@@ -208,17 +208,31 @@ All coordinates are in units, in the frame of 3.3.
 | `kind` | `sea`, `lake`, `mountains`, `hills`, `plains`, `marsh`, `forest`, `desert` | Required. |
 | shape | one of `polygon: [[x, y], ...]`, `box: [x0, y0, x1, y1]`, `circle: {at, r}` | Required. A polygon has 3 or more points and does not cross itself. |
 | `edge` | number, in units | Default 0. Width of the soft edge, inside the shape. |
+| `height` | `[min, max]` on the 0 to 100 height scale (sea level is 20) | Optional. Changes the default range of the kind. Example: the Wolds are `hills` with `[35, 50]`. |
+| `landlocked` | bool | Only for `sea` and `lake`. Default `false`. With `false`, a `sea` must connect to the ocean (a frame edge), else `SEA_NOT_CONNECTED`. With `true`, an inland sea or a large lake is correct. |
 | `name` | string | Optional. A region label. |
 
+Default height ranges: `sea` and `lake` 5 to 15, `marsh` 20 to 23,
+`plains` 21 to 35, `hills` 35 to 60, `mountains` 70 to 100.
+`forest` and `desert` only make sure of land.
+
 `pins.rivers[]`
+
+A river has no height field. The tool calculates the heights along the
+course from the region heights, so that the river flows downhill.
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | id | Required. |
 | `name` | string | Optional. |
-| `through` | array of `[x, y]`, 1 or more | Required. The first point is the source. |
-| `mouth` | `[x, y]` | Required. This point must be in sea or lake, after pins are applied. |
-| `tolerance` | number, in units | Default 0. The largest distance from a `through` point to the drawn line. |
+| `source` | `[x, y]`, or `{place: id}`, or `{region: id}` | Required. With a region, the tool chooses the source cell inside the region: the highest cell from which the course can flow downhill. |
+| `through` | array of `[x, y]` or `{place: id}` | Optional, in order. The course passes each one exactly. |
+| `mouth` | `[x, y]`, or `{place: id}`, or `{region: id}` | Required. A point must be in sea or lake. A place must be a port; the river reaches the water at the cell of the place. A region of kind `marsh`, `lake` or `sea` is the end of the river; a river that ends in a `marsh` has no sea mouth. |
+
+Two pinned rivers can share a mouth or join another pinned river. They then
+meet in a confluence. Two pinned rivers never cross.
+Example: the Corrin and the Tey both have `mouth: {place: "corrantey"}`.
+They join before the sea, at the last land cell before Corrantey or earlier.
 
 `pins.roads[]`
 
@@ -300,9 +314,11 @@ A code is never renamed and never reused.
 | `PORT_NOT_NEAR_COAST` | 3 | A port pin has no sea cell that it can touch. |
 | `REGION_CONFLICT` | 3 | Two forced regions overlap with kinds that cannot agree. |
 | `REGION_POLYGON_INVALID` | 2 | A polygon has fewer than 3 points or crosses itself. |
-| `RIVER_MOUTH_ON_LAND` | 3 | The river mouth is not in sea or lake. |
-| `RIVER_NOT_DOWNHILL` | 3 | A forced height on the path makes downhill flow impossible. |
-| `RIVER_CROSSES_RIVER` | 3 | Two pinned rivers cross. |
+| `SEA_NOT_CONNECTED` | 3 | A `sea` region without `landlocked: true` does not connect to the ocean. |
+| `RIVER_MOUTH_ON_LAND` | 3 | A point mouth is not in sea or lake, or a place mouth is not a port. |
+| `RIVER_MOUTH_REGION_KIND` | 2 | A region mouth is not of kind `marsh`, `lake` or `sea`. |
+| `RIVER_NOT_DOWNHILL` | 3 | The region heights on the course make downhill flow impossible, for example a course that goes from the Low Fen up into the Grey Teeth. |
+| `RIVER_CROSSES_RIVER` | 3 | Two pinned rivers cross. A join (confluence) is not a cross. |
 | `ROAD_TARGET_TOO_SHORT` | 3 | The target is shorter than the straight line through all via points. |
 | `ROAD_NO_PATH` | 3 | No land path joins the road ends. |
 | `ROAD_LENGTH_OUT_OF_TOLERANCE` | 1 | The route was made, but its length is outside the tolerance (a check). |
