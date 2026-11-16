@@ -47,6 +47,33 @@ impl Shape {
         }
     }
 
+    /// The distance from `p` to the shape: 0 inside or on the edge.
+    pub fn distance(&self, p: Point) -> f64 {
+        if self.contains(p) {
+            return 0.0;
+        }
+        match self {
+            Shape::Polygon(poly) => edges(poly)
+                .map(|(a, b)| segment_point_dist2(a, b, p))
+                .fold(f64::INFINITY, f64::min)
+                .sqrt(),
+            Shape::Circle { at, r } => (dist2(*at, p).sqrt() - r).max(0.0),
+        }
+    }
+
+    /// The bounding box `[x0, y0, x1, y1]` of the shape.
+    pub fn bbox(&self) -> [f64; 4] {
+        self.extreme_points().iter().fold(
+            [
+                f64::INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::NEG_INFINITY,
+            ],
+            |[x0, y0, x1, y1], p| [x0.min(p[0]), y0.min(p[1]), x1.max(p[0]), y1.max(p[1])],
+        )
+    }
+
     /// `true` if the insides of the two shapes have a common part.
     /// Shapes that only touch at an edge do not overlap.
     pub fn overlaps(&self, other: &Shape) -> bool {
@@ -251,6 +278,20 @@ mod tests {
             r: 3.0,
         };
         assert!(!far.overlaps(&square(0.0, 0.0, 10.0)));
+    }
+
+    #[test]
+    fn distance_is_zero_inside_and_exact_outside() {
+        let s = square(0.0, 0.0, 10.0);
+        assert_eq!(s.distance([5.0, 5.0]), 0.0);
+        assert_eq!(s.distance([13.0, 5.0]), 3.0);
+        assert_eq!(s.distance([13.0, 14.0]), 5.0);
+        let c = Shape::Circle {
+            at: [0.0, 0.0],
+            r: 2.0,
+        };
+        assert_eq!(c.distance([5.0, 0.0]), 3.0);
+        assert_eq!(c.bbox(), [-2.0, -2.0, 2.0, 2.0]);
     }
 
     #[test]
