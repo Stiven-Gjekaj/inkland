@@ -347,7 +347,10 @@ fn variant_flag_writes_only_that_variant() {
 fn pins_that_this_version_cannot_apply_are_refused_and_nothing_is_written() {
     let dir = tempfile::tempdir().unwrap();
     let mut c = minimal();
-    c["pins"] = json!({ "points": [{ "id": "a", "kind": "town", "at": [5, 5] }] });
+    c["pins"] = json!({
+        "points": [{ "id": "a", "kind": "town", "at": [5, 5] }, { "id": "b", "kind": "town", "at": [50, 50] }],
+        "roads": [{ "id": "r", "from": "a", "to": "b" }]
+    });
     let config = write_config(dir.path(), &c);
     let out = dir.path().join("out");
     let (code, err) = run(&[

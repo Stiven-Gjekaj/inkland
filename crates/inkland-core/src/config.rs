@@ -349,8 +349,9 @@ pub struct RegionPin {
     /// Circle, in units.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub circle: Option<Circle>,
-    /// Width of the soft edge inside the shape, in units. Heights blend from
-    /// the forced range to the free terrain over this width.
+    /// Width of the soft edge outside the shape, in units. Heights blend
+    /// from the forced range to the free terrain over this width. Inside the
+    /// shape, the heights are always in the range.
     #[serde(default)]
     #[schemars(range(min = 0.0))]
     pub edge: f64,

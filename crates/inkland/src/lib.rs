@@ -83,9 +83,6 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
     };
     let p = &config.pins;
     let mut not_yet = Vec::new();
-    if !(p.points.is_empty() && p.regions.is_empty()) {
-        not_yet.push(later("/pins", "pinned points and regions", 3));
-    }
     if !p.rivers.is_empty() {
         not_yet.push(later("/pins/rivers", "pinned rivers", 4));
     }
@@ -110,8 +107,7 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
             format!("there is no variant {:?}", only.unwrap_or_default()),
         )]);
     }
-    let world = inkland_core::world::World::build(config)
-        .map_err(|e| vec![Error::new(ErrorCode::Internal, "", e)])?;
+    let world = inkland_core::world::World::build(config).map_err(|e| vec![e])?;
     let hash = config_hash(config);
     Ok(Output {
         world_json: inkland_io::world::world_json(&world, config, &hash),
@@ -194,11 +190,13 @@ mod tests {
 
     #[test]
     fn generate_refuses_pins_that_it_cannot_apply_yet() {
-        let c =
-            config(json!({ "pins": { "points": [{ "id": "a", "kind": "town", "at": [5, 5] }] } }));
+        let c = config(json!({ "pins": {
+            "points": [{ "id": "a", "kind": "town", "at": [5, 5] }, { "id": "b", "kind": "town", "at": [50, 50] }],
+            "roads": [{ "id": "r", "from": "a", "to": "b" }]
+        }}));
         let e = generate(&c, None).unwrap_err();
         assert_eq!(e[0].code, ErrorCode::NotImplemented);
-        assert_eq!(e[0].path, "/pins");
+        assert_eq!(e[0].path, "/pins/roads");
     }
 
     #[test]
