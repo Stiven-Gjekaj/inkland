@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "seed": 42,
+  "units": { "name": "mile", "per_cell_hint": 2.0 },
+  "frame": { "origin": "top-left", "x_axis": "east", "y_axis": "south", "width": 400, "height": 300 },
+  "world": {
+    "cells": 20000,
+    "template": "continents",
+    "sea_level": 20,
+    "climate": { "latitude_range": [30, 55] },
+    "cultures": 6,
+    "culture_set": "european",
+    "states": 5,
+    "towns": "auto",
+    "religions": 4,
+    "places": { "min_distance_from_pins": 6 }
+  },
+  "pins": {
+    "points": [
+      { "id": "ostrey", "kind": "city", "at": [120, 88], "name": "Ostrey" },
+      { "id": "harrowgate", "kind": "town", "at": [180, 120], "name": "Harrowgate" },
+      { "id": "saltmouth", "kind": "city", "at": [24, 200], "name": "Saltmouth", "port": true, "capital_of": "The Coast" },
+      { "id": "brannock-ford", "kind": "village", "at": [150, 150], "name": "Brannock Ford" },
+      { "id": "old-tower", "kind": "fortress", "at": [230, 60] },
+      { "id": "standing-stone", "kind": "custom", "custom_kind": "monolith", "at": [300, 250] }
+    ],
+    "regions": [
+      { "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300], "name": "The Western Sea" },
+      { "id": "spine", "kind": "mountains", "box": [200, 40, 260, 140], "edge": 8, "name": "The Spine" },
+      { "id": "downs", "kind": "hills", "circle": { "at": [300, 160], "r": 25 }, "height": [35, 50] },
+      { "id": "greyfens", "kind": "marsh", "polygon": [[60, 170], [110, 160], [120, 210], [70, 220]] },
+      { "id": "mere", "kind": "lake", "box": [320, 40, 340, 60], "landlocked": true }
+    ],
+    "rivers": [
+      { "id": "brann", "name": "Brann", "source": { "region": "spine" },
+        "through": [[180, 100], { "place": "brannock-ford" }],
+        "mouth": { "region": "greyfens" } },
+      { "id": "salt", "name": "Salt", "source": { "region": "downs" },
+        "mouth": { "place": "saltmouth" } }
+    ],
+    "roads": [
+      { "id": "kings-road", "from": "ostrey", "to": "harrowgate", "via": [[150, 100]],
+        "kind": "road", "target_length": 72, "tolerance": 0.05 }
+    ]
+  },
+  "overlays": {
+    "then": {
+      "add": {
+        "places": [{ "id": "old-ostrey", "kind": "ruin", "at": [125, 90] }],
+        "features": [{ "id": "old-wall", "kind": "wall", "polyline": [[100, 50], [140, 70]] }],
+        "roads": [{ "id": "old-track", "from": "old-ostrey", "to": "harrowgate", "kind": "trail" }]
+      },
+      "rename": { "place:ostrey": "Ostrey the Old" }
+    },
+    "today": {
+      "remove": ["place:old-tower"],
+      "labels": { "region:mere": { "hide": true } }
+    }
+  },
+  "variants": [
+    { "name": "ostrey-then", "overlay": "then", "page": { "w_mm": 167, "h_mm": 250 } },
+    { "name": "land-today", "overlay": "today", "page": { "w_mm": 167, "h_mm": 250 } },
+    { "name": "act-1", "overlay": "today", "crop": [80, 40, 220, 160],
+      "page": { "w_mm": 167, "h_mm": 120 }, "extras": { "scale_bar": true } }
+  ],
+  "render": {
+    "mode": "print-safe",
+    "fonts": { "title": "IM Fell English", "labels": "IM Fell English", "labels_sc": "IM Fell English SC", "other": "Caladea" },
+    "min_line_width_pt": 0.5,
+    "extras": { "scale_bar": true, "compass": true, "cartouche": { "title": "The Land" } },
+    "layers": ["coast", "relief", "rivers", "regions", "roads", "places", "labels"]
+  }
+}

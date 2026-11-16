@@ -59,6 +59,9 @@ macro_rules! codes {
 codes! {
     /// Error codes.
     ErrorCode {
+        /// The command line is not valid: an unknown command or flag, or a
+        /// flag without its value.
+        CliUsage = "CLI_USAGE" => InvalidConfig,
         /// The file is not valid JSON.
         ConfigParse = "CONFIG_PARSE" => InvalidConfig,
         /// The JSON does not agree with the schema.
