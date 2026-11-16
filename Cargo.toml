@@ -9,6 +9,7 @@ rust-version = "1.100"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Stiven-Gjekaj/inkland"
 authors = ["Stiven Gjekaj"]
+publish = false
 
 [workspace.dependencies]
 inkland-core = { path = "crates/inkland-core" }
