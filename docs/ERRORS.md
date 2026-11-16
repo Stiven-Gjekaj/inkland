@@ -56,9 +56,9 @@ With more than one error, the exit code comes from the most basic fault:
 | `PIN_OUTSIDE_FRAME` | 3 | 0.1.0 | A pin, a crop, or an overlay item is outside the frame. |
 | `PIN_IN_FORCED_SEA` | 3 | 0.1.0 | A place is inside a `sea` or `lake` region. `details`: `region`. |
 | `PIN_SAME_POSITION` | 3 | 0.1.0 | Two point pins have the same position. Each place needs its own cell. `details`: `other`. |
-| `PORT_NOT_NEAR_COAST` | 3 | 0.1.0 | A port has no water cell that it can touch. (Milestone 3.) |
+| `PORT_NOT_NEAR_COAST` | 3 | 0.1.0 | A port has no water next to it, and no channel of 8 cells or fewer can join it to water. `details`: `max_channel_cells`. |
 | `REGION_CONFLICT` | 3 | 0.1.0 | Two regions overlap, but their height ranges have no common value. `details`: `other`. |
-| `SEA_NOT_CONNECTED` | 3 | 0.1.0 | A `sea` region without `landlocked: true` does not connect to the ocean. (Milestone 3.) |
+| `SEA_NOT_CONNECTED` | 3 | 0.1.0 | A `sea` region without `landlocked: true` does not connect to the ocean at a frame edge. |
 | `RIVER_MOUTH_ON_LAND` | 3 | 0.1.0 | A point mouth is in a land region, or a place mouth is not a port. |
 | `RIVER_NOT_DOWNHILL` | 3 | 0.1.0 | The heights of the regions on a river course do not permit downhill flow. |
 | `RIVER_CROSSES_RIVER` | 3 | 0.1.0 | Two pinned rivers cross. (Milestone 4.) |
