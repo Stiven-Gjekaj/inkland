@@ -236,7 +236,7 @@ exit code 3 and a specific error code.
 | burgsSpecify | Skip locked places. Map the pin kind: `city`, `town`, `village` to the group; `fortress` to group `fort` with citadel; `ruin` to a ruin place with no population. |
 | provinces, religions | No change. A pinned city can be a province seat. |
 | markers | Only pinned or overlay ruins and features. No random markers in v1. |
-| labels | New solver in inkland (M8), with font metrics from the font files, not from a DOM. A label that cannot go in is left out and listed in the report. |
+| labels | New solver in inkland (M8), with font metrics from the font files, not from a DOM. A label that cannot go in is left out and listed in the report. The solver must measure text, but placement must not depend on the fonts of the machine. So inkland keeps a metrics table (advance widths, kerning, ascent, descent) for each permitted family in the repository, made one time from the font files. The four families have free licenses (SIL OFL for IM Fell and Inter, Apache 2.0 for Caladea), so the tables can go in the repository. The SVG does not embed fonts. A family with no table is a config error. |
 | coastline detail | The fractal detail stays a fixed distance from each point pin and from each river mouth, so the drawn coast does not cross a pin. |
 
 ### 4.3 Pinned roads

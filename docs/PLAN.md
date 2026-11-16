@@ -275,13 +275,24 @@ The type system enforces this: an overlay has no field that can do it.
 | Field | Type | Default |
 |---|---|---|
 | `mode` | `print-safe`, `colour` | `print-safe` |
-| `fonts` | `{title, labels, small}` family names | `EB Garamond` for all |
-| `font_sizes_pt` | `{title, region, place_city, place_town, river, small}` | to decide in M7 |
+| `fonts` | `{title, labels, labels_sc, other}` family names | `title`, `labels`: `IM Fell English`. `labels_sc` (small capitals, for region names): `IM Fell English SC`. `other` (scale bar, compass, grid, notes): `Caladea`. |
+| `fonts_allowed` | array of family names | `["Caladea", "Inter", "IM Fell English", "IM Fell English SC"]` |
+| `font_sizes_pt` | `{title, region, place_city, place_town, river, other}` | to decide in M7 |
 | `min_line_width_pt` | number | `0.5` |
 | `extras` | `{scale_bar, compass, cartouche: {title}, grid: {step}}` | all off |
 | `layers` | ordered array of layer names | all layers |
-| `embed_fonts` | bool | `false` |
-| `fonts_files` | map of family to path | only with `embed_fonts` |
+
+Fonts:
+
+- The SVG names each family in a `font-family` attribute, exactly as the
+  config gives it, for example `font-family="IM Fell English"`.
+- inkland never embeds a font and never changes text to outlines. The spec
+  option `render.embed_fonts` is removed.
+- The `font_families_allowed` check parses the written SVG and fails if a
+  `font-family` is not in `fonts_allowed`. A config that names a family that
+  is not in `fonts_allowed` is a schema error (`FONT_NOT_ALLOWED`, exit 2).
+- The PNG preview uses `font_dirs` and the system fonts. A missing font gives
+  the warning `FONT_NOT_FOUND`.
 
 ### 3.9 Flags that change the config
 
@@ -314,6 +325,7 @@ A code is never renamed and never reused.
 | `PORT_NOT_NEAR_COAST` | 3 | A port pin has no sea cell that it can touch. |
 | `REGION_CONFLICT` | 3 | Two forced regions overlap with kinds that cannot agree. |
 | `REGION_POLYGON_INVALID` | 2 | A polygon has fewer than 3 points or crosses itself. |
+| `FONT_NOT_ALLOWED` | 2 | A font family in the config is not in `render.fonts_allowed`. |
 | `SEA_NOT_CONNECTED` | 3 | A `sea` region without `landlocked: true` does not connect to the ocean. |
 | `RIVER_MOUTH_ON_LAND` | 3 | A point mouth is not in sea or lake, or a place mouth is not a port. |
 | `RIVER_MOUTH_REGION_KIND` | 2 | A region mouth is not of kind `marsh`, `lake` or `sea`. |
