@@ -6,6 +6,7 @@
 pub mod config;
 pub mod error;
 pub mod features;
+pub mod geom;
 pub mod grid;
 pub mod heightmap;
 pub mod num;

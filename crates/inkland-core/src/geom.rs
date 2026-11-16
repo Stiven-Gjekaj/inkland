@@ -3,7 +3,7 @@
 //! The functions use only `+`, `-`, `*`, `/`, and comparisons, so they give
 //! the same result on each machine.
 
-use inkland_core::config::{Point, RegionPin};
+use crate::config::{Point, RegionPin};
 
 /// The shape of a region.
 #[derive(Debug, Clone, PartialEq)]
