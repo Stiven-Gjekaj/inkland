@@ -50,17 +50,86 @@ pub fn dry_run(config: &Config) -> Result<DryRunReport, Vec<Error>> {
     })
 }
 
-/// Generate the maps of a config. Milestone 2 adds the first output.
-pub fn generate(config: &Config) -> Result<Value, Vec<Error>> {
+/// The output of one variant.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariantOutput {
+    pub name: String,
+    /// The text of `<name>.svg`.
+    pub svg: String,
+    /// The report of the variant.
+    pub report: Value,
+}
+
+/// The output of `generate`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Output {
+    /// The text of `world.json`. All variants share it.
+    pub world_json: String,
+    pub variants: Vec<VariantOutput>,
+}
+
+/// Generate the maps of a config: all variants, or only the variant `only`.
+pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error>> {
     let errors = validate(config);
     if !errors.is_empty() {
         return Err(errors);
     }
-    Err(vec![Error::new(
-        ErrorCode::NotImplemented,
-        "",
-        "generation without --dry-run comes in milestone 2",
-    )])
+    let later = |path: &str, what: &str, milestone: u32| {
+        Error::new(
+            ErrorCode::NotImplemented,
+            path,
+            format!("{what} come in milestone {milestone}; this version cannot apply them"),
+        )
+    };
+    let p = &config.pins;
+    let mut not_yet = Vec::new();
+    if !(p.points.is_empty() && p.regions.is_empty()) {
+        not_yet.push(later("/pins", "pinned points and regions", 3));
+    }
+    if !p.rivers.is_empty() {
+        not_yet.push(later("/pins/rivers", "pinned rivers", 4));
+    }
+    if !p.roads.is_empty() {
+        not_yet.push(later("/pins/roads", "pinned roads", 6));
+    }
+    if !config.overlays.is_empty() {
+        not_yet.push(later("/overlays", "overlays", 9));
+    }
+    if !not_yet.is_empty() {
+        return Err(not_yet);
+    }
+    let selected: Vec<&inkland_core::config::Variant> = config
+        .variants
+        .iter()
+        .filter(|v| only.is_none_or(|name| v.name == name))
+        .collect();
+    if selected.is_empty() {
+        return Err(vec![Error::new(
+            ErrorCode::RefUnknown,
+            "/variants",
+            format!("there is no variant {:?}", only.unwrap_or_default()),
+        )]);
+    }
+    let world = inkland_core::world::World::build(config)
+        .map_err(|e| vec![Error::new(ErrorCode::Internal, "", e)])?;
+    let hash = config_hash(config);
+    Ok(Output {
+        world_json: inkland_io::world::world_json(&world, config, &hash),
+        variants: selected
+            .into_iter()
+            .map(|v| VariantOutput {
+                name: v.name.clone(),
+                svg: inkland_render::svg::render(&world, config, v),
+                report: inkland_io::report::variant_report(&world, config, &v.name, &hash),
+            })
+            .collect(),
+    })
+}
+
+/// A PNG preview of an SVG. The longer side is `longest_px` pixels.
+#[cfg(feature = "png")]
+pub fn preview_png(svg: &str, longest_px: u32) -> Result<Vec<u8>, String> {
+    inkland_render::png::svg_to_png(svg, longest_px)
 }
 
 /// The version of the tool and the notices of third-party work.
@@ -118,13 +187,34 @@ mod tests {
             json!({ "pins": { "points": [{ "id": "a", "kind": "town", "at": [500, 1] }] } }),
         );
         assert_eq!(
-            generate(&c).unwrap_err()[0].code,
+            generate(&c, None).unwrap_err()[0].code,
             ErrorCode::PinOutsideFrame
         );
-        assert_eq!(
-            generate(&config(json!({}))).unwrap_err()[0].code,
-            ErrorCode::NotImplemented
-        );
+    }
+
+    #[test]
+    fn generate_refuses_pins_that_it_cannot_apply_yet() {
+        let c =
+            config(json!({ "pins": { "points": [{ "id": "a", "kind": "town", "at": [5, 5] }] } }));
+        let e = generate(&c, None).unwrap_err();
+        assert_eq!(e[0].code, ErrorCode::NotImplemented);
+        assert_eq!(e[0].path, "/pins");
+    }
+
+    #[test]
+    fn generate_makes_one_svg_for_each_variant() {
+        let c = config(json!({ "world": { "cells": 1000 }, "variants": [
+            { "name": "full", "page": { "w_mm": 167, "h_mm": 250 } },
+            { "name": "half", "crop": [0, 0, 50, 40], "page": { "w_mm": 167, "h_mm": 120 } }
+        ]}));
+        let out = generate(&c, None).unwrap();
+        let names: Vec<&str> = out.variants.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(names, ["full", "half"]);
+        assert!(out.variants[1].svg.contains("height=\"120mm\""));
+        assert_eq!(out.variants[0].report["variant"], "full");
+        let one = generate(&c, Some("half")).unwrap();
+        assert_eq!(one.variants.len(), 1);
+        assert_eq!(one.world_json, out.world_json);
     }
 
     #[test]

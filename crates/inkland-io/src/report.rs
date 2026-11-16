@@ -51,3 +51,37 @@ pub struct DryRunReport {
     /// The config after the flags are applied.
     pub effective_config: Config,
 }
+
+/// The report of one generated variant.
+pub fn variant_report(
+    world: &inkland_core::world::World,
+    config: &Config,
+    variant: &str,
+    config_hash: &str,
+) -> serde_json::Value {
+    use inkland_core::features::FeatureKind;
+    use inkland_core::num::round;
+    let count = |k: FeatureKind| world.features.list.iter().filter(|f| f.kind == k).count();
+    serde_json::json!({
+        "tool": Tool::current(),
+        "config_hash": config_hash,
+        "seed": config.seed,
+        "variant": variant,
+        "units": config.units.name,
+        "dry_run": false,
+        "world": {
+            "cells": world.grid.len(),
+            "land_fraction": round(world.land_fraction(), 3),
+            "features": {
+                "ocean": count(FeatureKind::Ocean),
+                "lake": count(FeatureKind::Lake),
+                "island": count(FeatureKind::Island),
+            },
+            "coastlines": world.coastlines.len(),
+        },
+        "pins": { "points": [], "regions": [], "rivers": [], "roads": [] },
+        "labels": { "placed": 0, "unplaced": [] },
+        "checks": [],
+        "warnings": [],
+    })
+}
