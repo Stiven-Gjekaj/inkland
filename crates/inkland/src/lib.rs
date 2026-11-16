@@ -216,6 +216,25 @@ mod tests {
     }
 
     #[test]
+    fn report_gives_each_pin_with_error_zero() {
+        let c = config(json!({
+            "world": { "cells": 1000 },
+            "pins": {
+                "points": [{ "id": "ostrey", "kind": "city", "at": [41.25, 33.5] }],
+                "regions": [{ "id": "sea", "kind": "sea", "box": [0, 0, 10, 80] }]
+            }
+        }));
+        let out = generate(&c, None).unwrap();
+        let pins = &out.variants[0].report["pins"];
+        assert_eq!(pins["points"][0]["id"], "ostrey");
+        assert_eq!(pins["points"][0]["placed"], json!([41.25, 33.5]));
+        assert_eq!(pins["points"][0]["error"], 0.0);
+        assert_eq!(pins["points"][0]["land"], true);
+        assert_eq!(pins["regions"][0]["in_range"], true);
+        assert!(pins["regions"][0]["cells"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
     fn version_names_the_original_program() {
         let v = version_info();
         assert_eq!(v["third_party"][0]["license"], "MIT");

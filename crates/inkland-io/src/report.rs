@@ -79,9 +79,90 @@ pub fn variant_report(
             },
             "coastlines": world.coastlines.len(),
         },
-        "pins": { "points": [], "regions": [], "rivers": [], "roads": [] },
+        "pins": {
+            "points": point_pins(world, config),
+            "regions": region_pins(world, config),
+            "rivers": [],
+            "roads": [],
+        },
         "labels": { "placed": 0, "unplaced": [] },
         "checks": [],
         "warnings": [],
     })
+}
+
+/// The report of each point pin: where it was asked for, where it is, and
+/// what its cell is. `error` is the distance between the two, in units.
+fn point_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
+    use inkland_core::num::round;
+    config
+        .pins
+        .points
+        .iter()
+        .zip(&world.pin_cells)
+        .map(|(pin, &cell)| {
+            let placed = world.grid.points[cell];
+            let error = ((placed[0] - pin.at[0]).powi(2) + (placed[1] - pin.at[1]).powi(2)).sqrt();
+            let mut v = serde_json::json!({
+                "id": pin.id,
+                "requested": [round(pin.at[0], 3), round(pin.at[1], 3)],
+                "placed": [round(placed[0], 3), round(placed[1], 3)],
+                "error": round(error, 3),
+                "height": world.heights[cell],
+                "land": world.features.is_land(cell),
+            });
+            if pin.port {
+                v["port"] = serde_json::Value::from(
+                    world
+                        .grid
+                        .neighbors(cell)
+                        .any(|m| !world.features.is_land(m)),
+                );
+            }
+            v
+        })
+        .collect()
+}
+
+/// The report of each region pin: its cells and their height range.
+fn region_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
+    use inkland_core::fit::effective_range;
+    use inkland_core::geom::Shape;
+    config
+        .pins
+        .regions
+        .iter()
+        .map(|r| {
+            let shape = Shape::of(r);
+            let cells: Vec<usize> = (0..world.grid.len())
+                .filter(|&c| {
+                    shape
+                        .as_ref()
+                        .is_some_and(|s| s.contains(world.grid.points[c]))
+                })
+                .collect();
+            let [lo, hi] = effective_range(r, world.sea_level);
+            let min = cells
+                .iter()
+                .map(|&c| world.heights[c])
+                .fold(f64::INFINITY, f64::min);
+            let max = cells
+                .iter()
+                .map(|&c| world.heights[c])
+                .fold(f64::NEG_INFINITY, f64::max);
+            let in_range = cells.iter().all(|&c| {
+                let h = world.heights[c];
+                h >= lo.ceil() && h <= hi.floor().max(lo.ceil())
+            });
+            serde_json::json!({
+                "id": r.id,
+                "kind": serde_json::to_value(r.kind).expect("a kind converts to JSON"),
+                "cells": cells.len(),
+                "range": [lo, hi],
+                "min_height": if cells.is_empty() { serde_json::Value::Null } else { min.into() },
+                "max_height": if cells.is_empty() { serde_json::Value::Null } else { max.into() },
+                "in_range": in_range,
+            })
+        })
+        .collect()
 }
