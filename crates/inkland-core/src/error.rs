@@ -219,6 +219,24 @@ mod tests {
         assert_eq!(exit_code_of(&errors), ExitCode::InvalidConfig);
     }
 
+    /// `docs/ERRORS.md` is the public list of codes. Each code of the enum
+    /// must have a row in it with the right exit code.
+    #[test]
+    fn each_code_has_a_row_in_errors_md() {
+        let doc = include_str!("../../../docs/ERRORS.md");
+        for &c in ErrorCode::ALL {
+            let row = format!("| `{}` | {} |", c.as_str(), c.exit_code().code());
+            assert!(doc.contains(&row), "docs/ERRORS.md has no row {row}");
+        }
+        for &w in WarningCode::ALL {
+            assert!(
+                doc.contains(&format!("| `{}` |", w.as_str())),
+                "{}",
+                w.as_str()
+            );
+        }
+    }
+
     #[test]
     fn no_errors_is_exit_zero() {
         assert_eq!(exit_code_of(&[]), ExitCode::Ok);
