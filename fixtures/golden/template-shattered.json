@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "seed": 1010,
+  "frame": {
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "cells": 2000,
+    "template": "shattered"
+  },
+  "variants": [
+    {
+      "name": "full",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 120
+      }
+    }
+  ]
+}

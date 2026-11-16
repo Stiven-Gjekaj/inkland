@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "seed": 7,
+  "units": {
+    "name": "league"
+  },
+  "frame": {
+    "origin": "bottom-left",
+    "y_axis": "north",
+    "width": 300,
+    "height": 300
+  },
+  "world": {
+    "cells": 3000,
+    "template": "archipelago",
+    "sea_level": 25
+  },
+  "variants": [
+    {
+      "name": "square",
+      "page": {
+        "w_mm": 120,
+        "h_mm": 120,
+        "margin_mm": 4
+      }
+    }
+  ]
+}

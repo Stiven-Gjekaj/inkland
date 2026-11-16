@@ -22,3 +22,6 @@ inkland-constraints.workspace = true
 inkland-io.workspace = true
 inkland-render.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+sha2.workspace = true

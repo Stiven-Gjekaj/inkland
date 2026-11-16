@@ -573,6 +573,7 @@ dependencies = [
  "inkland-io",
  "inkland-render",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "seed": 42,
+  "units": {
+    "name": "mile",
+    "per_cell_hint": 2.0
+  },
+  "frame": {
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "template": "continents"
+  },
+  "variants": [
+    {
+      "name": "land",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 250
+      }
+    },
+    {
+      "name": "act-1",
+      "crop": [
+        80,
+        40,
+        220,
+        160
+      ],
+      "page": {
+        "w_mm": 167,
+        "h_mm": 120,
+        "margin_mm": 3
+      }
+    }
+  ]
+}
