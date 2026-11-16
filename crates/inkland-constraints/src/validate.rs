@@ -143,14 +143,23 @@ impl<'a> Validator<'a> {
                 "latitude_range must be [south, north], each from -90 to 90, with south less than north",
             );
         }
-        if let Some(h) = c.units.per_cell_hint
-            && !(h.is_finite() && h > 0.0)
-        {
-            self.err(
-                ErrorCode::ValueOutOfRange,
-                "/units/per_cell_hint",
-                "per_cell_hint must be more than 0",
-            );
+        if let Some(h) = c.units.per_cell_hint {
+            if !(h.is_finite() && h > 0.0) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    "/units/per_cell_hint",
+                    "per_cell_hint must be more than 0",
+                );
+            } else {
+                let cells = inkland_core::world::cell_count(c);
+                if !(1000.0..=100_000.0).contains(&cells) {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        "/units/per_cell_hint",
+                        format!("per_cell_hint {h} gives {cells} cells; the cell count must be 1000 to 100000"),
+                    );
+                }
+            }
         }
         if !(c.render.min_line_width_pt.is_finite() && c.render.min_line_width_pt > 0.0) {
             self.err(

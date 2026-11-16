@@ -306,3 +306,10 @@ fn custom_template_with_good_steps_is_valid() {
     );
     assert_eq!(codes(&c), vec![]);
 }
+
+#[test]
+fn per_cell_hint_that_gives_too_many_cells_is_refused() {
+    // 400 x 300 with cells of 0.1 units is 12 million cells.
+    let c = with(json!({ "units": { "per_cell_hint": 0.1 } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/units/per_cell_hint");
+}
