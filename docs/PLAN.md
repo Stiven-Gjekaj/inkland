@@ -379,14 +379,33 @@ and the test that closes each milestone. We stop for a review after each one.
 | 13 | Optional import of an Azgaar `.map` file. | A sample `.map` loads, and its land and sea agree. |
 | 14 | Speed work, `docs/CLI.md`, `docs/CONFIG.md`, release packages. | 20k cells and one variant in less than 2 s (release build). |
 
-## 7. Open questions for the human
+## 7. Road lengths in the report
 
-1. Fixed inputs can make terrain that the template did not plan, for example
-   a forced sea inside a continent. Is a sea that is not joined to the ocean
-   correct, or must a forced `sea` always join the ocean (else error)?
-2. Does a pinned river need a pinned source height, or is "highest point on
-   its path" enough?
-3. Must the economy, military, emblems, zones, and journeys of the original
-   come back later, or do we drop them for good?
-4. Which page sizes and fonts does the book use? The spec uses 167 x 250 mm,
-   IM Fell English, and EB Garamond. We use these until you change them.
+The book checks travel days against road lengths.
+Each road in the report has a `stops` list: each pinned place on the road
+and its length along the road from `from`.
+The report also has a `legs` list: the length between each two stops that
+follow each other.
+
+```json
+{ "id": "kings-road", "target": 72, "actual": 71.4, "within_tolerance": true,
+  "stops": [{ "place": "ostrey", "at_length": 0.0 },
+            { "place": "brannocks-ford", "at_length": 20.1 },
+            { "place": "harrowgate", "at_length": 71.4 }],
+  "legs":  [{ "from": "ostrey", "to": "brannocks-ford", "length": 20.1 },
+            { "from": "brannocks-ford", "to": "harrowgate", "length": 51.3 }],
+  "crossings": [{ "river": "brann", "at_length": 20.1, "kind": "bridge" }] }
+```
+
+## 8. Answers to the Phase 0 questions
+
+`docs/DECISIONS.md` records the answers. In short:
+
+1. A pinned `sea` must connect to the ocean, unless it has
+   `landlocked: true`.
+2. A river has no fixed height. Region heights drive the river heights.
+   Sources and mouths can be areas or places.
+3. Journeys, coats of arms, economy, military and zones are out.
+   Coats of arms can come later as a separate milestone.
+4. Pages are 167 x 250 mm and 167 x 120 mm. Fonts: IM Fell English,
+   IM Fell English SC, Caladea, Inter. No embedding.
