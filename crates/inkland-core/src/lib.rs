@@ -6,5 +6,6 @@
 pub mod config;
 pub mod error;
 pub mod grid;
+pub mod heightmap;
 pub mod rand;
 pub mod seed;
