@@ -11,18 +11,27 @@ A chapter can cite a fact from a map, and a machine can check that fact.
 
 ## Status
 
-Milestone 1 is complete. The tool reads and checks a config, but it does
-not make maps yet.
+Milestone 2 is complete. The tool makes terrain and coastlines, and it
+writes a black-and-white SVG page, a world file, a report, and a PNG preview.
+Pins, rivers, places, roads, labels, and overlays come in later milestones.
 
 ```sh
-cargo run -p inkland-cli -- schema
+cargo run -p inkland-cli -- generate --config fixtures/golden/continents-30k-crop.json --out-dir out --preview out/preview.png
 cargo run -p inkland-cli -- generate --config fixtures/configs/full.json --dry-run
+cargo run -p inkland-cli -- schema
 cargo run -p inkland-cli -- version
 ```
 
-- `schema` prints the JSON Schema of the config.
-- `generate --dry-run` checks the config and the pins and prints a report.
-- `version` prints the version and the third-party notices.
+`generate` writes these files in the output directory:
+
+- `world.json`: the base world that all variants share.
+- `<variant>.svg`: the map page of each variant.
+- `<variant>.report.json`: the report of each variant.
+- With `--preview FILE.png`: a PNG preview, 1024 pixels on the longer side.
+  With more than one variant, the file name gets the variant name.
+
+`generate --dry-run` checks the config and the pins, prints a report, and
+writes nothing.
 
 All output is JSON on stdout. An error has a stable code and a JSON Pointer
 to the bad value. See [the error codes](docs/ERRORS.md).
