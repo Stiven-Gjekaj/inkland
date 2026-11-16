@@ -27,6 +27,7 @@ pub fn validate(config: &Config) -> Vec<Error> {
     v.references();
     v.inside_frame();
     v.places_on_land();
+    v.same_positions();
     v.region_conflicts();
     v.river_mouths();
     v.rivers_downhill();
@@ -36,7 +37,7 @@ pub fn validate(config: &Config) -> Vec<Error> {
 
 /// The names of the checks that `validate` runs, in order. The dry-run report
 /// lists them.
-pub const CHECKS: [&str; 12] = [
+pub const CHECKS: [&str; 13] = [
     "frame",
     "ranges",
     "ids",
@@ -45,6 +46,7 @@ pub const CHECKS: [&str; 12] = [
     "references",
     "pins_inside_frame",
     "places_on_land",
+    "same_positions",
     "region_conflicts",
     "river_mouths",
     "rivers_downhill",
@@ -780,6 +782,27 @@ impl<'a> Validator<'a> {
                     .details
                     .insert("region".into(), region.id.clone().into());
                 }
+            }
+        }
+    }
+
+    fn same_positions(&mut self) {
+        let mut seen: BTreeMap<(u64, u64), usize> = BTreeMap::new();
+        for (i, p) in self.c.pins.points.iter().enumerate() {
+            let key = (p.at[0].to_bits(), p.at[1].to_bits());
+            if let Some(&first) = seen.get(&key) {
+                self.err(
+                    ErrorCode::PinSamePosition,
+                    format!("/pins/points/{i}/at"),
+                    format!(
+                        "the places {:?} and {:?} have the same position",
+                        self.c.pins.points[first].id, p.id
+                    ),
+                )
+                .details
+                .insert("other".into(), format!("/pins/points/{first}").into());
+            } else {
+                seen.insert(key, i);
             }
         }
     }

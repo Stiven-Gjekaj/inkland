@@ -313,3 +313,12 @@ fn per_cell_hint_that_gives_too_many_cells_is_refused() {
     let c = with(json!({ "units": { "per_cell_hint": 0.1 } }));
     one(&c, ErrorCode::ValueOutOfRange, "/units/per_cell_hint");
 }
+
+#[test]
+fn two_places_at_the_same_position_are_infeasible() {
+    let c = with(json!({ "pins": { "points": [
+        { "id": "a", "kind": "town", "at": [10, 10] },
+        { "id": "b", "kind": "town", "at": [10, 10] }
+    ]}}));
+    one(&c, ErrorCode::PinSamePosition, "/pins/points/1/at");
+}

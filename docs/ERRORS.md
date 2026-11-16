@@ -55,6 +55,7 @@ With more than one error, the exit code comes from the most basic fault:
 | `TEMPLATE_INVALID` | 2 | 0.1.0 | A step of a custom heightmap template cannot be read. The message names the step. |
 | `PIN_OUTSIDE_FRAME` | 3 | 0.1.0 | A pin, a crop, or an overlay item is outside the frame. |
 | `PIN_IN_FORCED_SEA` | 3 | 0.1.0 | A place is inside a `sea` or `lake` region. `details`: `region`. |
+| `PIN_SAME_POSITION` | 3 | 0.1.0 | Two point pins have the same position. Each place needs its own cell. `details`: `other`. |
 | `PORT_NOT_NEAR_COAST` | 3 | 0.1.0 | A port has no water cell that it can touch. (Milestone 3.) |
 | `REGION_CONFLICT` | 3 | 0.1.0 | Two regions overlap, but their height ranges have no common value. `details`: `other`. |
 | `SEA_NOT_CONNECTED` | 3 | 0.1.0 | A `sea` region without `landlocked: true` does not connect to the ocean. (Milestone 3.) |

@@ -96,6 +96,8 @@ codes! {
         PinOutsideFrame = "PIN_OUTSIDE_FRAME" => Infeasible,
         /// A point pin is in a `sea` or `lake` region.
         PinInForcedSea = "PIN_IN_FORCED_SEA" => Infeasible,
+        /// Two point pins have the same position.
+        PinSamePosition = "PIN_SAME_POSITION" => Infeasible,
         /// A port pin has no water cell that it can touch.
         PortNotNearCoast = "PORT_NOT_NEAR_COAST" => Infeasible,
         /// Two forced regions overlap with kinds that cannot agree.
