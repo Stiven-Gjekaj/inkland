@@ -50,6 +50,23 @@ pub const JITTER: f64 = 0.9;
 impl Grid {
     /// Make a grid of about `cells` cells on a `width` x `height` frame.
     pub fn new(width: f64, height: f64, cells: u32, rng: &mut Rand) -> Grid {
+        Self::with_sites(width, height, cells, &[], rng).0
+    }
+
+    /// Make a grid in which each of `sites` is exactly the site of a cell.
+    /// Return the grid and the cell of each site.
+    ///
+    /// A site takes the lattice slot that contains it. If an earlier site
+    /// has that slot, the site takes the nearest free slot. The sites must
+    /// be different from each other. The random numbers do not depend on the
+    /// sites, so a new site does not move the other cells.
+    pub fn with_sites(
+        width: f64,
+        height: f64,
+        cells: u32,
+        sites: &[[f64; 2]],
+        rng: &mut Rand,
+    ) -> (Grid, Vec<usize>) {
         let spacing = (width * height / f64::from(cells.max(1))).sqrt();
         let cells_x = ((width / spacing).round() as u32).max(2);
         let cells_y = ((height / spacing).round() as u32).max(2);
@@ -67,7 +84,25 @@ impl Grid {
                 ]);
             }
         }
-        Self::from_points(width, height, cells_x, cells_y, points)
+        let slot_of = |x: f64, y: f64| -> (i64, i64) {
+            let col = ((x / step_x).floor() as i64).clamp(0, i64::from(cells_x) - 1);
+            let row = ((y / step_y).floor() as i64).clamp(0, i64::from(cells_y) - 1);
+            (col, row)
+        };
+        let mut taken = vec![false; points.len()];
+        let mut site_cells = Vec::with_capacity(sites.len());
+        for &site in sites {
+            let (col, row) = slot_of(site[0], site[1]);
+            let slot = nearest_free_slot(col, row, cells_x, cells_y, &taken)
+                .expect("a grid has more slots than pins");
+            taken[slot] = true;
+            points[slot] = site;
+            site_cells.push(slot);
+        }
+        (
+            Self::from_points(width, height, cells_x, cells_y, points),
+            site_cells,
+        )
     }
 
     /// Make the cells of the given lattice points.
@@ -214,6 +249,36 @@ impl Grid {
     }
 }
 
+/// The free slot nearest to `(col, row)`: first by ring, then by row, then
+/// by column, so the choice is the same on each run.
+fn nearest_free_slot(
+    col: i64,
+    row: i64,
+    cells_x: u32,
+    cells_y: u32,
+    taken: &[bool],
+) -> Option<usize> {
+    let (cx, cy) = (i64::from(cells_x), i64::from(cells_y));
+    for ring in 0..cx.max(cy) {
+        for dy in -ring..=ring {
+            for dx in -ring..=ring {
+                if dx.abs().max(dy.abs()) != ring {
+                    continue;
+                }
+                let (c, r) = (col + dx, row + dy);
+                if c < 0 || r < 0 || c >= cx || r >= cy {
+                    continue;
+                }
+                let slot = (r * cx + c) as usize;
+                if !taken[slot] {
+                    return Some(slot);
+                }
+            }
+        }
+    }
+    None
+}
+
 fn next_half_edge(e: usize) -> usize {
     if e % 3 == 2 { e - 2 } else { e + 1 }
 }
@@ -327,6 +392,31 @@ mod tests {
             let best = (0..g.len()).min_by(|&a, &b| d(a).total_cmp(&d(b))).unwrap();
             assert_eq!(d(found), d(best));
         }
+    }
+
+    #[test]
+    fn sites_are_exact_cell_sites() {
+        let sites = [[120.0, 88.0], [120.5, 88.5], [0.0, 0.0], [400.0, 150.0]];
+        let mut rng = Rand::new(SeedTree::new(7).part_rng(Layer::Terrain, "grid"));
+        let (g, cells) = Grid::with_sites(400.0, 300.0, 2000, &sites, &mut rng);
+        assert_eq!(cells.len(), sites.len());
+        for (site, &cell) in sites.iter().zip(&cells) {
+            assert_eq!(g.points[cell], *site);
+            assert_eq!(g.find_cell(site[0], site[1]), cell);
+        }
+        // Two sites in one slot get two cells.
+        assert_ne!(cells[0], cells[1]);
+    }
+
+    #[test]
+    fn a_site_does_not_move_far_cells() {
+        let plain = grid(2000);
+        let mut rng = Rand::new(SeedTree::new(7).part_rng(Layer::Terrain, "grid"));
+        let (with, cells) = Grid::with_sites(400.0, 300.0, 2000, &[[200.0, 150.0]], &mut rng);
+        let changed: Vec<usize> = (0..plain.len())
+            .filter(|&c| plain.points[c] != with.points[c])
+            .collect();
+        assert_eq!(changed, vec![cells[0]]);
     }
 
     #[test]
