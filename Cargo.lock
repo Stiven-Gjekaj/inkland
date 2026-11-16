@@ -70,6 +70,12 @@ dependencies = [
 [[package]]
 name = "inkland"
 version = "0.1.0"
+dependencies = [
+ "inkland-constraints",
+ "inkland-core",
+ "inkland-io",
+ "serde_json",
+]
 
 [[package]]
 name = "inkland-app"

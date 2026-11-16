@@ -1,3 +1,141 @@
 //! The public library API of inkland.
 //!
-//! Each command of the `inkland` CLI has a function here.
+//! Each command of the `inkland` CLI has a function here, so Rust code can do
+//! all that the CLI can do.
+
+pub use inkland_core::config::Config;
+pub use inkland_core::error::{Error, ErrorCode, ExitCode, Warning, WarningCode, exit_code_of};
+pub use inkland_io::config::{Override, config_hash, parse_config};
+pub use inkland_io::report::DryRunReport;
+
+use inkland_io::report::{Check, PinCounts, Tool};
+use serde_json::{Value, json};
+
+/// The JSON Schema of the config.
+pub fn schema() -> Value {
+    inkland_io::schema::config_schema()
+}
+
+/// All config rules and pin feasibility checks that need no terrain.
+pub fn validate(config: &Config) -> Vec<Error> {
+    inkland_constraints::validate(config)
+}
+
+/// Check a config and give the dry-run report. Nothing is generated and
+/// nothing is written.
+pub fn dry_run(config: &Config) -> Result<DryRunReport, Vec<Error>> {
+    let errors = validate(config);
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    Ok(DryRunReport {
+        tool: Tool::current(),
+        config_hash: config_hash(config),
+        seed: config.seed,
+        units: config.units.name.clone(),
+        dry_run: true,
+        variants: config.variants.iter().map(|v| v.name.clone()).collect(),
+        pins: PinCounts {
+            points: config.pins.points.len(),
+            regions: config.pins.regions.len(),
+            rivers: config.pins.rivers.len(),
+            roads: config.pins.roads.len(),
+        },
+        checks: inkland_constraints::CHECKS
+            .iter()
+            .map(|&name| Check { name, pass: true })
+            .collect(),
+        warnings: Vec::new(),
+        effective_config: config.clone(),
+    })
+}
+
+/// Generate the maps of a config. Milestone 2 adds the first output.
+pub fn generate(config: &Config) -> Result<Value, Vec<Error>> {
+    let errors = validate(config);
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    Err(vec![Error::new(
+        ErrorCode::NotImplemented,
+        "",
+        "generation without --dry-run comes in milestone 2",
+    )])
+}
+
+/// The version of the tool and the notices of third-party work.
+pub fn version_info() -> Value {
+    json!({
+        "name": "inkland",
+        "version": env!("CARGO_PKG_VERSION"),
+        "config_version": inkland_core::config::CONFIG_VERSION,
+        "license": "MIT OR Apache-2.0",
+        "third_party": [{
+            "name": "Azgaar's Fantasy Map Generator",
+            "url": "https://github.com/Azgaar/Fantasy-Map-Generator",
+            "license": "MIT",
+            "copyright": "Copyright 2017-2024 Max Haniyeu (Azgaar)",
+            "use": "inkland re-implements its algorithms"
+        }]
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config(extra: Value) -> Config {
+        let mut v = json!({ "version": 1, "seed": 5, "frame": { "width": 100, "height": 80 } });
+        for (k, val) in extra.as_object().unwrap() {
+            v[k] = val.clone();
+        }
+        serde_json::from_value(v).unwrap()
+    }
+
+    #[test]
+    fn dry_run_of_a_valid_config_passes_each_check() {
+        let report = dry_run(&config(json!({}))).unwrap();
+        assert!(report.dry_run);
+        assert_eq!(report.seed, 5);
+        assert_eq!(report.checks.len(), inkland_constraints::CHECKS.len());
+        assert!(report.checks.iter().all(|c| c.pass));
+        assert_eq!(report.variants, vec!["default".to_owned()]);
+    }
+
+    #[test]
+    fn dry_run_of_an_infeasible_config_gives_the_errors() {
+        let c = config(
+            json!({ "pins": { "points": [{ "id": "a", "kind": "town", "at": [500, 1] }] } }),
+        );
+        let errors = dry_run(&c).unwrap_err();
+        assert_eq!(errors[0].code, ErrorCode::PinOutsideFrame);
+        assert_eq!(exit_code_of(&errors), ExitCode::Infeasible);
+    }
+
+    #[test]
+    fn generate_validates_first() {
+        let c = config(
+            json!({ "pins": { "points": [{ "id": "a", "kind": "town", "at": [500, 1] }] } }),
+        );
+        assert_eq!(
+            generate(&c).unwrap_err()[0].code,
+            ErrorCode::PinOutsideFrame
+        );
+        assert_eq!(
+            generate(&config(json!({}))).unwrap_err()[0].code,
+            ErrorCode::NotImplemented
+        );
+    }
+
+    #[test]
+    fn version_names_the_original_program() {
+        let v = version_info();
+        assert_eq!(v["third_party"][0]["license"], "MIT");
+        assert!(
+            v["third_party"][0]["copyright"]
+                .as_str()
+                .unwrap()
+                .contains("Azgaar")
+        );
+    }
+}

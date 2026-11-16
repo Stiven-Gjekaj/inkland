@@ -10,3 +10,9 @@ authors.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+inkland-core.workspace = true
+inkland-constraints.workspace = true
+inkland-io.workspace = true
+serde_json.workspace = true
