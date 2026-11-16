@@ -552,6 +552,10 @@ dependencies = [
 [[package]]
 name = "inkland-render"
 version = "0.1.0"
+dependencies = [
+ "inkland-core",
+ "serde_json",
+]
 
 [[package]]
 name = "is_terminal_polyfill"
