@@ -399,6 +399,27 @@ impl RegionKind {
     pub fn is_water(self) -> bool {
         matches!(self, RegionKind::Sea | RegionKind::Lake)
     }
+
+    /// The default height range `[min, max]` of the kind, on the height
+    /// scale 0 to 100 with sea level at 20. A water range ends below 20.
+    pub fn default_height(self) -> [f64; 2] {
+        match self {
+            RegionKind::Sea | RegionKind::Lake => [5.0, 15.0],
+            RegionKind::Marsh => [20.0, 23.0],
+            RegionKind::Plains => [21.0, 35.0],
+            RegionKind::Hills => [35.0, 60.0],
+            RegionKind::Mountains => [70.0, 100.0],
+            RegionKind::Forest | RegionKind::Desert => [20.0, 100.0],
+        }
+    }
+}
+
+impl RegionPin {
+    /// The height range of the region: `height` if it is given, else the
+    /// default range of the kind.
+    pub fn height_range(&self) -> [f64; 2] {
+        self.height.unwrap_or_else(|| self.kind.default_height())
+    }
 }
 
 /// A river with a fixed source, course, and mouth. A river has no height:
@@ -906,6 +927,32 @@ mod tests {
         assert_eq!(c.world.towns, Towns::Count(30));
         v["world"] = json!({ "towns": "many" });
         assert!(serde_json::from_value::<Config>(v).is_err());
+    }
+
+    #[test]
+    fn region_height_comes_from_the_kind_or_the_config() {
+        let mut v = minimal();
+        v["pins"] = json!({ "regions": [
+            { "id": "teeth", "kind": "mountains", "box": [0, 0, 1, 1] },
+            { "id": "wolds", "kind": "hills", "box": [0, 0, 1, 1], "height": [35, 50] }
+        ]});
+        let c: Config = serde_json::from_value(v).unwrap();
+        assert_eq!(c.pins.regions[0].height_range(), [70.0, 100.0]);
+        assert_eq!(c.pins.regions[1].height_range(), [35.0, 50.0]);
+    }
+
+    #[test]
+    fn water_ranges_end_below_sea_level_and_land_ranges_start_at_it() {
+        use RegionKind::*;
+        for k in [Sea, Lake, Mountains, Hills, Plains, Marsh, Forest, Desert] {
+            let [lo, hi] = k.default_height();
+            assert!(lo <= hi);
+            if k.is_water() {
+                assert!(hi < 20.0, "{k:?}");
+            } else {
+                assert!(lo >= 20.0, "{k:?}");
+            }
+        }
     }
 
     #[test]
