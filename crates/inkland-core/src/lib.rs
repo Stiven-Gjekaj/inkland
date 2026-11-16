@@ -8,6 +8,7 @@ pub mod error;
 pub mod features;
 pub mod grid;
 pub mod heightmap;
+pub mod num;
 pub mod rand;
 pub mod seed;
 pub mod world;
