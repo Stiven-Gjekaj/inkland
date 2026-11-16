@@ -2,3 +2,5 @@
 //!
 //! This crate is pure. It does no I/O, and it reads no clock and no
 //! environment.
+
+pub mod seed;
