@@ -207,7 +207,7 @@ All coordinates are in units, in the frame of 3.3.
 | `id` | id | Required. |
 | `kind` | `sea`, `lake`, `mountains`, `hills`, `plains`, `marsh`, `forest`, `desert` | Required. |
 | shape | one of `polygon: [[x, y], ...]`, `box: [x0, y0, x1, y1]`, `circle: {at, r}` | Required. A polygon has 3 or more points and does not cross itself. |
-| `edge` | number, in units | Default 0. Width of the soft edge, inside the shape. |
+| `edge` | number, in units | Default 0. Width of the soft edge, outside the shape. Inside the shape, heights are always in the range. |
 | `height` | `[min, max]` on the 0 to 100 height scale (sea level is 20) | Optional. Changes the default range of the kind. Example: the Wolds are `hills` with `[35, 50]`. |
 | `landlocked` | bool | Only for `sea` and `lake`. Default `false`. With `false`, a `sea` must connect to the ocean (a frame edge), else `SEA_NOT_CONNECTED`. With `true`, an inland sea or a large lake is correct. |
 | `name` | string | Optional. A region label. |
@@ -399,6 +399,33 @@ and the test that closes each milestone. We stop for a review after each one.
 - The coastline follows the cell edges. Milestone 7 adds smoothing.
 - A 20000-cell world with one variant and a PNG preview takes about 0.03 s
   in a release build on an Apple M-series machine.
+
+## 6.2 Notes from Milestone 3
+
+- The soft edge of a region is outside its shape, not inside it. Thus each
+  cell inside a region has a height in the range of the region, and the
+  checks "a forced sea is water" and "forced mountains are high" hold for the
+  full shape. Outside the shape, heights blend to the free terrain over the
+  `edge` width.
+- Inside a region, the template height is scaled into the range:
+  `min + (max - min) * h / 100`. A `forest` or `desert` region without a
+  `height` only lifts water to sea level. Where regions overlap, a cell gets
+  a height in all of their ranges.
+- A point pin is the exact site of its cell, so its report error is 0. The
+  cell of a place is land. The ring around a place that is not a port is
+  land too, except cells in forced water.
+- A port needs one water cell next to it. If the terrain gives none, a
+  channel of at most 8 cells joins the port to the nearest water. The
+  channel does not cross other places, the rings around them, or forced land.
+  Else the error is `PORT_NOT_NEAR_COAST`.
+- After the features are known, each `sea` region without `landlocked: true`
+  must be part of the ocean, else `SEA_NOT_CONNECTED`.
+- Known limit: a region box in open sea makes a land block with straight
+  coasts, because the soft edge has no noise. Use a polygon outline for now.
+  A noisy soft edge is a later change.
+- The report gives, for each point pin: requested and placed position,
+  error, height, land, and for a port whether it touches water. For each
+  region pin: cell count, range, lowest and highest height, and `in_range`.
 
 ## 7. Road lengths in the report
 
