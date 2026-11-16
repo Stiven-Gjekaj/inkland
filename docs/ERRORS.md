@@ -66,7 +66,7 @@ With more than one error, the exit code comes from the most basic fault:
 | `ROAD_LENGTH_OUT_OF_TOLERANCE` | 1 | 0.1.0 | A road is written, but its length is outside the tolerance. (Milestone 6.) |
 | `IO_READ` | 4 | 0.1.0 | A file cannot be read. `details`: `file`. |
 | `IO_WRITE` | 4 | 0.1.0 | A file cannot be written. |
-| `NOT_IMPLEMENTED` | 70 | 0.1.0 | The command is not in this version. The message names the milestone that adds it. |
+| `NOT_IMPLEMENTED` | 70 | 0.1.0 | The command, or a config feature that `generate` must apply, is not in this version. The message names the milestone that adds it. Nothing is written. |
 | `INTERNAL` | 70 | 0.1.0 | A bug in inkland. |
 
 "(Milestone N.)" means that the code exists, but no check gives it before
