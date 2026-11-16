@@ -8,7 +8,14 @@ Some data tables come from it. This file keeps its license notice.
 - Source: <https://github.com/Azgaar/Fantasy-Map-Generator>
 - Commit read: `74136292b8012abe0d57a11ac7780ddc43d9433d`
 - License: MIT (full text below, without changes)
-- Data tables copied into inkland: none yet. Each table gets a line here when it is added.
+- Data tables copied into inkland:
+  - The step lists of the 14 heightmap templates, from
+    `src/data/heightmap-templates.ts`. In inkland:
+    `crates/inkland-core/src/heightmap/templates.rs`.
+  - The blob and line fall-off tables, from
+    `src/model/physical/heightmap-generator.ts`. In inkland:
+    `BLOB_POWER` and `LINE_POWER` in
+    `crates/inkland-core/src/heightmap/mod.rs`.
 
 ```text
 MIT License
@@ -37,3 +44,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Rust crates
+
+The `inkland` binary includes Rust crates under MIT, Apache-2.0, ISC,
+BSD-2-Clause, BSD-3-Clause, and Unicode-3.0 licenses. `deny.toml` lists the
+licenses that the build accepts. To list each crate with its license, run
+`cargo deny list`.
