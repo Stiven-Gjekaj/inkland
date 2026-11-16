@@ -7,7 +7,7 @@
 use clap::{Args, Parser, Subcommand};
 use inkland::{Error, ErrorCode, ExitCode, Override, exit_code_of};
 use serde_json::{Value, json};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(
@@ -178,7 +178,75 @@ fn generate(args: GenerateArgs, verbose: bool) -> Result<Value, Vec<Error>> {
         }
         return Ok(serde_json::to_value(report).expect("a report always converts to JSON"));
     }
-    inkland::generate(&config)
+    let out = inkland::generate(&config, args.variant.as_deref())?;
+    write_output(&out, &args, verbose)
+}
+
+/// The longer side of the PNG preview, in pixels.
+const PREVIEW_PX: u32 = 1024;
+
+/// Write the files of `generate`. Return the summary for stdout.
+fn write_output(
+    out: &inkland::Output,
+    args: &GenerateArgs,
+    verbose: bool,
+) -> Result<Value, Vec<Error>> {
+    let write = |path: &Path, bytes: &[u8]| -> Result<(), Vec<Error>> {
+        std::fs::write(path, bytes).map_err(|e| {
+            vec![
+                Error::new(ErrorCode::IoWrite, "", format!("cannot write a file: {e}"))
+                    .with("file", path.display().to_string()),
+            ]
+        })?;
+        if verbose {
+            eprintln!("inkland: wrote {}", path.display());
+        }
+        Ok(())
+    };
+    std::fs::create_dir_all(&args.out_dir).map_err(|e| {
+        vec![
+            Error::new(
+                ErrorCode::IoWrite,
+                "",
+                format!("cannot make the output directory: {e}"),
+            )
+            .with("file", args.out_dir.display().to_string()),
+        ]
+    })?;
+    let world_path = args.out_dir.join("world.json");
+    write(&world_path, out.world_json.as_bytes())?;
+    let mut variants = Vec::new();
+    for v in &out.variants {
+        let svg_path = args.out_dir.join(format!("{}.svg", v.name));
+        let report_path = args.out_dir.join(format!("{}.report.json", v.name));
+        write(&svg_path, v.svg.as_bytes())?;
+        let mut report =
+            serde_json::to_string_pretty(&v.report).expect("a report converts to JSON");
+        report.push('\n');
+        write(&report_path, report.as_bytes())?;
+        let mut entry = json!({
+            "name": v.name,
+            "svg": svg_path.display().to_string(),
+            "report": report_path.display().to_string(),
+        });
+        if let Some(preview) = &args.preview {
+            let path = if out.variants.len() == 1 {
+                preview.clone()
+            } else {
+                let stem = preview.file_stem().unwrap_or_default().to_string_lossy();
+                preview.with_file_name(format!("{stem}-{}.png", v.name))
+            };
+            let png = inkland::preview_png(&v.svg, PREVIEW_PX)
+                .map_err(|e| vec![Error::new(ErrorCode::Internal, "", e)])?;
+            write(&path, &png)?;
+            entry["preview"] = Value::from(path.display().to_string());
+        }
+        variants.push(entry);
+    }
+    Ok(json!({
+        "world": world_path.display().to_string(),
+        "variants": variants,
+    }))
 }
 
 fn not_yet(command: &str, milestone: u32) -> Result<Value, Vec<Error>> {

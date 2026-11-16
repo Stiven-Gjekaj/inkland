@@ -270,3 +270,120 @@ fn same_config_gives_the_same_bytes() {
         .unwrap();
     assert_eq!(a.stdout, b.stdout);
 }
+
+#[test]
+fn generate_writes_the_world_and_each_variant() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = minimal();
+    c["world"] = json!({ "cells": 1000 });
+    c["variants"] = json!([
+        { "name": "full", "page": { "w_mm": 167, "h_mm": 250 } },
+        { "name": "act-1", "crop": [0, 0, 50, 40], "page": { "w_mm": 167, "h_mm": 120 } }
+    ]);
+    let config = write_config(dir.path(), &c);
+    let out = dir.path().join("out");
+    let preview = out.join("p.png");
+    let (code, summary) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--out-dir",
+        out.to_str().unwrap(),
+        "--preview",
+        preview.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "{summary}");
+    let mut names: Vec<String> = std::fs::read_dir(&out)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "act-1.report.json",
+            "act-1.svg",
+            "full.report.json",
+            "full.svg",
+            "p-act-1.png",
+            "p-full.png",
+            "world.json"
+        ]
+    );
+    let report: Value =
+        serde_json::from_str(&std::fs::read_to_string(out.join("act-1.report.json")).unwrap())
+            .unwrap();
+    assert_eq!(report["variant"], "act-1");
+    assert_eq!(report["dry_run"], false);
+}
+
+#[test]
+fn variant_flag_writes_only_that_variant() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = minimal();
+    c["world"] = json!({ "cells": 1000 });
+    c["variants"] = json!([
+        { "name": "a", "page": { "w_mm": 100, "h_mm": 100 } },
+        { "name": "b", "page": { "w_mm": 100, "h_mm": 100 } }
+    ]);
+    let config = write_config(dir.path(), &c);
+    let out = dir.path().join("out");
+    let (code, summary) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--out-dir",
+        out.to_str().unwrap(),
+        "--variant",
+        "b",
+    ]);
+    assert_eq!(code, 0);
+    assert_eq!(summary["variants"].as_array().unwrap().len(), 1);
+    assert!(out.join("b.svg").exists());
+    assert!(!out.join("a.svg").exists());
+}
+
+#[test]
+fn pins_that_this_version_cannot_apply_are_refused_and_nothing_is_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = minimal();
+    c["pins"] = json!({ "points": [{ "id": "a", "kind": "town", "at": [5, 5] }] });
+    let config = write_config(dir.path(), &c);
+    let out = dir.path().join("out");
+    let (code, err) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--out-dir",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 70);
+    assert_eq!(err["error"]["code"], "NOT_IMPLEMENTED");
+    assert!(!out.exists());
+}
+
+#[test]
+fn generate_twice_gives_the_same_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = minimal();
+    c["world"] = json!({ "cells": 2000, "template": "archipelago" });
+    let config = write_config(dir.path(), &c);
+    let mut outputs = Vec::new();
+    for name in ["one", "two"] {
+        let out = dir.path().join(name);
+        let (code, _) = run(&[
+            "generate",
+            "--config",
+            config.to_str().unwrap(),
+            "--out-dir",
+            out.to_str().unwrap(),
+        ]);
+        assert_eq!(code, 0);
+        let files: Vec<Vec<u8>> = ["world.json", "default.svg", "default.report.json"]
+            .iter()
+            .map(|f| std::fs::read(out.join(f)).unwrap())
+            .collect();
+        outputs.push(files);
+    }
+    assert_eq!(outputs[0], outputs[1]);
+}
