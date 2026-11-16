@@ -12,8 +12,13 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# The PNG preview. The CLI turns it on.
+png = ["dep:resvg"]
+
 [dependencies]
 inkland-core.workspace = true
+resvg = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true

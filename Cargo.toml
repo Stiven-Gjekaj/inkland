@@ -28,6 +28,7 @@ clap = { version = "4", features = ["derive"] }
 delaunator = "1.1"
 libm = "0.2"
 proptest = "1"
+resvg = { version = "0.50", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

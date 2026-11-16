@@ -3,4 +3,6 @@
 //! Milestone 7 adds print-safe styles and the SVG checks.
 
 pub mod page;
+#[cfg(feature = "png")]
+pub mod png;
 pub mod svg;
