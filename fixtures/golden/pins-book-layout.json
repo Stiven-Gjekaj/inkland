@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "seed": 2026,
+  "units": {
+    "name": "mile"
+  },
+  "frame": {
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "cells": 8000,
+    "template": "continents"
+  },
+  "pins": {
+    "points": [
+      {
+        "id": "kingsholm",
+        "kind": "city",
+        "at": [
+          150,
+          120
+        ],
+        "name": "Kingsholm"
+      },
+      {
+        "id": "harbour",
+        "kind": "city",
+        "at": [
+          22,
+          180
+        ],
+        "name": "Harbour",
+        "port": true
+      },
+      {
+        "id": "ford",
+        "kind": "village",
+        "at": [
+          120,
+          190
+        ],
+        "name": "Ford"
+      },
+      {
+        "id": "high-keep",
+        "kind": "fortress",
+        "at": [
+          235,
+          70
+        ]
+      }
+    ],
+    "regions": [
+      {
+        "id": "western-sea",
+        "kind": "sea",
+        "box": [
+          0,
+          0,
+          20,
+          300
+        ],
+        "name": "The Western Sea"
+      },
+      {
+        "id": "grey-peaks",
+        "kind": "mountains",
+        "box": [
+          210,
+          30,
+          280,
+          130
+        ],
+        "edge": 15
+      },
+      {
+        "id": "downs",
+        "kind": "hills",
+        "circle": {
+          "at": [
+            260,
+            210
+          ],
+          "r": 35
+        },
+        "height": [
+          35,
+          50
+        ],
+        "edge": 10
+      },
+      {
+        "id": "fen",
+        "kind": "marsh",
+        "polygon": [
+          [
+            60,
+            200
+          ],
+          [
+            110,
+            195
+          ],
+          [
+            115,
+            240
+          ],
+          [
+            65,
+            250
+          ]
+        ]
+      },
+      {
+        "id": "mere",
+        "kind": "lake",
+        "box": [
+          320,
+          60,
+          345,
+          80
+        ],
+        "landlocked": true
+      }
+    ]
+  },
+  "variants": [
+    {
+      "name": "full",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 250
+      }
+    },
+    {
+      "name": "west",
+      "crop": [
+        0,
+        100,
+        200,
+        260
+      ],
+      "page": {
+        "w_mm": 167,
+        "h_mm": 120
+      }
+    }
+  ]
+}
