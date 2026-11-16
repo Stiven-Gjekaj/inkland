@@ -90,6 +90,8 @@ codes! {
         RiverMouthRegionKind = "RIVER_MOUTH_REGION_KIND" => InvalidConfig,
         /// A value is outside its permitted range.
         ValueOutOfRange = "VALUE_OUT_OF_RANGE" => InvalidConfig,
+        /// A step of a custom heightmap template cannot be read.
+        TemplateInvalid = "TEMPLATE_INVALID" => InvalidConfig,
         /// A pin or a crop is outside the frame.
         PinOutsideFrame = "PIN_OUTSIDE_FRAME" => Infeasible,
         /// A point pin is in a `sea` or `lake` region.

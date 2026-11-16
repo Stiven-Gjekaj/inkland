@@ -124,6 +124,17 @@ impl<'a> Validator<'a> {
                 format!("sea_level must be 1 to 99, found {}", w.sea_level),
             );
         }
+        if let inkland_core::config::Template::Steps { steps } = &w.template {
+            if let Err(e) = inkland_core::heightmap::parse_steps(steps.iter().map(String::as_str)) {
+                self.err(ErrorCode::TemplateInvalid, "/world/template/steps", e);
+            } else if steps.iter().all(|s| s.trim().is_empty()) {
+                self.err(
+                    ErrorCode::TemplateInvalid,
+                    "/world/template/steps",
+                    "a custom template needs one or more steps",
+                );
+            }
+        }
         let [south, north] = w.climate.latitude_range;
         if !(-90.0..=90.0).contains(&south) || !(-90.0..=90.0).contains(&north) || south >= north {
             self.err(

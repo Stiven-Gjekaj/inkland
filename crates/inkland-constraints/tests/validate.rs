@@ -290,3 +290,19 @@ fn errors_come_in_a_fixed_order() {
     assert_eq!(first, codes(&c));
     assert_eq!(first[0].0, ErrorCode::FrameAxesInvalid);
 }
+
+#[test]
+fn custom_template_with_a_bad_step_is_refused() {
+    let c = with(
+        json!({ "world": { "template": { "steps": ["Hill 1 50 40-60 40-60", "Volcano 3"] } } }),
+    );
+    one(&c, ErrorCode::TemplateInvalid, "/world/template/steps");
+}
+
+#[test]
+fn custom_template_with_good_steps_is_valid() {
+    let c = with(
+        json!({ "world": { "template": { "steps": ["Hill 1 50 40-60 40-60", "Smooth 2"] } } }),
+    );
+    assert_eq!(codes(&c), vec![]);
+}
