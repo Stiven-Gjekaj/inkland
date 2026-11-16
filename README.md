@@ -11,12 +11,27 @@ A chapter can cite a fact from a map, and a machine can check that fact.
 
 ## Status
 
-Phase 0 (research and plan) is complete. No code exists yet.
+Milestone 1 is complete. The tool reads and checks a config, but it does
+not make maps yet.
+
+```sh
+cargo run -p inkland-cli -- schema
+cargo run -p inkland-cli -- generate --config fixtures/configs/full.json --dry-run
+cargo run -p inkland-cli -- version
+```
+
+- `schema` prints the JSON Schema of the config.
+- `generate --dry-run` checks the config and the pins and prints a report.
+- `version` prints the version and the third-party notices.
+
+All output is JSON on stdout. An error has a stable code and a JSON Pointer
+to the bad value. See [the error codes](docs/ERRORS.md).
 
 - [Specification](docs/SPEC.md)
 - [Plan](docs/PLAN.md)
 - [Architecture of the original program](docs/ARCHITECTURE.md)
 - [Decisions](docs/DECISIONS.md)
+- [Error codes](docs/ERRORS.md)
 
 ## Attribution
 
