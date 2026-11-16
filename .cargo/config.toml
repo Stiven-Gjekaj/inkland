@@ -1,0 +1,4 @@
+# The static Linux build links with the linker that ships with Rust, so it
+# needs no C toolchain for musl.
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"

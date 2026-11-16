@@ -1,0 +1,63 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: never
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml selects the toolchain and its components.
+      - run: rustup show active-toolchain
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: ./scripts/check-guards.sh
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain
+      - run: cargo test --workspace --locked
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  musl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add x86_64-unknown-linux-musl
+      - run: cargo build --release --locked -p inkland-cli --target x86_64-unknown-linux-musl
+      - name: The binary is static
+        run: |
+          bin=target/x86_64-unknown-linux-musl/release/inkland
+          file "$bin"
+          file "$bin" | grep -q 'static'
+          if ldd "$bin" 2>&1 | grep -q '=>'; then echo "the binary links to shared libraries"; exit 1; fi
+      - name: The binary runs
+        run: |
+          bin=target/x86_64-unknown-linux-musl/release/inkland
+          "$bin" version --json
+          "$bin" generate --config fixtures/configs/full.json --dry-run > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: inkland-x86_64-unknown-linux-musl
+          path: target/x86_64-unknown-linux-musl/release/inkland
