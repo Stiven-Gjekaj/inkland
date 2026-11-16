@@ -180,6 +180,14 @@ impl<'a> Validator<'a> {
                     format!("{p}/height"),
                     "height must be [min, max] with 0 <= min <= max <= 100",
                 );
+            } else if let Some([lo, hi]) = r.height
+                && lo.ceil() > hi.floor()
+            {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{p}/height"),
+                    "heights are whole numbers, so the height range must contain a whole number",
+                );
             }
             if let Some([lo, hi]) = r.height {
                 let water = r.kind.is_water();

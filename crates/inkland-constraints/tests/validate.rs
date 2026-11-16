@@ -322,3 +322,11 @@ fn two_places_at_the_same_position_are_infeasible() {
     ]}}));
     one(&c, ErrorCode::PinSamePosition, "/pins/points/1/at");
 }
+
+#[test]
+fn height_range_without_a_whole_number_is_refused() {
+    let c = with(json!({ "pins": { "regions": [
+        { "id": "r", "kind": "hills", "box": [0, 0, 10, 10], "height": [40.2, 40.8] }
+    ]}}));
+    one(&c, ErrorCode::ValueOutOfRange, "/pins/regions/0/height");
+}
