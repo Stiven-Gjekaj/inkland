@@ -21,3 +21,6 @@ serde_json.workspace = true
 schemars.workspace = true
 delaunator.workspace = true
 libm.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

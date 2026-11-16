@@ -26,6 +26,7 @@ serde_path_to_error = "0.1"
 clap = { version = "4", features = ["derive"] }
 delaunator = "1.1"
 libm = "0.2"
+proptest = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -10,3 +10,4 @@ pub mod grid;
 pub mod heightmap;
 pub mod rand;
 pub mod seed;
+pub mod world;
