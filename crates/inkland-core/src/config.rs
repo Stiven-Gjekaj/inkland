@@ -1,0 +1,923 @@
+//! The config of one map (version 1).
+//!
+//! `inkland schema` makes the JSON Schema from these types. The doc comment
+//! of each field is its description in the schema, so each doc comment gives
+//! the unit of the field.
+//!
+//! All coordinates are in config units (`units.name`), in the frame of
+//! `frame`.
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+/// The only config version that this tool reads.
+pub const CONFIG_VERSION: u32 = 1;
+
+/// A point `[x, y]` in config units.
+pub type Point = [f64; 2];
+
+/// The config of one map.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    /// Config format version. Must be 1.
+    pub version: u32,
+    /// Master seed. Each layer of generation gets its own seed from it.
+    pub seed: u64,
+    /// The distance unit of all coordinates and lengths.
+    #[serde(default)]
+    pub units: Units,
+    /// The size and the axes of the world.
+    pub frame: Frame,
+    /// Generation options.
+    #[serde(default)]
+    pub world: World,
+    /// Hard constraints. Generation fits around them and never moves them.
+    #[serde(default)]
+    pub pins: Pins,
+    /// Named overlays. A variant shows the base world and one overlay.
+    #[serde(default)]
+    pub overlays: BTreeMap<String, Overlay>,
+    /// The maps to render. Default: one variant `default`, full frame, on a
+    /// 167 x 250 mm page.
+    #[serde(default = "default_variants")]
+    pub variants: Vec<Variant>,
+    /// Render options for all variants.
+    #[serde(default)]
+    pub render: Render,
+    /// Directories with font files. Only the PNG preview uses them.
+    #[serde(default)]
+    pub font_dirs: Vec<String>,
+}
+
+/// The distance unit.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Units {
+    /// Name of the unit, for example `mile`. The report and the scale bar use
+    /// this name.
+    #[serde(default = "default_unit_name")]
+    pub name: String,
+    /// Wanted mean width of a cell, in units. Optional. When it is given, it
+    /// sets the number of cells and replaces `world.cells`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub per_cell_hint: Option<f64>,
+}
+
+impl Default for Units {
+    fn default() -> Self {
+        Self {
+            name: default_unit_name(),
+            per_cell_hint: None,
+        }
+    }
+}
+
+/// The frame of the world: its size and the direction of its axes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Frame {
+    /// The corner where x = 0 and y = 0.
+    #[serde(default)]
+    pub origin: Origin,
+    /// The direction in which x increases. Only `east`.
+    #[serde(default)]
+    pub x_axis: XAxis,
+    /// The direction in which y increases: `south` with origin `top-left`,
+    /// `north` with origin `bottom-left`.
+    #[serde(default)]
+    pub y_axis: YAxis,
+    /// Width of the world, in units. Must be more than 0.
+    pub width: f64,
+    /// Height of the world, in units. Must be more than 0.
+    pub height: f64,
+}
+
+/// The corner of the origin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Origin {
+    #[default]
+    TopLeft,
+    BottomLeft,
+}
+
+/// The direction of the x axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum XAxis {
+    #[default]
+    East,
+}
+
+/// The direction of the y axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum YAxis {
+    #[default]
+    South,
+    North,
+}
+
+/// Generation options.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct World {
+    /// Number of cells in the first grid. 1000 to 100000.
+    #[serde(default = "default_cells")]
+    #[schemars(range(min = 1000, max = 100000))]
+    pub cells: u32,
+    /// Heightmap template: a template name, or a list of steps.
+    #[serde(default)]
+    pub template: Template,
+    /// Sea level on the height scale 0 to 100. Cells below it are water.
+    #[serde(default = "default_sea_level")]
+    #[schemars(range(min = 1, max = 99))]
+    pub sea_level: u8,
+    /// Climate options.
+    #[serde(default)]
+    pub climate: Climate,
+    /// Number of cultures.
+    #[serde(default = "default_cultures")]
+    pub cultures: u32,
+    /// Name of the culture set, for example `european`.
+    #[serde(default = "default_culture_set")]
+    pub culture_set: String,
+    /// Number of states.
+    #[serde(default = "default_states")]
+    pub states: u32,
+    /// Number of towns that generation adds, or `auto`.
+    #[serde(default)]
+    pub towns: Towns,
+    /// Number of religions.
+    #[serde(default = "default_religions")]
+    pub religions: u32,
+    /// Options for places that generation adds.
+    #[serde(default)]
+    pub places: PlaceOptions,
+}
+
+impl Default for World {
+    fn default() -> Self {
+        Self {
+            cells: default_cells(),
+            template: Template::default(),
+            sea_level: default_sea_level(),
+            climate: Climate::default(),
+            cultures: default_cultures(),
+            culture_set: default_culture_set(),
+            states: default_states(),
+            towns: Towns::default(),
+            religions: default_religions(),
+            places: PlaceOptions::default(),
+        }
+    }
+}
+
+/// A heightmap template.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Template {
+    /// A named template.
+    Named(TemplateName),
+    /// A list of template steps, one step in each string, for example
+    /// `"Hill 1 90-99 60-80 45-55"`.
+    Steps {
+        /// The steps, in order.
+        steps: Vec<String>,
+    },
+}
+
+impl Default for Template {
+    fn default() -> Self {
+        Template::Named(TemplateName::Continents)
+    }
+}
+
+/// The names of the built-in heightmap templates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TemplateName {
+    Volcano,
+    HighIsland,
+    LowIsland,
+    Continents,
+    Archipelago,
+    Atoll,
+    Mediterranean,
+    Peninsula,
+    Pangea,
+    Isthmus,
+    Shattered,
+    Taklamakan,
+    OldWorld,
+    Fractious,
+}
+
+/// Climate options.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Climate {
+    /// Latitude of the south edge and of the north edge, in degrees.
+    #[serde(default = "default_latitude_range")]
+    pub latitude_range: [f64; 2],
+    /// Wind bearings in degrees, one for each 30 degree latitude band from
+    /// north to south. Optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wind: Option<[f64; 6]>,
+}
+
+impl Default for Climate {
+    fn default() -> Self {
+        Self {
+            latitude_range: default_latitude_range(),
+            wind: None,
+        }
+    }
+}
+
+/// A count, or `auto`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Towns {
+    /// Generation chooses the number from the land area.
+    Auto(AutoKeyword),
+    /// A fixed number of towns.
+    Count(u32),
+}
+
+impl Default for Towns {
+    fn default() -> Self {
+        Towns::Auto(AutoKeyword::Auto)
+    }
+}
+
+/// The keyword `auto`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum AutoKeyword {
+    Auto,
+}
+
+/// Options for places that generation adds.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PlaceOptions {
+    /// Smallest distance from a generated place to a pinned place, in units.
+    /// Default: three times the mean cell width.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub min_distance_from_pins: Option<f64>,
+}
+
+/// Hard constraints.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Pins {
+    /// Places at exact coordinates.
+    #[serde(default)]
+    pub points: Vec<PointPin>,
+    /// Areas with a forced kind of terrain.
+    #[serde(default)]
+    pub regions: Vec<RegionPin>,
+    /// Rivers with a fixed source, course, and mouth.
+    #[serde(default)]
+    pub rivers: Vec<RiverPin>,
+    /// Roads between pinned places, with an optional target length.
+    #[serde(default)]
+    pub roads: Vec<RoadPin>,
+}
+
+/// A place at exact coordinates.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PointPin {
+    /// Identifier: lower-case letters and digits, words joined by `-`.
+    /// Unique across all pins.
+    #[schemars(regex(pattern = r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    pub id: String,
+    /// Kind of place.
+    pub kind: PlaceKind,
+    /// Position `[x, y]`, in units. The place is put here exactly.
+    pub at: Point,
+    /// Name of the place. Default: a generated name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// `true`: the cell of the place touches the sea or a lake.
+    #[serde(default)]
+    pub port: bool,
+    /// Name of a state. The state forms around this place, its capital.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capital_of: Option<String>,
+    /// Name of the kind. Required when `kind` is `custom`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_kind: Option<String>,
+}
+
+/// Kinds of places.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum PlaceKind {
+    City,
+    Town,
+    Village,
+    Ruin,
+    Fortress,
+    Custom,
+}
+
+/// An area with a forced kind of terrain. Give exactly one of `polygon`,
+/// `box`, and `circle`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RegionPin {
+    /// Identifier: lower-case letters and digits, words joined by `-`.
+    /// Unique across all pins.
+    #[schemars(regex(pattern = r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    pub id: String,
+    /// Kind of terrain in the area.
+    pub kind: RegionKind,
+    /// Outline `[[x, y], ...]`, in units. 3 or more points. The outline must
+    /// not cross itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polygon: Option<Vec<Point>>,
+    /// Rectangle `[x0, y0, x1, y1]`, in units.
+    #[serde(default, rename = "box", skip_serializing_if = "Option::is_none")]
+    pub rect: Option<[f64; 4]>,
+    /// Circle, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub circle: Option<Circle>,
+    /// Width of the soft edge inside the shape, in units. Heights blend from
+    /// the forced range to the free terrain over this width.
+    #[serde(default)]
+    #[schemars(range(min = 0.0))]
+    pub edge: f64,
+    /// Height range `[min, max]` on the height scale 0 to 100 (sea level 20).
+    /// Default: the range of the kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<[f64; 2]>,
+    /// Only for `sea` and `lake`. `false`: a `sea` must connect to the ocean
+    /// at a frame edge. `true`: an inland sea or a large lake.
+    #[serde(default)]
+    pub landlocked: bool,
+    /// Name of the area, for its label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// A circle.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Circle {
+    /// Center `[x, y]`, in units.
+    pub at: Point,
+    /// Radius, in units.
+    #[schemars(range(min = 0.0))]
+    pub r: f64,
+}
+
+/// Kinds of forced terrain.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum RegionKind {
+    Sea,
+    Lake,
+    Mountains,
+    Hills,
+    Plains,
+    Marsh,
+    Forest,
+    Desert,
+}
+
+impl RegionKind {
+    /// `true` for kinds that force water.
+    pub fn is_water(self) -> bool {
+        matches!(self, RegionKind::Sea | RegionKind::Lake)
+    }
+}
+
+/// A river with a fixed source, course, and mouth. A river has no height:
+/// generation calculates the heights so that the river flows downhill.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RiverPin {
+    /// Identifier: lower-case letters and digits, words joined by `-`.
+    /// Unique across all pins.
+    #[schemars(regex(pattern = r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    pub id: String,
+    /// Name of the river.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Where the river starts: a point, a place, or a region.
+    pub source: Anchor,
+    /// Points or places that the river passes, in order.
+    #[serde(default)]
+    pub through: Vec<Anchor>,
+    /// Where the river ends: a point in water, a port place, or a region of
+    /// kind `sea`, `lake`, or `marsh`.
+    pub mouth: Anchor,
+}
+
+/// A position: a point, a pinned place, or a pinned region.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Anchor {
+    /// A point `[x, y]`, in units.
+    Point(Point),
+    /// A pinned place.
+    Place(PlaceRef),
+    /// A pinned region.
+    Region(RegionRef),
+}
+
+/// A reference to a pinned place.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PlaceRef {
+    /// The id of a point pin.
+    pub place: String,
+}
+
+/// A reference to a pinned region.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RegionRef {
+    /// The id of a region pin.
+    pub region: String,
+}
+
+/// A road between two pinned places.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RoadPin {
+    /// Identifier: lower-case letters and digits, words joined by `-`.
+    /// Unique across all pins.
+    #[schemars(regex(pattern = r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    pub id: String,
+    /// The id of the place where the road starts.
+    pub from: String,
+    /// The id of the place where the road ends.
+    pub to: String,
+    /// Places (ids) or points `[x, y]` in units that the road passes, in
+    /// order.
+    #[serde(default)]
+    pub via: Vec<Waypoint>,
+    /// Kind of road.
+    #[serde(default)]
+    pub kind: RoadKind,
+    /// Wanted length of the road, in units. Optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub target_length: Option<f64>,
+    /// Permitted difference from `target_length`, as a fraction (0.05 is
+    /// 5 percent).
+    #[serde(default = "default_tolerance")]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub tolerance: f64,
+}
+
+/// A point that a road passes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Waypoint {
+    /// The id of a point pin.
+    Place(String),
+    /// A point `[x, y]`, in units.
+    Point(Point),
+}
+
+/// Kinds of roads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RoadKind {
+    #[default]
+    Road,
+    Trail,
+}
+
+/// An overlay: what one variant adds to, removes from, or renames in the
+/// base world. An overlay cannot change terrain, rivers, or coasts.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Overlay {
+    /// Items that only this overlay shows.
+    #[serde(default)]
+    pub add: OverlayAdd,
+    /// Items to hide, as `"<kind>:<id>"`, for example `"place:ostrey"`.
+    #[serde(default)]
+    pub remove: Vec<String>,
+    /// New names, from `"<kind>:<id>"` to the name.
+    #[serde(default)]
+    pub rename: BTreeMap<String, String>,
+    /// Label options, from `"<kind>:<id>"` to the options.
+    #[serde(default)]
+    pub labels: BTreeMap<String, LabelOptions>,
+}
+
+/// Items that an overlay adds.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OverlayAdd {
+    /// Places. They do not change the terrain.
+    #[serde(default)]
+    pub places: Vec<PointPin>,
+    /// Features such as ruins, battle sites, and old borders.
+    #[serde(default)]
+    pub features: Vec<Feature>,
+    /// Roads, routed on the shared terrain.
+    #[serde(default)]
+    pub roads: Vec<RoadPin>,
+}
+
+/// A feature that an overlay adds. Give exactly one of `at`, `polyline`,
+/// and `polygon`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Feature {
+    /// Identifier: lower-case letters and digits, words joined by `-`.
+    #[schemars(regex(pattern = r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    pub id: String,
+    /// Kind of feature.
+    pub kind: FeatureKind,
+    /// Position `[x, y]`, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Point>,
+    /// Line `[[x, y], ...]`, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polyline: Option<Vec<Point>>,
+    /// Outline `[[x, y], ...]`, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polygon: Option<Vec<Point>>,
+    /// Name of the feature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// Kinds of overlay features.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum FeatureKind {
+    Ruin,
+    BattleSite,
+    Border,
+    Wall,
+    Custom,
+}
+
+/// Label options.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LabelOptions {
+    /// `true`: do not show the label.
+    #[serde(default)]
+    pub hide: bool,
+    /// Font size, in points. Default: the size of the label kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub size_pt: Option<f64>,
+}
+
+/// One map to render.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Variant {
+    /// Name of the variant: lower-case letters and digits, words joined by
+    /// `-`. It is also the stem of the output file names.
+    #[schemars(regex(pattern = r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    pub name: String,
+    /// Name of the overlay to show. Default: no overlay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlay: Option<String>,
+    /// Rectangle `[x0, y0, x1, y1]` of the world to show, in units. Default:
+    /// the full frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<[f64; 4]>,
+    /// Page size.
+    pub page: Page,
+    /// Extras for this variant. A value here replaces the value in
+    /// `render.extras`.
+    #[serde(default)]
+    pub extras: Extras,
+}
+
+/// A page size.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Page {
+    /// Width, in millimetres.
+    #[schemars(range(min = 0.0))]
+    pub w_mm: f64,
+    /// Height, in millimetres.
+    #[schemars(range(min = 0.0))]
+    pub h_mm: f64,
+    /// Margin on all sides, in millimetres.
+    #[serde(default)]
+    #[schemars(range(min = 0.0))]
+    pub margin_mm: f64,
+}
+
+/// Render options for all variants.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Render {
+    /// Render mode. `print-safe` is black on white only.
+    #[serde(default)]
+    pub mode: RenderMode,
+    /// Font families. The SVG names each family exactly as given here. The
+    /// SVG never embeds a font.
+    #[serde(default)]
+    pub fonts: Fonts,
+    /// Font families that the SVG can use. A family in `fonts` that is not in
+    /// this list is an error.
+    #[serde(default = "default_fonts_allowed")]
+    pub fonts_allowed: Vec<String>,
+    /// Smallest permitted line width, in points.
+    #[serde(default = "default_min_line_width_pt")]
+    #[schemars(range(min = 0.0))]
+    pub min_line_width_pt: f64,
+    /// Extras such as the scale bar and the compass.
+    #[serde(default)]
+    pub extras: Extras,
+    /// Layers to draw, from bottom to top.
+    #[serde(default = "default_layers")]
+    pub layers: Vec<LayerName>,
+}
+
+impl Default for Render {
+    fn default() -> Self {
+        Self {
+            mode: RenderMode::default(),
+            fonts: Fonts::default(),
+            fonts_allowed: default_fonts_allowed(),
+            min_line_width_pt: default_min_line_width_pt(),
+            extras: Extras::default(),
+            layers: default_layers(),
+        }
+    }
+}
+
+/// Render modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RenderMode {
+    #[default]
+    PrintSafe,
+    Colour,
+}
+
+/// Font families.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Fonts {
+    /// Family of the map title.
+    #[serde(default = "default_font_fell")]
+    pub title: String,
+    /// Family of the map labels.
+    #[serde(default = "default_font_fell")]
+    pub labels: String,
+    /// Small-capital family of the map labels, for example region names.
+    #[serde(default = "default_font_fell_sc")]
+    pub labels_sc: String,
+    /// Family of all other text: scale bar, compass letters, grid, notes.
+    #[serde(default = "default_font_other")]
+    pub other: String,
+}
+
+impl Default for Fonts {
+    fn default() -> Self {
+        Self {
+            title: default_font_fell(),
+            labels: default_font_fell(),
+            labels_sc: default_font_fell_sc(),
+            other: default_font_other(),
+        }
+    }
+}
+
+impl Fonts {
+    /// Each family with the name of its field, in a fixed order.
+    pub fn families(&self) -> [(&'static str, &str); 4] {
+        [
+            ("title", &self.title),
+            ("labels", &self.labels),
+            ("labels_sc", &self.labels_sc),
+            ("other", &self.other),
+        ]
+    }
+}
+
+/// Extras. A missing value means "not set".
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Extras {
+    /// Show a scale bar in config units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_bar: Option<bool>,
+    /// Show a compass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compass: Option<bool>,
+    /// Show a title cartouche.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cartouche: Option<Cartouche>,
+    /// Show a grid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<Grid>,
+}
+
+/// A title cartouche.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Cartouche {
+    /// The title text.
+    pub title: String,
+}
+
+/// A grid.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Grid {
+    /// Distance between grid lines, in units.
+    #[schemars(range(min = 0.0))]
+    pub step: f64,
+}
+
+/// Names of the map layers.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum LayerName {
+    Coast,
+    Relief,
+    Rivers,
+    Regions,
+    Roads,
+    Places,
+    Labels,
+}
+
+fn default_unit_name() -> String {
+    "mile".to_owned()
+}
+fn default_cells() -> u32 {
+    10_000
+}
+fn default_sea_level() -> u8 {
+    20
+}
+fn default_cultures() -> u32 {
+    6
+}
+fn default_culture_set() -> String {
+    "european".to_owned()
+}
+fn default_states() -> u32 {
+    5
+}
+fn default_religions() -> u32 {
+    4
+}
+fn default_latitude_range() -> [f64; 2] {
+    [30.0, 55.0]
+}
+fn default_tolerance() -> f64 {
+    0.05
+}
+fn default_min_line_width_pt() -> f64 {
+    0.5
+}
+fn default_font_fell() -> String {
+    "IM Fell English".to_owned()
+}
+fn default_font_fell_sc() -> String {
+    "IM Fell English SC".to_owned()
+}
+fn default_font_other() -> String {
+    "Caladea".to_owned()
+}
+fn default_fonts_allowed() -> Vec<String> {
+    ["Caladea", "Inter", "IM Fell English", "IM Fell English SC"]
+        .map(str::to_owned)
+        .to_vec()
+}
+fn default_layers() -> Vec<LayerName> {
+    vec![
+        LayerName::Coast,
+        LayerName::Relief,
+        LayerName::Rivers,
+        LayerName::Regions,
+        LayerName::Roads,
+        LayerName::Places,
+        LayerName::Labels,
+    ]
+}
+fn default_variants() -> Vec<Variant> {
+    vec![Variant {
+        name: "default".to_owned(),
+        overlay: None,
+        crop: None,
+        page: Page {
+            w_mm: 167.0,
+            h_mm: 250.0,
+            margin_mm: 0.0,
+        },
+        extras: Extras::default(),
+    }]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn minimal() -> serde_json::Value {
+        json!({ "version": 1, "seed": 7, "frame": { "width": 400, "height": 300 } })
+    }
+
+    #[test]
+    fn minimal_config_gets_the_defaults() {
+        let c: Config = serde_json::from_value(minimal()).unwrap();
+        assert_eq!(c.units.name, "mile");
+        assert_eq!(c.frame.origin, Origin::TopLeft);
+        assert_eq!(c.world.cells, 10_000);
+        assert_eq!(c.world.template, Template::Named(TemplateName::Continents));
+        assert_eq!(c.variants.len(), 1);
+        assert_eq!(c.variants[0].page.w_mm, 167.0);
+        assert_eq!(c.render.fonts.labels_sc, "IM Fell English SC");
+        assert_eq!(c.render.mode, RenderMode::PrintSafe);
+    }
+
+    #[test]
+    fn unknown_field_is_refused() {
+        let mut v = minimal();
+        v["colour"] = json!("red");
+        assert!(serde_json::from_value::<Config>(v).is_err());
+    }
+
+    #[test]
+    fn region_box_is_read_from_the_box_key() {
+        let mut v = minimal();
+        v["pins"] = json!({ "regions": [
+            { "id": "spine", "kind": "mountains", "box": [200, 40, 260, 140] }
+        ]});
+        let c: Config = serde_json::from_value(v).unwrap();
+        assert_eq!(c.pins.regions[0].rect, Some([200.0, 40.0, 260.0, 140.0]));
+    }
+
+    #[test]
+    fn river_anchors_accept_points_places_and_regions() {
+        let mut v = minimal();
+        v["pins"] = json!({ "rivers": [{
+            "id": "brann",
+            "source": { "region": "wolds" },
+            "through": [{ "place": "brannocks-ford" }, [140, 90]],
+            "mouth": { "region": "low-fen" }
+        }]});
+        let c: Config = serde_json::from_value(v).unwrap();
+        let r = &c.pins.rivers[0];
+        assert_eq!(
+            r.source,
+            Anchor::Region(RegionRef {
+                region: "wolds".into()
+            })
+        );
+        assert_eq!(
+            r.through[0],
+            Anchor::Place(PlaceRef {
+                place: "brannocks-ford".into()
+            })
+        );
+        assert_eq!(r.through[1], Anchor::Point([140.0, 90.0]));
+    }
+
+    #[test]
+    fn towns_accept_auto_and_a_count() {
+        let mut v = minimal();
+        v["world"] = json!({ "towns": "auto" });
+        let c: Config = serde_json::from_value(v.clone()).unwrap();
+        assert_eq!(c.world.towns, Towns::Auto(AutoKeyword::Auto));
+        v["world"] = json!({ "towns": 30 });
+        let c: Config = serde_json::from_value(v.clone()).unwrap();
+        assert_eq!(c.world.towns, Towns::Count(30));
+        v["world"] = json!({ "towns": "many" });
+        assert!(serde_json::from_value::<Config>(v).is_err());
+    }
+
+    #[test]
+    fn a_config_survives_a_round_trip() {
+        let mut v = minimal();
+        v["pins"] = json!({
+            "points": [{ "id": "ostrey", "kind": "city", "at": [120, 88], "port": true }],
+            "roads": [{ "id": "kings-road", "from": "ostrey", "to": "harrowgate",
+                        "via": ["mid", [10, 20]], "target_length": 72 }]
+        });
+        let c: Config = serde_json::from_value(v).unwrap();
+        let again: Config = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
+        assert_eq!(c, again);
+    }
+}
