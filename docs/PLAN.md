@@ -379,6 +379,27 @@ and the test that closes each milestone. We stop for a review after each one.
 | 13 | Optional import of an Azgaar `.map` file. | A sample `.map` loads, and its land and sea agree. |
 | 14 | Speed work, `docs/CLI.md`, `docs/CONFIG.md`, release packages. | 20k cells and one variant in less than 2 s (release build). |
 
+## 6.1 Notes from Milestone 2
+
+- Output files. `SPEC.md` §2 names `report.json` and `world.json` for each
+  variant. All variants share one base world, so `generate` writes one
+  `world.json` and, for each variant, `<variant>.svg` and
+  `<variant>.report.json`. Thus two variants never write the same file.
+- Until a milestone applies a feature, `generate` refuses a config that uses
+  it with `NOT_IMPLEMENTED` (exit 70) and writes nothing: pinned points and
+  regions (M3), pinned rivers (M4), pinned roads (M6), overlays (M9).
+  `generate --dry-run` checks all of them now.
+- Crops work from Milestone 2, because the page fit uses the crop. The crop
+  scale bar comes with the scale bar in Milestone 7.
+- Heights are whole numbers from 0 to 100, as in the original. The blob
+  tools depend on this: each ring loses up to 1 unit, so a blob stops.
+- Each part of a layer gets its own seed (`terrain/grid`,
+  `terrain/heightmap`), so a change in the grid code does not move the
+  heightmap numbers of a fixed grid.
+- The coastline follows the cell edges. Milestone 7 adds smoothing.
+- A 20000-cell world with one variant and a PNG preview takes about 0.03 s
+  in a release build on an Apple M-series machine.
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
