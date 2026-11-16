@@ -82,6 +82,10 @@ version = "0.1.0"
 [[package]]
 name = "inkland-constraints"
 version = "0.1.0"
+dependencies = [
+ "inkland-core",
+ "serde_json",
+]
 
 [[package]]
 name = "inkland-core"
