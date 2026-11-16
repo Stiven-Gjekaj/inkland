@@ -1,0 +1,12 @@
+[package]
+name = "inkland-edit"
+description = "Undoable, serializable edit commands for inkland worlds."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

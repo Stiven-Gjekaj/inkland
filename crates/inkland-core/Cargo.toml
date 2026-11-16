@@ -1,0 +1,12 @@
+[package]
+name = "inkland-core"
+description = "The world model, the seed tree, and the generation stages of inkland. No I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

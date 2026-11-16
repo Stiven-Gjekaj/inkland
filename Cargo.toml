@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Stiven-Gjekaj/inkland"
+authors = ["Stiven Gjekaj"]
+
+[workspace.dependencies]
+inkland-core = { path = "crates/inkland-core" }
+inkland-constraints = { path = "crates/inkland-constraints" }
+inkland-edit = { path = "crates/inkland-edit" }
+inkland-render = { path = "crates/inkland-render" }
+inkland-io = { path = "crates/inkland-io" }
+inkland = { path = "crates/inkland" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+disallowed_methods = "deny"
+disallowed_types = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

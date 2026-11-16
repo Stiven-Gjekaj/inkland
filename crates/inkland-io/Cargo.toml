@@ -1,0 +1,12 @@
+[package]
+name = "inkland-io"
+description = "Config, world, report, and schema files for inkland."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
