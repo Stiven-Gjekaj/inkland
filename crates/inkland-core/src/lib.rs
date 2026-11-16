@@ -5,4 +5,6 @@
 
 pub mod config;
 pub mod error;
+pub mod grid;
+pub mod rand;
 pub mod seed;

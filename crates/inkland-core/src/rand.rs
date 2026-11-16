@@ -1,0 +1,87 @@
+//! Random numbers for generation.
+//!
+//! Each function turns the bits of the generator into a number with integer
+//! steps and one multiplication, so the result is the same on each machine.
+
+use rand_chacha::ChaCha8Rng;
+use rand_core::Rng as _;
+
+/// A random number source for one layer or one part of a layer.
+pub struct Rand {
+    inner: ChaCha8Rng,
+}
+
+impl Rand {
+    pub fn new(inner: ChaCha8Rng) -> Self {
+        Self { inner }
+    }
+
+    /// A number in `[0, 1)`, with 53 random bits.
+    pub fn unit(&mut self) -> f64 {
+        (self.inner.next_u64() >> 11) as f64 * (1.0 / (1u64 << 53) as f64)
+    }
+
+    /// A number in `[min, max)`.
+    pub fn uniform(&mut self, min: f64, max: f64) -> f64 {
+        min + (max - min) * self.unit()
+    }
+
+    /// An integer in `[min, max]`, both included. The draw has no bias.
+    pub fn int(&mut self, min: i64, max: i64) -> i64 {
+        if max <= min {
+            return min;
+        }
+        let span = (max - min) as u64 + 1;
+        // Refuse the top part of the u64 range that would give a bias.
+        let zone = u64::MAX - (u64::MAX % span) - 1;
+        loop {
+            let v = self.inner.next_u64();
+            if v <= zone {
+                return min + (v % span) as i64;
+            }
+        }
+    }
+
+    /// `true` with probability `p`.
+    pub fn chance(&mut self, p: f64) -> bool {
+        self.unit() < p
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::seed::{Layer, SeedTree};
+
+    fn r() -> Rand {
+        Rand::new(SeedTree::new(1).part_rng(Layer::Terrain, "test"))
+    }
+
+    #[test]
+    fn unit_stays_in_range() {
+        let mut r = r();
+        for _ in 0..10_000 {
+            let u = r.unit();
+            assert!((0.0..1.0).contains(&u));
+        }
+    }
+
+    #[test]
+    fn int_gives_each_value_and_only_those() {
+        let mut r = r();
+        let mut seen = [0u32; 5];
+        for _ in 0..10_000 {
+            let v = r.int(3, 7);
+            assert!((3..=7).contains(&v));
+            seen[(v - 3) as usize] += 1;
+        }
+        assert!(seen.iter().all(|&n| n > 1500), "{seen:?}");
+    }
+
+    #[test]
+    fn chance_zero_and_one() {
+        let mut r = r();
+        assert!((0..1000).all(|_| !r.chance(0.0)));
+        assert!((0..1000).all(|_| r.chance(1.0)));
+    }
+}

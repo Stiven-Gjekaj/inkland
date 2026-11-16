@@ -90,6 +90,20 @@ impl SeedTree {
     pub fn rng(&self, layer: Layer) -> ChaCha8Rng {
         ChaCha8Rng::from_seed(self.layer_seed(layer))
     }
+
+    /// The 32-byte seed of one part of a layer:
+    /// `sha256("inkland/v1/" + master seed + "/" + layer name + "/" + part)`.
+    /// A part has its own numbers, so a change in one part of a layer does
+    /// not move the numbers of another part.
+    pub fn part_seed(&self, layer: Layer, part: &str) -> [u8; 32] {
+        let text = format!("{DERIVATION}/{}/{}/{part}", self.master, layer.name());
+        Sha256::digest(text.as_bytes()).into()
+    }
+
+    /// A new random number generator for one part of a layer.
+    pub fn part_rng(&self, layer: Layer, part: &str) -> ChaCha8Rng {
+        ChaCha8Rng::from_seed(self.part_seed(layer, part))
+    }
 }
 
 #[cfg(test)]
@@ -138,6 +152,18 @@ mod tests {
     fn layer_names_are_unique() {
         let names: BTreeSet<&str> = Layer::ALL.iter().map(|l| l.name()).collect();
         assert_eq!(names.len(), Layer::ALL.len());
+    }
+
+    #[test]
+    fn parts_differ_from_each_other_and_from_the_layer() {
+        let tree = SeedTree::new(42);
+        let layer = first(tree, Layer::Terrain);
+        let mut grid = tree.part_rng(Layer::Terrain, "grid");
+        let mut height = tree.part_rng(Layer::Terrain, "heightmap");
+        let g = grid.next_u64();
+        let h = height.next_u64();
+        assert_ne!(g, h);
+        assert_ne!(g, layer[0]);
     }
 
     /// The seed derivation is part of the file format. This test holds the
