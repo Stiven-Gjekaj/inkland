@@ -3,3 +3,4 @@
 pub mod config;
 pub mod report;
 pub mod schema;
+pub mod world;
