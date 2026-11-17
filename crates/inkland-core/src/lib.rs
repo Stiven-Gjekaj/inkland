@@ -9,6 +9,7 @@ pub mod climate;
 pub mod config;
 pub mod coordinates;
 pub mod courses;
+pub mod culture_sets;
 pub mod error;
 pub mod features;
 pub mod fit;
