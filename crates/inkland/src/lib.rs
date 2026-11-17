@@ -438,6 +438,45 @@ mod tests {
     }
 
     #[test]
+    fn a_crop_has_its_own_labels_and_scale_bar() {
+        let c = config(json!({
+            "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": "pangea" },
+            "pins": { "points": [
+                { "id": "west", "kind": "city", "name": "Westmarch", "at": [100, 150] },
+                { "id": "east", "kind": "city", "name": "Eastmarch", "at": [300, 150] }
+            ]},
+            "render": { "extras": { "scale_bar": true } },
+            "variants": [
+                { "name": "full", "page": { "w_mm": 167, "h_mm": 120 } },
+                { "name": "west", "crop": [40, 90, 200, 210], "page": { "w_mm": 167, "h_mm": 120 } }
+            ]
+        }));
+        let out = generate(&c, None).unwrap();
+        let (full, west) = (&out.variants[0].svg, &out.variants[1].svg);
+        assert!(full.contains(">Eastmarch</text>") && full.contains(">Westmarch</text>"));
+        assert!(west.contains(">Westmarch</text>"));
+        assert!(
+            !west.contains(">Eastmarch</text>"),
+            "a place outside the crop has no label"
+        );
+        // The scale bar shows a shorter length on the larger scale of the crop.
+        let last = |svg: &str| -> f64 {
+            let i = svg.find("<g id=\"scale-bar\"").unwrap();
+            let part = &svg[i..];
+            let end = part.find(" miles</text>").unwrap();
+            let start = part[..end].rfind('>').unwrap() + 1;
+            part[start..end].parse().unwrap()
+        };
+        assert!(last(west) < last(full), "{} {}", last(west), last(full));
+        assert!(
+            !out.variants[1].checks_failed(),
+            "{}",
+            out.variants[1].report["checks"]
+        );
+    }
+
+    #[test]
     fn generate_makes_one_svg_for_each_variant() {
         let c = config(json!({ "world": { "cells": 1000 }, "variants": [
             { "name": "full", "page": { "w_mm": 167, "h_mm": 250 } },
