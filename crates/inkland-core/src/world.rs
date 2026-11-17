@@ -67,6 +67,8 @@ pub struct World {
     pub rivers: Vec<River>,
     /// The water data of each lake, in feature order.
     pub lakes: Vec<Lake>,
+    /// Glaciers and icebergs, from the first grid.
+    pub ice: Vec<crate::ice::Ice>,
     /// The biome of each cell (see `biomes::NAMES`).
     pub biomes: Vec<u8>,
     /// Cultures, places, states, and provinces.
@@ -225,6 +227,17 @@ impl World {
             config,
             latitudes,
             &mut rain_rng,
+        );
+
+        // Glaciers and icebergs (FMG `Ice.generate`).
+        let mut ice_rng = Rand::new(tree.part_rng(Layer::Climate, "ice"));
+        let ice = crate::ice::generate(
+            &base_grid,
+            &base_heights,
+            sea_level,
+            &base_features,
+            &base_temperature,
+            &mut ice_rng,
         );
 
         // The second grid (FMG `regraph`). Each exact site stays a site.
@@ -394,6 +407,7 @@ impl World {
             courses,
             rivers,
             lakes,
+            ice,
             biomes,
             society,
             roads,

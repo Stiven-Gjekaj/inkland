@@ -148,6 +148,25 @@ pub fn world_value(world: &World, config: &Config) -> Value {
             .collect::<Vec<_>>()
     );
     v["harbor"] = json!(world.features.harbor);
+    // Glaciers and icebergs (FMG `pack.ice`).
+    v["ice"] = json!(
+        world
+            .ice
+            .iter()
+            .map(|i| {
+                let mut e = json!({
+                    "id": i.id,
+                    "kind": i.kind.name(),
+                    "points": i.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
+                });
+                if let (Some(c), Some(s)) = (i.cell, i.size) {
+                    e["base_cell"] = json!(c);
+                    e["size"] = json!(round(s, 3));
+                }
+                e
+            })
+            .collect::<Vec<_>>()
+    );
     v
 }
 
