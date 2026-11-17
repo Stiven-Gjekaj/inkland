@@ -201,6 +201,12 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
         "culture": owner(soc.cell_culture[c], &culture_name),
         "state": owner(soc.cell_state[c], &state_name),
         "province": owner(soc.cell_province[c], &province_name),
+        "religion": world
+            .religions
+            .list
+            .iter()
+            .find(|r| r.id == world.religions.cell_religion[c])
+            .map(|r| json!({ "id": r.id, "name": r.name, "kind": r.kind })),
         "nearest_place": nearest_place,
         "nearest_river": nearest_river,
         "nearest_road": nearest_road,
@@ -238,6 +244,7 @@ mod tests {
         assert!(q["biome"].is_string());
         assert!(q["nearest_river"]["name"].is_string());
         assert!(q["feature"]["group"].is_string());
+        assert!(q["religion"]["name"].is_string());
     }
 
     #[test]

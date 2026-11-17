@@ -52,6 +52,14 @@ pub fn world_value(world: &World, config: &Config) -> Value {
             "cells": f.cells,
             "border": f.border,
         })).collect::<Vec<_>>(),
+        "religions": world.religions.list.iter().map(|r| json!({
+            "id": r.id,
+            "name": r.name,
+            "kind": r.kind,
+            "culture": r.culture,
+            "center_place": r.center_place,
+        })).collect::<Vec<_>>(),
+        "cell_religion": world.religions.cell_religion,
         "rivers": world.rivers.iter().zip(&world.names.rivers).map(|(r, n)| river_value(r, n, config)).collect::<Vec<_>>(),
         "roads": world.roads.iter().map(|r| json!({
             "id": r.id,
