@@ -179,7 +179,8 @@ pub struct Placed {
     pub id: String,
     pub kind: Kind,
     /// The style group of the label: `capital`, `city`, `town`, `village`,
-    /// `fort`, `hamlet`, `river`, `lake`, `state`, `region`, or `feature`.
+    /// `fort`, `hamlet`, `river`, `lake`, `ocean`, `state`, `region`, or
+    /// `feature`.
     pub group: &'static str,
     pub text: String,
     pub family: String,
@@ -897,6 +898,39 @@ pub fn place_with(
             required: false,
             rank: 6,
         });
+    }
+
+    // Named oceans, seas, and gulfs, with optional labels: only in colour
+    // mode, as the custom labels of the original program.
+    if config.render.mode == inkland_core::config::RenderMode::Colour {
+        for n in &world.names.features {
+            let Some(name) = n.name.as_deref() else {
+                continue;
+            };
+            if !matches!(n.group, "ocean" | "sea" | "gulf") {
+                continue;
+            }
+            let g = &world.grid;
+            let area: Vec<bool> = world.features.of_cell.iter().map(|&f| f == n.id).collect();
+            if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
+                continue;
+            }
+            let size = pt(sizes.region);
+            let look = style("ocean");
+            let name = look.text(name);
+            let f = FontMetrics::of(&look.family);
+            requests.push(Request {
+                candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.1, 0.6)),
+                id: format!("label-water-{}", n.id),
+                kind: Kind::Region,
+                group: "ocean",
+                text: name,
+                family: look.family,
+                size,
+                required: false,
+                rank: 6,
+            });
+        }
     }
 
     // States.

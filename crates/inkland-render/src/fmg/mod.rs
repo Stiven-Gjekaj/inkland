@@ -198,7 +198,7 @@ pub fn fix_refs(value: &str) -> String {
 pub fn style_group(group: &str) -> &str {
     match group {
         "lake" => "river",
-        "region" | "feature" => "added",
+        "region" | "feature" | "ocean" => "added",
         other => other,
     }
 }

@@ -306,3 +306,22 @@ fn the_ice_layer_draws_the_ice_of_a_cold_world() {
     }
     parse_and_draw(&svg);
 }
+
+#[test]
+fn named_seas_get_labels_in_colour_mode_only() {
+    let w = world();
+    let named: Vec<u32> = w
+        .names
+        .features
+        .iter()
+        .filter(|n| matches!(n.group, "ocean" | "sea" | "gulf") && n.name.is_some())
+        .map(|n| n.id)
+        .collect();
+    assert!(!named.is_empty(), "the test world has a named sea");
+    let svg = render_with(&[LayerName::Labels], StyleName::Default);
+    assert!(svg.contains("id=\"label-water-"));
+    let mut c = base_config();
+    c.render.mode = RenderMode::PrintSafe;
+    let print = crate::svg::render(w, &c, &c.variants[0]).svg;
+    assert!(!print.contains("label-water-"));
+}
