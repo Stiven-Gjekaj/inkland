@@ -340,6 +340,11 @@ fn depths(world: &World, area: &[bool]) -> Vec<u32> {
     depth
 }
 
+/// The least distance between two anchors of an area label, in mm.
+const ANCHOR_GAP: f64 = 3.0;
+/// The most anchors of an area label.
+const MAX_ANCHORS: usize = 40;
+
 /// Candidates for the label of an area, on its deepest cells.
 #[allow(clippy::too_many_arguments)]
 fn area_candidates(
@@ -372,9 +377,23 @@ fn area_candidates(
     let n = text.chars().count();
     let w0 = f.width(text, size, 0.0);
     let (ch, dd) = (f.cap(size), 0.6 * f.descent(size));
-    let mut out: Vec<Candidate> = Vec::new();
-    for &(d, c) in cells.iter().take(24) {
+    // Anchor cells: the deepest cells first, each at least `ANCHOR_GAP` from
+    // the anchors before it, so the candidates spread over the area.
+    let mut anchors: Vec<(u32, [f64; 2])> = Vec::new();
+    for &(d, c) in &cells {
         let q = page.to_page(g.points[c]);
+        if anchors
+            .iter()
+            .all(|(_, a)| (a[0] - q[0]).powi(2) + (a[1] - q[1]).powi(2) >= ANCHOR_GAP * ANCHOR_GAP)
+        {
+            anchors.push((d, q));
+            if anchors.len() == MAX_ANCHORS {
+                break;
+            }
+        }
+    }
+    let mut out: Vec<Candidate> = Vec::new();
+    for &(d, q) in &anchors {
         // Text along the page x axis, or upright from bottom to top.
         for (turn, axis) in [(0, [1.0, 0.0]), (-90, [0.0, -1.0])] {
             // The length of the area along the text line through the cell.
@@ -396,76 +415,86 @@ fn area_candidates(
             };
             let (back, ahead) = (walk(-1.0), walk(1.0));
             let run = back + ahead;
-            let spacing = if n > 1 {
+            let spaced = if n > 1 {
                 ((0.7 * run - w0) / (n - 1) as f64).clamp(spread.0 * size, spread.1 * size)
             } else {
                 0.0
             };
-            let w = w0 + spacing * n.saturating_sub(1) as f64;
-            // The middle of the run, moved so that the text stays in the map.
-            let mid = (ahead - back) / 2.0;
-            let mut centre = [q[0] + axis[0] * mid, q[1] + axis[1] * mid];
-            let half = w / 2.0 + PAD;
-            let (lo, hi, k) = if turn == 0 {
-                (inner[0] + half, inner[2] - half, 0)
-            } else {
-                (inner[1] + half, inner[3] - half, 1)
-            };
-            if lo > hi {
-                continue;
-            }
-            centre[k] = centre[k].clamp(lo, hi);
-            // The baseline: glyphs from `cap` above it to `dd` below it,
-            // centred on the line through the cell.
-            let lift = (ch - dd) / 2.0;
-            let (bx, by) = if turn == 0 {
-                (centre[0], centre[1] + lift)
-            } else {
-                (centre[0] + lift, centre[1])
-            };
-            let b = Obb {
-                c: centre,
-                u: axis,
-                h: [half, (ch + dd) / 2.0 + PAD],
-            };
-            // The part of the label outside the area costs more.
-            let mut outside = 0;
-            for i in 0..5 {
-                for j in 0..3 {
-                    let s = -b.h[0] + 2.0 * b.h[0] * f64::from(i) / 4.0;
-                    let t = -b.h[1] + b.h[1] * f64::from(j);
-                    let p = [
-                        b.c[0] + b.u[0] * s - b.u[1] * t,
-                        b.c[1] + b.u[1] * s + b.u[0] * t,
-                    ];
-                    if !in_area(p) {
-                        outside += 1;
+            // Spaced letters first; tight letters as a second choice.
+            for (tight, spacing) in [(false, spaced), (true, spread.0 * size)] {
+                if tight && (n < 2 || spacing >= spaced) {
+                    continue;
+                }
+                let w = w0 + spacing * n.saturating_sub(1) as f64;
+                // The middle of the run, moved so that the text stays in the map.
+                let mid = (ahead - back) / 2.0;
+                let mut centre = [q[0] + axis[0] * mid, q[1] + axis[1] * mid];
+                let half = w / 2.0 + PAD;
+                let (lo, hi, k) = if turn == 0 {
+                    (inner[0] + half, inner[2] - half, 0)
+                } else {
+                    (inner[1] + half, inner[3] - half, 1)
+                };
+                if lo > hi {
+                    continue;
+                }
+                centre[k] = centre[k].clamp(lo, hi);
+                // The baseline: glyphs from `cap` above it to `dd` below it,
+                // centred on the line through the cell.
+                let lift = (ch - dd) / 2.0;
+                let (bx, by) = if turn == 0 {
+                    (centre[0], centre[1] + lift)
+                } else {
+                    (centre[0] + lift, centre[1])
+                };
+                let b = Obb {
+                    c: centre,
+                    u: axis,
+                    h: [half, (ch + dd) / 2.0 + PAD],
+                };
+                // The part of the label outside the area costs more.
+                let mut outside = 0;
+                for i in 0..5 {
+                    for j in 0..3 {
+                        let s = -b.h[0] + 2.0 * b.h[0] * f64::from(i) / 4.0;
+                        let t = -b.h[1] + b.h[1] * f64::from(j);
+                        let p = [
+                            b.c[0] + b.u[0] * s - b.u[1] * t,
+                            b.c[1] + b.u[1] * s + b.u[0] * t,
+                        ];
+                        if !in_area(p) {
+                            outside += 1;
+                        }
                     }
                 }
-            }
-            // Skip a candidate that is almost the same as one before it.
-            if out.iter().any(|o| match o.geometry {
-                Geometry::Point { x, y, angle, .. } => {
-                    angle == turn && (x - bx).abs() < 1.0 && (y - by).abs() < 1.0
+                // Skip a candidate that is almost the same as one before it.
+                if out.iter().any(|o| match o.geometry {
+                    Geometry::Point { x, y, angle, .. } => {
+                        angle == turn
+                            && (o.spacing - spacing).abs() < 1e-9
+                            && (x - bx).abs() < 1.0
+                            && (y - by).abs() < 1.0
+                    }
+                    Geometry::Path { .. } => false,
+                }) {
+                    continue;
                 }
-                Geometry::Path { .. } => false,
-            }) {
-                continue;
+                out.push(Candidate {
+                    boxes: vec![b],
+                    geometry: Geometry::Point {
+                        x: bx,
+                        y: by,
+                        anchor: "middle",
+                        angle: turn,
+                    },
+                    spacing,
+                    cost: 3.0 * f64::from(outside) / 15.0
+                        + 0.5 * (1.0 - f64::from(d) / f64::from(max_depth))
+                        + if turn == 0 { 0.0 } else { 0.4 }
+                        + if tight { 0.3 } else { 0.0 },
+                    river: None,
+                });
             }
-            out.push(Candidate {
-                boxes: vec![b],
-                geometry: Geometry::Point {
-                    x: bx,
-                    y: by,
-                    anchor: "middle",
-                    angle: turn,
-                },
-                spacing,
-                cost: 3.0 * f64::from(outside) / 15.0
-                    + 0.5 * (1.0 - f64::from(d) / f64::from(max_depth))
-                    + if turn == 0 { 0.0 } else { 0.4 },
-                river: None,
-            });
         }
     }
     out
