@@ -27,4 +27,4 @@ resvg = { workspace = true, optional = true }
 serde_json.workspace = true
 proptest.workspace = true
 # Only for examples/font_metrics.rs.
-ttf-parser = "0.25"
+skrifa = "0.49"

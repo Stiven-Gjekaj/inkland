@@ -11,6 +11,9 @@
 //! U+024F, the cap height, and the descender. A width of 0 means that the
 //! font has no glyph for the character.
 
+use skrifa::FontRef;
+use skrifa::MetadataProvider;
+use skrifa::instance::{LocationRef, Size};
 use std::fmt::Write as _;
 
 const FIRST: u32 = 0x20;
@@ -26,13 +29,17 @@ fn main() {
     for arg in &args {
         let (family, path) = arg.split_once('=').expect("argument is Family=path");
         let data = std::fs::read(path).expect("font file can be read");
-        let face = ttf_parser::Face::parse(&data, 0).expect("font file can be parsed");
-        let cap = face.capital_height().unwrap_or(face.ascender());
+        let font = FontRef::new(&data).expect("font file can be parsed");
+        let m = font.metrics(Size::unscaled(), LocationRef::default());
+        let glyphs = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+        let charmap = font.charmap();
+        let cap = libm::round(f64::from(m.cap_height.unwrap_or(m.ascent))) as i16;
+        let descender = libm::round(f64::from(m.descent)) as i16;
         let _ = writeln!(out, "    FontMetrics {{");
         let _ = writeln!(out, "        family: {family:?},");
-        let _ = writeln!(out, "        units_per_em: {},", face.units_per_em());
+        let _ = writeln!(out, "        units_per_em: {},", m.units_per_em);
         let _ = writeln!(out, "        cap_height: {cap},");
-        let _ = writeln!(out, "        descender: {},", face.descender());
+        let _ = writeln!(out, "        descender: {descender},");
         let _ = writeln!(out, "        first: {FIRST:#x},");
         out.push_str("        advances: &[");
         for (i, code) in (FIRST..=LAST).enumerate() {
@@ -42,9 +49,9 @@ fn main() {
                 out.push(' ');
             }
             let advance = char::from_u32(code)
-                .and_then(|c| face.glyph_index(c))
-                .and_then(|g| face.glyph_hor_advance(g))
-                .unwrap_or(0);
+                .and_then(|c| charmap.map(c))
+                .and_then(|g| glyphs.advance_width(g))
+                .map_or(0, |a| libm::round(f64::from(a)) as u16);
             let _ = write!(out, "{advance},");
         }
         out.push_str("\n        ],\n    },\n");
