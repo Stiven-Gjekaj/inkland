@@ -31,6 +31,11 @@ Some data tables come from it. This file keeps its license notice.
   - The 43 name bases, from `src/data/name-bases.ts`, and the culture names
     of five culture sets, from `src/model/society/cultures-generator.ts`. In
     inkland: `crates/inkland-core/src/names/data.rs`.
+- Test data copied into inkland:
+  - The four test maps `tests/fixtures/1.112.1.map`, `1.139.4.map`,
+    `1.143.1.map`, and `1.154.0.map`, without changes. In inkland:
+    `fixtures/azgaar/`. They come from the original under the MIT license
+    below.
 
 ```text
 MIT License
