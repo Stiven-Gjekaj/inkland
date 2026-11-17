@@ -1,5 +1,5 @@
-//! Optional data of the layers that the world does not have yet: zones,
-//! ice, population, emblems, and markers.
+//! The data of the layers that the world may not have: zones, ice,
+//! population, emblems, and markers.
 //!
 //! The drawing of each of these layers reads its data from here. Each
 //! function gives `None` while the world has no such data, and the layer
@@ -61,9 +61,22 @@ pub fn zones(_world: &World) -> Option<Vec<Zone>> {
     None
 }
 
-/// The ice of a world.
-pub fn ice(_world: &World) -> Option<Vec<Ice>> {
-    None
+/// The ice of a world: its glaciers and icebergs.
+pub fn ice(world: &World) -> Option<Vec<Ice>> {
+    if world.ice.is_empty() {
+        return None;
+    }
+    Some(
+        world
+            .ice
+            .iter()
+            .map(|i| Ice {
+                id: i.id,
+                glacier: i.kind == inkland_core::ice::IceKind::Glacier,
+                points: i.points.clone(),
+            })
+            .collect(),
+    )
 }
 
 /// The population of a world.

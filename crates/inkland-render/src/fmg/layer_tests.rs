@@ -287,3 +287,22 @@ fn each_relief_set_draws() {
         ));
     }
 }
+
+#[test]
+fn the_ice_layer_draws_the_ice_of_a_cold_world() {
+    let mut c = base_config();
+    c.world.climate.latitude_range = [70.0, 90.0];
+    c.render.layers = vec![LayerName::Ice];
+    let w = World::build(&c).unwrap();
+    assert!(!w.ice.is_empty(), "a polar world has ice");
+    let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
+    assert!(svg.contains("<g id=\"ice\""));
+    for i in &w.ice {
+        assert!(
+            svg.contains(&format!("id=\"ice-{}\"", i.id)),
+            "ice-{}",
+            i.id
+        );
+    }
+    parse_and_draw(&svg);
+}
