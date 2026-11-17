@@ -223,8 +223,9 @@ pub struct Climate {
     /// Latitude of the south edge and of the north edge, in degrees.
     #[serde(default = "default_latitude_range")]
     pub latitude_range: [f64; 2],
-    /// Wind bearings in degrees, one for each 30 degree latitude band from
-    /// north to south. Optional.
+    /// Winds, one for each 30 degree latitude band from 90 north to 90
+    /// south: the direction to which the wind blows, in degrees clockwise
+    /// from north. Default: `[225, 45, 225, 315, 135, 315]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wind: Option<[f64; 6]>,
 }
