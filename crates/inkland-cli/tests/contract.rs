@@ -347,10 +347,7 @@ fn variant_flag_writes_only_that_variant() {
 fn pins_that_this_version_cannot_apply_are_refused_and_nothing_is_written() {
     let dir = tempfile::tempdir().unwrap();
     let mut c = minimal();
-    c["pins"] = json!({
-        "points": [{ "id": "a", "kind": "town", "at": [5, 5] }, { "id": "b", "kind": "town", "at": [50, 50] }],
-        "roads": [{ "id": "r", "from": "a", "to": "b" }]
-    });
+    c["overlays"] = json!({ "then": { "remove": [] } });
     let config = write_config(dir.path(), &c);
     let out = dir.path().join("out");
     let (code, err) = run(&[
@@ -389,4 +386,32 @@ fn generate_twice_gives_the_same_bytes() {
         outputs.push(files);
     }
     assert_eq!(outputs[0], outputs[1]);
+}
+
+#[test]
+fn a_failed_check_writes_the_output_and_exits_1() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = minimal();
+    c["frame"] = json!({ "width": 400, "height": 300 });
+    c["world"] = json!({ "cells": 2000, "template": { "steps": ["Add 35 all"] } });
+    c["pins"] = json!({
+        "points": [{ "id": "a", "kind": "city", "at": [60, 150] }, { "id": "b", "kind": "town", "at": [340, 150] }],
+        "roads": [{ "id": "r", "from": "a", "to": "b", "target_length": 281, "tolerance": 0.0001 }]
+    });
+    let config = write_config(dir.path(), &c);
+    let out = dir.path().join("out");
+    let (code, summary) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--out-dir",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 1, "{summary}");
+    assert_eq!(summary["checks_failed"], true);
+    assert!(out.join("default.svg").exists());
+    let report: Value =
+        serde_json::from_str(&std::fs::read_to_string(out.join("default.report.json")).unwrap())
+            .unwrap();
+    assert_eq!(report["pins"]["roads"][0]["within_tolerance"], false);
 }

@@ -125,6 +125,10 @@ fn main() {
     match out {
         Ok(value) => {
             print_json(&value);
+            // The output is written, but a check failed.
+            if value["checks_failed"] == true {
+                std::process::exit(ExitCode::ChecksFailed.code());
+            }
             std::process::exit(ExitCode::Ok.code());
         }
         Err(errors) => fail(errors),
@@ -225,6 +229,7 @@ fn write_output(
         report.push('\n');
         write(&report_path, report.as_bytes())?;
         let mut entry = json!({
+            "checks_failed": v.checks_failed(),
             "name": v.name,
             "svg": svg_path.display().to_string(),
             "report": report_path.display().to_string(),
@@ -246,6 +251,7 @@ fn write_output(
     Ok(json!({
         "world": world_path.display().to_string(),
         "variants": variants,
+        "checks_failed": out.variants.iter().any(|v| v.checks_failed()),
     }))
 }
 

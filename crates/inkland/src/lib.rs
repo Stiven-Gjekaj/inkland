@@ -60,6 +60,15 @@ pub struct VariantOutput {
     pub report: Value,
 }
 
+impl VariantOutput {
+    /// `true` if a check in the report failed.
+    pub fn checks_failed(&self) -> bool {
+        self.report["checks"]
+            .as_array()
+            .is_some_and(|c| c.iter().any(|x| x["pass"] == false))
+    }
+}
+
 /// The output of `generate`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Output {
@@ -81,11 +90,7 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
             format!("{what} come in milestone {milestone}; this version cannot apply them"),
         )
     };
-    let p = &config.pins;
     let mut not_yet = Vec::new();
-    if !p.roads.is_empty() {
-        not_yet.push(later("/pins/roads", "pinned roads", 6));
-    }
     if !config.overlays.is_empty() {
         not_yet.push(later("/overlays", "overlays", 9));
     }
@@ -186,14 +191,40 @@ mod tests {
     }
 
     #[test]
-    fn generate_refuses_pins_that_it_cannot_apply_yet() {
-        let c = config(json!({ "pins": {
-            "points": [{ "id": "a", "kind": "town", "at": [5, 5] }, { "id": "b", "kind": "town", "at": [50, 50] }],
-            "roads": [{ "id": "r", "from": "a", "to": "b" }]
-        }}));
+    fn generate_refuses_overlays_that_it_cannot_apply_yet() {
+        let c = config(json!({ "overlays": { "then": { "remove": [] } } }));
         let e = generate(&c, None).unwrap_err();
         assert_eq!(e[0].code, ErrorCode::NotImplemented);
-        assert_eq!(e[0].path, "/pins/roads");
+        assert_eq!(e[0].path, "/overlays");
+    }
+
+    #[test]
+    fn report_gives_each_pinned_road_and_its_check() {
+        let c = config(json!({
+            "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": { "steps": ["Add 35 all"] } },
+            "pins": {
+                "points": [
+                    { "id": "ostrey", "kind": "city", "at": [60, 150] },
+                    { "id": "harrowgate", "kind": "town", "at": [340, 150] }
+                ],
+                "roads": [
+                    { "id": "kings-road", "from": "ostrey", "to": "harrowgate", "target_length": 330 },
+                    { "id": "short", "from": "ostrey", "to": "harrowgate", "target_length": 282, "tolerance": 0.001 }
+                ]
+            }
+        }));
+        let out = generate(&c, None).unwrap();
+        let r = &out.variants[0].report;
+        let road = &r["pins"]["roads"][0];
+        assert_eq!(road["within_tolerance"], true);
+        assert_eq!(road["stops"][0]["place"], "ostrey");
+        assert_eq!(road["legs"][0]["length"], road["actual"]);
+        // The second road cannot be as short as 282 +- 0.1 on a grid.
+        assert_eq!(r["pins"]["roads"][1]["within_tolerance"], false);
+        assert_eq!(r["checks"][0]["name"], "pinned_road_length");
+        assert_eq!(r["checks"][0]["pass"], false);
+        assert!(out.variants[0].checks_failed());
     }
 
     #[test]

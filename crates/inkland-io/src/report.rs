@@ -93,10 +93,10 @@ pub fn variant_report(
             "points": point_pins(world, config),
             "regions": region_pins(world, config),
             "rivers": river_pins(world, config),
-            "roads": [],
+            "roads": road_pins(world, config),
         },
         "labels": { "placed": 0, "unplaced": [] },
-        "checks": [],
+        "checks": world_checks(world, config),
         "warnings": [],
     })
 }
@@ -278,4 +278,86 @@ fn nearest(points: &[[f64; 2]], p: [f64; 2]) -> f64 {
         .iter()
         .map(|q| ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt())
         .fold(f64::INFINITY, f64::min)
+}
+
+/// The report of each pinned road: target and real length, stops, legs,
+/// and river crossings, all in units.
+fn road_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
+    use inkland_core::num::round;
+    config
+        .pins
+        .roads
+        .iter()
+        .enumerate()
+        .map(|(k, pin)| {
+            let Some(r) = world.roads.iter().find(|r| r.pin == Some(k)) else {
+                return serde_json::json!({ "id": pin.id, "found": false });
+            };
+            let within = pin
+                .target_length
+                .map(|t| (r.length - t).abs() <= t * pin.tolerance + 1e-9);
+            let legs: Vec<serde_json::Value> = r
+                .stops
+                .windows(2)
+                .map(|w| {
+                    serde_json::json!({
+                        "from": w[0].place,
+                        "to": w[1].place,
+                        "length": round(w[1].at_length - w[0].at_length, 3),
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "id": pin.id,
+                "found": true,
+                "kind": serde_json::to_value(pin.kind).expect("a kind converts to JSON"),
+                "target": pin.target_length,
+                "tolerance": pin.tolerance,
+                "actual": round(r.length, 3),
+                "within_tolerance": within,
+                "stops": r.stops.iter().map(|s| serde_json::json!({
+                    "place": s.place,
+                    "at_length": round(s.at_length, 3),
+                })).collect::<Vec<_>>(),
+                "legs": legs,
+                "crossings": r.crossings.iter().map(|x| serde_json::json!({
+                    "river": x.river_pin.clone().unwrap_or_else(|| format!("river-{}", x.river)),
+                    "at_length": round(x.at_length, 3),
+                    "kind": x.kind,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect()
+}
+
+/// Checks on the world: each pinned road with a target is in its
+/// tolerance. The SVG checks come from the renderer.
+fn world_checks(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    let with_target: Vec<(usize, f64, f64)> = config
+        .pins
+        .roads
+        .iter()
+        .enumerate()
+        .filter_map(|(k, p)| p.target_length.map(|t| (k, t, p.tolerance)))
+        .collect();
+    if !with_target.is_empty() {
+        let failed: Vec<String> = with_target
+            .iter()
+            .filter(|&&(k, t, tol)| {
+                world
+                    .roads
+                    .iter()
+                    .find(|r| r.pin == Some(k))
+                    .is_none_or(|r| (r.length - t).abs() > t * tol + 1e-9)
+            })
+            .map(|&(k, _, _)| config.pins.roads[k].id.clone())
+            .collect();
+        out.push(serde_json::json!({
+            "name": "pinned_road_length",
+            "pass": failed.is_empty(),
+            "failed": failed,
+        }));
+    }
+    out
 }
