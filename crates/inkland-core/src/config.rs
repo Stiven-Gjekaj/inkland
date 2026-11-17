@@ -874,6 +874,8 @@ pub enum LayerName {
     Rivers,
     Regions,
     Roads,
+    /// The features that an overlay adds.
+    Features,
     Places,
     Labels,
 }
@@ -929,6 +931,7 @@ fn default_layers() -> Vec<LayerName> {
         LayerName::Rivers,
         LayerName::Regions,
         LayerName::Roads,
+        LayerName::Features,
         LayerName::Places,
         LayerName::Labels,
     ]

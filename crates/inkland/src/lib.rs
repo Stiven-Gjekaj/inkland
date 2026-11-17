@@ -84,20 +84,6 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
     if !errors.is_empty() {
         return Err(errors);
     }
-    let later = |path: &str, what: &str, milestone: u32| {
-        Error::new(
-            ErrorCode::NotImplemented,
-            path,
-            format!("{what} come in milestone {milestone}; this version cannot apply them"),
-        )
-    };
-    let mut not_yet = Vec::new();
-    if !config.overlays.is_empty() {
-        not_yet.push(later("/overlays", "overlays", 9));
-    }
-    if !not_yet.is_empty() {
-        return Err(not_yet);
-    }
     let selected: Vec<&inkland_core::config::Variant> = config
         .variants
         .iter()
@@ -112,27 +98,48 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
     }
     let world = inkland_core::world::World::build(config).map_err(|e| vec![e])?;
     let hash = config_hash(config);
+    let mut variants = Vec::new();
+    for v in selected {
+        // A variant with an overlay renders a copy of the world with the
+        // overlay applied. The shared world does not change.
+        let shown = match &v.overlay {
+            Some(name) => {
+                Some(inkland_core::overlay::apply(&world, config, name).map_err(|e| vec![e])?)
+            }
+            None => None,
+        };
+        let w = shown.as_ref().unwrap_or(&world);
+        let rendered = inkland_render::svg::render(w, config, v);
+        let svg = rendered.svg;
+        let mut report = inkland_io::report::variant_report(&world, config, &v.name, &hash);
+        if let Some(name) = &v.overlay {
+            let o = &config.overlays[name];
+            let section = inkland_io::report::overlay_section(w, o, name);
+            let bad = section["roads"].as_array().map_or(0, |r| {
+                r.iter().filter(|x| x["within_tolerance"] == false).count()
+            });
+            report["overlay"] = section;
+            if let Some(list) = report["checks"].as_array_mut()
+                && o.add.roads.iter().any(|r| r.target_length.is_some())
+            {
+                list.push(json!({ "name": "overlay_road_length", "pass": bad == 0, "count": bad }));
+            }
+        }
+        add_labels(&mut report, &rendered.labels);
+        // The print checks run on the written SVG text.
+        let checks = check_svg(&svg, config);
+        if let Some(list) = report["checks"].as_array_mut() {
+            list.extend(checks);
+        }
+        variants.push(VariantOutput {
+            name: v.name.clone(),
+            svg,
+            report,
+        });
+    }
     Ok(Output {
         world_json: inkland_io::world::world_json(&world, config),
-        variants: selected
-            .into_iter()
-            .map(|v| {
-                let rendered = inkland_render::svg::render(&world, config, v);
-                let svg = rendered.svg;
-                let mut report = inkland_io::report::variant_report(&world, config, &v.name, &hash);
-                add_labels(&mut report, &rendered.labels);
-                // The print checks run on the written SVG text.
-                let checks = check_svg(&svg, config);
-                if let Some(list) = report["checks"].as_array_mut() {
-                    list.extend(checks);
-                }
-                VariantOutput {
-                    name: v.name.clone(),
-                    svg,
-                    report,
-                }
-            })
-            .collect(),
+        variants,
     })
 }
 
@@ -293,11 +300,62 @@ mod tests {
     }
 
     #[test]
-    fn generate_refuses_overlays_that_it_cannot_apply_yet() {
-        let c = config(json!({ "overlays": { "then": { "remove": [] } } }));
-        let e = generate(&c, None).unwrap_err();
-        assert_eq!(e[0].code, ErrorCode::NotImplemented);
-        assert_eq!(e[0].path, "/overlays");
+    fn an_overlay_changes_its_variant_and_not_the_world() {
+        let pins = json!({
+            "points": [
+                { "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [20, 40] },
+                { "id": "harrow", "kind": "town", "name": "Harrow", "at": [80, 40] }
+            ],
+            "roads": [{ "id": "kings-road", "from": "ostrey", "to": "harrow" }]
+        });
+        let world = json!({ "cells": 1500, "template": { "steps": ["Add 35 all"] } });
+        let base = config(json!({ "world": world, "pins": pins }));
+        let c = config(json!({
+            "world": world, "pins": pins,
+            "overlays": { "then": {
+                "add": {
+                    "places": [{ "id": "old-keep", "kind": "ruin", "name": "Old Keep", "at": [50, 60] }],
+                    "features": [
+                        { "id": "field", "kind": "battle-site", "name": "Red Field", "at": [50, 20] },
+                        { "id": "old-wall", "kind": "wall", "polyline": [[10, 70], [90, 70]] }
+                    ],
+                    "roads": [{ "id": "keep-way", "from": "ostrey", "to": "old-keep", "kind": "trail", "target_length": 40, "tolerance": 0.5 }]
+                },
+                "remove": ["road:kings-road"],
+                "rename": { "place:harrow": "Harrowgate" },
+                "labels": { "place:ostrey": { "size_pt": 11 } }
+            }},
+            "variants": [
+                { "name": "today", "page": { "w_mm": 167, "h_mm": 120 } },
+                { "name": "then", "overlay": "then", "page": { "w_mm": 167, "h_mm": 120 } }
+            ]
+        }));
+        let a = generate(&base, None).unwrap();
+        let out = generate(&c, None).unwrap();
+        assert_eq!(
+            out.world_json, a.world_json,
+            "an overlay does not change world.json"
+        );
+        let today = &out.variants[0].svg;
+        let then = &out.variants[1].svg;
+        assert!(today.contains("id=\"road-kings-road\""));
+        assert!(!then.contains("id=\"road-kings-road\""));
+        assert!(then.contains("id=\"road-keep-way\""));
+        assert!(then.contains("<g id=\"place-old-keep\">"));
+        assert!(then.contains("id=\"feature-field\"") && then.contains("id=\"feature-old-wall\""));
+        assert!(then.contains(">Harrowgate</text>") && !then.contains(">Harrow</text>"));
+        assert!(then.contains(">Red Field</text>"));
+        assert!(then.contains(&format!(
+            "font-size=\"{}\"",
+            inkland_core::num::fixed(11.0 * 25.4 / 72.0, 3)
+        )));
+        let r = &out.variants[1].report;
+        assert_eq!(r["overlay"]["name"], "then");
+        assert_eq!(r["overlay"]["roads"][0]["id"], "keep-way");
+        assert_eq!(r["overlay"]["roads"][0]["found"], true);
+        assert_eq!(r["overlay"]["places"][0]["name"], "Old Keep");
+        assert!(out.variants[0].report.get("overlay").is_none());
+        assert!(!out.variants[1].checks_failed(), "{}", r["checks"]);
     }
 
     #[test]

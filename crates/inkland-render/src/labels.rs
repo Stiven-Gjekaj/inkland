@@ -170,6 +170,7 @@ pub enum Kind {
     State,
     Region,
     River,
+    Feature,
 }
 
 /// A placed label.
@@ -589,6 +590,38 @@ pub fn symbol_points(world: &World, page: &Page) -> Vec<[f64; 2]> {
         .collect()
 }
 
+/// The half size of the symbol of a point feature, in mm.
+pub const FEATURE_RADIUS: f64 = 0.8;
+
+/// The overlay of a variant, if it has one.
+pub fn overlay_of<'a>(
+    config: &'a Config,
+    variant: &Variant,
+) -> Option<&'a inkland_core::config::Overlay> {
+    variant
+        .overlay
+        .as_deref()
+        .and_then(|n| config.overlays.get(n))
+}
+
+/// The point features of the overlay of a variant that are shown, in the
+/// view, on the page, in mm.
+pub fn feature_points(config: &Config, variant: &Variant, page: &Page) -> Vec<[f64; 2]> {
+    let [x0, y0, x1, y1] = page.view;
+    overlay_of(config, variant)
+        .map(|o| {
+            o.add
+                .features
+                .iter()
+                .filter(|f| !inkland_core::overlay::removes(o, "feature", &f.id))
+                .filter_map(|f| f.at)
+                .filter(|p| p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1)
+                .map(|p| page.to_page(p))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The boxes that labels must not touch: place symbols and extras.
 fn fixed_obstacles(world: &World, config: &Config, variant: &Variant, page: &Page) -> Vec<Obb> {
     let symbols = symbol_points(world, page);
@@ -604,6 +637,10 @@ fn fixed_obstacles(world: &World, config: &Config, variant: &Variant, page: &Pag
             Obb::rect(x - r, y - r, x + r, y + r)
         })
         .collect();
+    for [x, y] in feature_points(config, variant, page) {
+        let r = FEATURE_RADIUS;
+        out.push(Obb::rect(x - r, y - r, x + r, y + r));
+    }
     for [a, b, c, d] in crate::extras::boxes(config, variant, page, &symbols) {
         out.push(Obb::rect(a, b, c, d));
     }
@@ -618,6 +655,30 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
     let inner = [mx + 0.5, my + 0.5, mx + mw - 0.5, my + mh - 0.5];
     let [vx0, vy0, vx1, vy1] = page.view;
     let in_view = |p: [f64; 2]| p[0] >= vx0 && p[0] <= vx1 && p[1] >= vy0 && p[1] <= vy1;
+    let overlay = overlay_of(config, variant);
+    // The label options of an item, and whether it has a label.
+    let opts = |kind: &str, id: &str| {
+        overlay.and_then(|o| {
+            o.labels
+                .iter()
+                .find(|(k, _)| inkland_core::overlay::split_key(k) == Some((kind, id)))
+                .map(|(_, v)| v)
+        })
+    };
+    let shown = |kind: &str, id: &str| {
+        !overlay.is_some_and(|o| inkland_core::overlay::removes(o, kind, id))
+            && !opts(kind, id).is_some_and(|o| o.hide)
+    };
+    let size_of = |kind: &str, id: &str, default_pt: f64| {
+        pt(opts(kind, id).and_then(|o| o.size_pt).unwrap_or(default_pt))
+    };
+    let name_of = |kind: &str, id: &str, name: Option<&str>| -> Option<String> {
+        overlay
+            .and_then(|o| inkland_core::overlay::renamed(o, kind, id))
+            .or(name)
+            .filter(|n| !n.trim().is_empty())
+            .map(str::to_owned)
+    };
     let mut requests: Vec<Request> = Vec::new();
 
     // Places.
@@ -625,13 +686,21 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
         if p.name.trim().is_empty() || !in_view(p.at) {
             continue;
         }
-        let size = pt(if p.capital || p.kind == PlaceKind::City {
-            sizes.place_city
-        } else if p.kind == PlaceKind::Village {
-            sizes.place_village
-        } else {
-            sizes.place_town
-        });
+        let key = p.pin.clone().unwrap_or_else(|| p.id.to_string());
+        if !shown("place", &key) {
+            continue;
+        }
+        let size = size_of(
+            "place",
+            &key,
+            if p.capital || p.kind == PlaceKind::City {
+                sizes.place_city
+            } else if p.kind == PlaceKind::Village {
+                sizes.place_village
+            } else {
+                sizes.place_town
+            },
+        );
         let f = FontMetrics::of(&fonts.labels);
         let id = match &p.pin {
             Some(pin) => format!("label-place-{pin}"),
@@ -670,10 +739,14 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
     for (i, r) in world.rivers.iter().enumerate() {
         let Some(k) = r.course else { continue };
         let pin = &config.pins.rivers[k];
-        let Some(name) = pin.name.as_deref().filter(|n| !n.trim().is_empty()) else {
+        if !shown("river", &pin.id) {
+            continue;
+        }
+        let Some(name) = name_of("river", &pin.id, pin.name.as_deref()) else {
             continue;
         };
-        let size = pt(sizes.river);
+        let name = name.as_str();
+        let size = size_of("river", &pin.id, sizes.river);
         let f = FontMetrics::of(&fonts.labels);
         let spacing = 0.1 * size;
         requests.push(Request {
@@ -716,9 +789,13 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
 
     // Pinned regions with a name.
     for pin in &config.pins.regions {
-        let Some(name) = pin.name.as_deref().filter(|n| !n.trim().is_empty()) else {
+        if !shown("region", &pin.id) {
+            continue;
+        }
+        let Some(name) = name_of("region", &pin.id, pin.name.as_deref()) else {
             continue;
         };
+        let name = name.as_str();
         let Some(shape) = Shape::of(pin) else {
             continue;
         };
@@ -726,7 +803,7 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
         if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
             continue;
         }
-        let size = pt(sizes.region);
+        let size = size_of("region", &pin.id, sizes.region);
         let f = FontMetrics::of(&fonts.labels_sc);
         requests.push(Request {
             candidates: area_candidates(world, page, inner, &area, name, f, size, (0.05, 0.5)),
@@ -738,6 +815,45 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
             required: true,
             rank: 2,
         });
+    }
+
+    // Named features of the overlay.
+    if let Some(o) = overlay {
+        for feat in &o.add.features {
+            if !shown("feature", &feat.id) {
+                continue;
+            }
+            let Some(name) = name_of("feature", &feat.id, feat.name.as_deref()) else {
+                continue;
+            };
+            let size = size_of("feature", &feat.id, sizes.place_town);
+            let f = FontMetrics::of(&fonts.labels);
+            let candidates = if let Some(at) = feat.at {
+                if !in_view(at) {
+                    continue;
+                }
+                point_candidates(page.to_page(at), FEATURE_RADIUS, &name, f, size)
+            } else if let Some(line) = &feat.polyline {
+                let line: Vec<[f64; 2]> = line.iter().map(|&p| page.to_page(p)).collect();
+                river_candidates(&line, inner, usize::MAX, &name, f, size, 0.1 * size)
+            } else if let Some(poly) = &feat.polygon {
+                let shape = Shape::Polygon(poly.clone());
+                let area: Vec<bool> = (0..g.len()).map(|c| shape.contains(g.points[c])).collect();
+                area_candidates(world, page, inner, &area, &name, f, size, (0.05, 0.5))
+            } else {
+                continue;
+            };
+            requests.push(Request {
+                candidates,
+                id: format!("label-feature-{}", feat.id),
+                kind: Kind::Feature,
+                text: name,
+                family: fonts.labels.clone(),
+                size,
+                required: true,
+                rank: 1,
+            });
+        }
     }
 
     requests.sort_by(|a, b| a.rank.cmp(&b.rank).then_with(|| a.id.cmp(&b.id)));

@@ -101,6 +101,56 @@ pub fn variant_report(
     })
 }
 
+/// The `overlay` section of a variant report: the name of the overlay, what
+/// it adds and removes, and each road that it adds, as for pinned roads.
+/// `world` is the world with the overlay applied.
+pub fn overlay_section(
+    world: &inkland_core::world::World,
+    overlay: &inkland_core::config::Overlay,
+    name: &str,
+) -> serde_json::Value {
+    let roads: Vec<serde_json::Value> = overlay
+        .add
+        .roads
+        .iter()
+        .map(|pin| {
+            road_entry(
+                pin,
+                world
+                    .roads
+                    .iter()
+                    .find(|r| r.overlay.as_deref() == Some(pin.id.as_str())),
+            )
+        })
+        .collect();
+    let places: Vec<serde_json::Value> = overlay
+        .add
+        .places
+        .iter()
+        .filter_map(|pin| {
+            let p = world
+                .society
+                .places
+                .iter()
+                .find(|p| p.pin.as_deref() == Some(pin.id.as_str()))?;
+            Some(serde_json::json!({
+                "id": pin.id,
+                "name": p.name,
+                "on_land": world.features.is_land(p.cell),
+                "state": world.society.states.iter().find(|s| s.id == p.state).map(|s| s.name.clone()),
+            }))
+        })
+        .collect();
+    serde_json::json!({
+        "name": name,
+        "places": places,
+        "features": overlay.add.features.iter().map(|f| f.id.clone()).collect::<Vec<_>>(),
+        "roads": roads,
+        "removed": overlay.remove,
+        "renamed": overlay.rename,
+    })
+}
+
 /// The report of each point pin: where it was asked for, where it is, and
 /// what its cell is. `error` is the distance between the two, in units.
 fn point_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
@@ -283,51 +333,57 @@ fn nearest(points: &[[f64; 2]], p: [f64; 2]) -> f64 {
 /// The report of each pinned road: target and real length, stops, legs,
 /// and river crossings, all in units.
 fn road_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
-    use inkland_core::num::round;
     config
         .pins
         .roads
         .iter()
         .enumerate()
-        .map(|(k, pin)| {
-            let Some(r) = world.roads.iter().find(|r| r.pin == Some(k)) else {
-                return serde_json::json!({ "id": pin.id, "found": false });
-            };
-            let within = pin
-                .target_length
-                .map(|t| (r.length - t).abs() <= t * pin.tolerance + 1e-9);
-            let legs: Vec<serde_json::Value> = r
-                .stops
-                .windows(2)
-                .map(|w| {
-                    serde_json::json!({
-                        "from": w[0].place,
-                        "to": w[1].place,
-                        "length": round(w[1].at_length - w[0].at_length, 3),
-                    })
-                })
-                .collect();
+        .map(|(k, pin)| road_entry(pin, world.roads.iter().find(|r| r.pin == Some(k))))
+        .collect()
+}
+
+/// The report of one pinned road and the road that the world has for it.
+fn road_entry(
+    pin: &inkland_core::config::RoadPin,
+    road: Option<&inkland_core::roads::Road>,
+) -> serde_json::Value {
+    use inkland_core::num::round;
+    let Some(r) = road else {
+        return serde_json::json!({ "id": pin.id, "found": false });
+    };
+    let within = pin
+        .target_length
+        .map(|t| (r.length - t).abs() <= t * pin.tolerance + 1e-9);
+    let legs: Vec<serde_json::Value> = r
+        .stops
+        .windows(2)
+        .map(|w| {
             serde_json::json!({
-                "id": pin.id,
-                "found": true,
-                "kind": serde_json::to_value(pin.kind).expect("a kind converts to JSON"),
-                "target": pin.target_length,
-                "tolerance": pin.tolerance,
-                "actual": round(r.length, 3),
-                "within_tolerance": within,
-                "stops": r.stops.iter().map(|s| serde_json::json!({
-                    "place": s.place,
-                    "at_length": round(s.at_length, 3),
-                })).collect::<Vec<_>>(),
-                "legs": legs,
-                "crossings": r.crossings.iter().map(|x| serde_json::json!({
-                    "river": x.river_pin.clone().unwrap_or_else(|| format!("river-{}", x.river)),
-                    "at_length": round(x.at_length, 3),
-                    "kind": x.kind,
-                })).collect::<Vec<_>>(),
+                "from": w[0].place,
+                "to": w[1].place,
+                "length": round(w[1].at_length - w[0].at_length, 3),
             })
         })
-        .collect()
+        .collect();
+    serde_json::json!({
+        "id": pin.id,
+        "found": true,
+        "kind": serde_json::to_value(pin.kind).expect("a kind converts to JSON"),
+        "target": pin.target_length,
+        "tolerance": pin.tolerance,
+        "actual": round(r.length, 3),
+        "within_tolerance": within,
+        "stops": r.stops.iter().map(|s| serde_json::json!({
+            "place": s.place,
+            "at_length": round(s.at_length, 3),
+        })).collect::<Vec<_>>(),
+        "legs": legs,
+        "crossings": r.crossings.iter().map(|x| serde_json::json!({
+            "river": x.river_pin.clone().unwrap_or_else(|| format!("river-{}", x.river)),
+            "at_length": round(x.at_length, 3),
+            "kind": x.kind,
+        })).collect::<Vec<_>>(),
+    })
 }
 
 /// Checks on the world: each pinned road with a target is in its

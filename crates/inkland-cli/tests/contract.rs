@@ -344,22 +344,37 @@ fn variant_flag_writes_only_that_variant() {
 }
 
 #[test]
-fn pins_that_this_version_cannot_apply_are_refused_and_nothing_is_written() {
+fn an_overlay_variant_leaves_world_json_as_it_is() {
     let dir = tempfile::tempdir().unwrap();
-    let mut c = minimal();
-    c["overlays"] = json!({ "then": { "remove": [] } });
-    let config = write_config(dir.path(), &c);
-    let out = dir.path().join("out");
-    let (code, err) = run(&[
-        "generate",
-        "--config",
-        config.to_str().unwrap(),
-        "--out-dir",
-        out.to_str().unwrap(),
-    ]);
-    assert_eq!(code, 70);
-    assert_eq!(err["error"]["code"], "NOT_IMPLEMENTED");
-    assert!(!out.exists());
+    let mut outputs = Vec::new();
+    for (name, with_overlay) in [("base", false), ("then", true)] {
+        let mut c = minimal();
+        if with_overlay {
+            c["overlays"] = json!({ "then": { "add": { "features": [
+                { "id": "old-field", "kind": "battle-site", "name": "Old Field", "at": [10, 10] }
+            ] } } });
+            c["variants"] = json!([{ "name": "then", "overlay": "then", "page": { "w_mm": 167, "h_mm": 120 } }]);
+        }
+        std::fs::create_dir_all(dir.path().join(name)).unwrap();
+        let config = write_config(&dir.path().join(name), &c);
+        let out = dir.path().join(name).join("out");
+        let (code, _) = run(&[
+            "generate",
+            "--config",
+            config.to_str().unwrap(),
+            "--out-dir",
+            out.to_str().unwrap(),
+        ]);
+        assert_eq!(code, 0);
+        outputs.push(out);
+    }
+    let read = |p: std::path::PathBuf| std::fs::read(p).unwrap();
+    assert_eq!(
+        read(outputs[0].join("world.json")),
+        read(outputs[1].join("world.json"))
+    );
+    let svg = String::from_utf8(read(outputs[1].join("then.svg"))).unwrap();
+    assert!(svg.contains("id=\"feature-old-field\""));
 }
 
 #[test]

@@ -74,9 +74,10 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
         match layer {
             LayerName::Coast => write_coast(&mut s, world, &page, coast_w, min),
             LayerName::Relief => write_relief(&mut s, world, config, &page, min, &labels),
-            LayerName::Rivers => write_rivers(&mut s, world, config, &page),
+            LayerName::Rivers => write_rivers(&mut s, world, config, variant, &page),
             LayerName::Regions => write_borders(&mut s, world, config, &page),
             LayerName::Roads => write_roads(&mut s, world, config, &page),
+            LayerName::Features => write_features(&mut s, config, variant, &page),
             LayerName::Places => write_places(&mut s, world, config, &page),
             LayerName::Labels => write_labels(&mut s, &labels),
         }
@@ -259,12 +260,21 @@ pub fn river_width_pt(flux: f64, threshold: f64, min_pt: f64) -> f64 {
     w.clamp(RIVER_MIN_PT, RIVER_MAX_PT).max(min_pt)
 }
 
-fn write_rivers(s: &mut String, world: &World, config: &Config, page: &Page) {
+fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Variant, page: &Page) {
     let threshold = inkland_core::rivers::river_threshold(world.grid.len());
     let min = config.render.min_line_width_pt;
+    let overlay = crate::labels::overlay_of(config, variant);
     let mut items: Vec<(String, String, f64)> = world
         .rivers
         .iter()
+        .filter(|r| {
+            // An overlay can hide a pinned river. The river stays in the world.
+            !r.course.is_some_and(|k| {
+                overlay.is_some_and(|o| {
+                    inkland_core::overlay::removes(o, "river", &config.pins.rivers[k].id)
+                })
+            })
+        })
         .filter_map(|r| {
             let id = match r.course {
                 Some(k) => format!("river-{}", config.pins.rivers[k].id),
@@ -419,14 +429,19 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
     // Pinned roads, each with its config id.
     let mut pinned_edges: BTreeSet<(usize, usize)> = BTreeSet::new();
     let mut items: Vec<(String, String, RoadKind)> = Vec::new();
+    // Pinned roads and overlay roads, each with its config id.
     for r in world.roads.iter() {
-        let Some(k) = r.pin else { continue };
+        let id = match (r.pin, &r.overlay) {
+            (Some(k), _) => config.pins.roads[k].id.clone(),
+            (None, Some(id)) => id.clone(),
+            (None, None) => continue,
+        };
         for w in r.cells.windows(2) {
             pinned_edges.insert((w[0].min(w[1]), w[0].max(w[1])));
         }
         let d = path_data(page, &r.points, false);
         if !d.is_empty() {
-            items.push((format!("road-{}", config.pins.roads[k].id), d, r.kind));
+            items.push((format!("road-{id}"), d, r.kind));
         }
     }
     items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -443,7 +458,7 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
         for r in world
             .roads
             .iter()
-            .filter(|r| r.pin.is_none() && r.kind == kind)
+            .filter(|r| r.pin.is_none() && r.overlay.is_none() && r.kind == kind)
         {
             for w in r.cells.windows(2) {
                 let e = (w[0].min(w[1]), w[0].max(w[1]));
@@ -457,7 +472,7 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
             for r in world
                 .roads
                 .iter()
-                .filter(|r| r.pin.is_none() && r.kind == RoadKind::Road)
+                .filter(|r| r.pin.is_none() && r.overlay.is_none() && r.kind == RoadKind::Road)
             {
                 for w in r.cells.windows(2) {
                     edges.remove(&(w[0].min(w[1]), w[0].max(w[1])));
@@ -481,6 +496,76 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
                     s,
                     "<path id=\"{name}-{}\" d=\"{d}\" stroke-width=\"{w}\" stroke-dasharray=\"{dash}\"/>",
                     i + 1
+                );
+            }
+        }
+    }
+    s.push_str("</g>\n");
+}
+
+/// Write the features of the overlay of a variant: a symbol at a point, a
+/// line, or an outline. A ruin is a cross, a battle site is two crossed
+/// blades, and other point features are a small triangle. A border is a
+/// dash-dot line, a wall is a thick line, and other lines are dotted.
+fn write_features(s: &mut String, config: &Config, variant: &Variant, page: &Page) {
+    use inkland_core::config::FeatureKind;
+    let Some(overlay) = crate::labels::overlay_of(config, variant) else {
+        return;
+    };
+    let mut feats: Vec<_> = overlay
+        .add
+        .features
+        .iter()
+        .filter(|f| !inkland_core::overlay::removes(overlay, "feature", &f.id))
+        .collect();
+    if feats.is_empty() {
+        return;
+    }
+    feats.sort_by(|a, b| a.id.cmp(&b.id));
+    let min = config.render.min_line_width_pt;
+    let _ = writeln!(
+        s,
+        "<g id=\"features\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    );
+    for f in feats {
+        let (width_pt, dash) = match f.kind {
+            FeatureKind::Border => (0.6, " stroke-dasharray=\"2 0.8 0.4 0.8\""),
+            FeatureKind::Wall => (1.0, ""),
+            _ => (0.5, " stroke-dasharray=\"0.4 0.8\""),
+        };
+        let w = n(line_mm(f64::max(width_pt, min)));
+        let id = format!("feature-{}", f.id);
+        if let Some(at) = f.at {
+            let [x, y] = page.to_page(at);
+            let (x, y) = (n(x), n(y));
+            let d = match f.kind {
+                FeatureKind::Ruin => format!("M{x} {y}m-0.6 -0.6l1.2 1.2m0 -1.2l-1.2 1.2"),
+                FeatureKind::BattleSite => format!(
+                    "M{x} {y}m-0.7 -0.7l1.4 1.4m0 -1.4l-1.4 1.4m0.2 -0.6l0.4 0.4m0.8 0l0.4 -0.4"
+                ),
+                _ => format!("M{x} {y}m0 -0.7l0.6 1.1h-1.2z"),
+            };
+            let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{w}\"/>");
+        } else if let Some(line) = &f.polyline {
+            let d = path_data(page, line, false);
+            if !d.is_empty() {
+                let _ = writeln!(
+                    s,
+                    "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{w}\"{dash}/>"
+                );
+            }
+        } else if let Some(poly) = &f.polygon {
+            let mut pts = poly.clone();
+            if pts.first() != pts.last()
+                && let Some(&p) = pts.first()
+            {
+                pts.push(p);
+            }
+            let d = path_data(page, &pts, true);
+            if !d.is_empty() {
+                let _ = writeln!(
+                    s,
+                    "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{w}\"{dash}/>"
                 );
             }
         }
