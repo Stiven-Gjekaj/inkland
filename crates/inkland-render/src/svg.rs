@@ -73,7 +73,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
         use inkland_core::config::LayerName;
         match layer {
             LayerName::Coast => write_coast(&mut s, world, &page, coast_w, min),
-            LayerName::Relief => write_relief(&mut s, world, config, &page, min),
+            LayerName::Relief => write_relief(&mut s, world, config, &page, min, &labels),
             LayerName::Rivers => write_rivers(&mut s, world, config, &page),
             LayerName::Regions => write_borders(&mut s, world, config, &page),
             LayerName::Roads => write_roads(&mut s, world, config, &page),
@@ -214,9 +214,20 @@ fn write_coast(s: &mut String, world: &World, page: &Page, coast_w: f64, min: f6
     s.push_str("</g>\n");
 }
 
-fn write_relief(s: &mut String, world: &World, config: &Config, page: &Page, min: f64) {
+fn write_relief(
+    s: &mut String,
+    world: &World,
+    config: &Config,
+    page: &Page,
+    min: f64,
+    labels: &crate::labels::Labels,
+) {
     use crate::decor::Symbol;
-    let symbols = crate::decor::relief(world, page, config.seed);
+    // A symbol under a label is left out, so that the text stays clear.
+    let symbols: Vec<_> = crate::decor::relief(world, page, config.seed)
+        .into_iter()
+        .filter(|(_, p)| !labels.covers(*p, 1.0))
+        .collect();
     let _ = writeln!(
         s,
         "<g id=\"relief\" clip-path=\"url(#clip-map)\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">",

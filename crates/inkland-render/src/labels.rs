@@ -205,6 +205,16 @@ pub struct Labels {
 }
 
 impl Labels {
+    /// `true` if a point is within `margin` of the box of a placed label.
+    pub fn covers(&self, p: [f64; 2], margin: f64) -> bool {
+        self.placed.iter().flat_map(|l| &l.boxes).any(|b| {
+            let d = [p[0] - b.c[0], p[1] - b.c[1]];
+            let along = (d[0] * b.u[0] + d[1] * b.u[1]).abs();
+            let across = (-d[0] * b.u[1] + d[1] * b.u[0]).abs();
+            along <= b.h[0] + margin && across <= b.h[1] + margin
+        })
+    }
+
     /// The number of required labels without a place.
     pub fn required_unplaced(&self) -> usize {
         self.unplaced.iter().filter(|u| u.required).count()
@@ -986,6 +996,18 @@ mod tests {
             place(&w, &c, &c.variants[0], &page),
             place(&w, &c, &c.variants[0], &page)
         );
+    }
+
+    #[test]
+    fn covers_is_true_only_near_a_placed_label() {
+        let (w, c) = world(3, "pangea", json!({}));
+        let page = Page::new(&c, &c.variants[0]);
+        let labels = place(&w, &c, &c.variants[0], &page);
+        let b = labels.placed[0].boxes[0];
+        assert!(labels.covers(b.c, 0.0));
+        let corner = b.corners()[0];
+        assert!(labels.covers([corner[0] - 0.5, corner[1]], 1.0));
+        assert!(!Labels::default().covers(b.c, 1.0));
     }
 
     #[test]
