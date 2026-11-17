@@ -6,6 +6,7 @@ pub mod catalog;
 pub mod model;
 pub mod options;
 pub mod pins;
+pub mod rows;
 pub mod snapshot;
 pub mod view;
 pub mod worker;
