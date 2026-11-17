@@ -10,6 +10,7 @@ import { StatusBar } from "status-bar.slint";
 import { HeightmapDialog } from "dialogs/heightmap.slint";
 import { BurgsDialog } from "dialogs/burgs.slint";
 import { PrintDialog } from "dialogs/print.slint";
+import { RegionsDialog } from "dialogs/regions.slint";
 
 export { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts, Theme }
 
@@ -59,6 +60,15 @@ export component AppWindow inherits Window {
                 Actions.redo();
                 return accept;
             }
+            if event.text == Key.Return && AppState.draft-points.length > 0 {
+                Actions.finish-draft();
+                return accept;
+            }
+            if event.text == Key.Escape && (AppState.draft-points.length > 0 || AppState.tool != Tool.select) {
+                Actions.cancel-draft();
+                AppState.tool = Tool.select;
+                return accept;
+            }
             if event.text == Key.Escape {
                 AppState.tool = Tool.select;
                 Dialogs.close-all();
@@ -87,6 +97,7 @@ export component AppWindow inherits Window {
         if Dialogs.heightmap: HeightmapDialog {}
         if Dialogs.burgs: BurgsDialog {}
         if Dialogs.print: PrintDialog {}
+        if Dialogs.regions: RegionsDialog {}
     }
 
     public function focus-keys() {

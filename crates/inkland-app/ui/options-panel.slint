@@ -52,12 +52,15 @@ export component OptionsPanel inherits Rectangle {
         background: touch.has-hover ? Theme.header-active : Theme.main;
         border-width: 1px;
         border-color: Theme.border;
-        Text {
-            text: "►";
-            font-size: 13px;
-            color: touch.has-hover ? white : Theme.text;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        Path {
+            x: (parent.width - 9px) / 2;
+            y: (parent.height - 12px) / 2;
+            width: 9px;
+            height: 12px;
+            viewbox-width: 9;
+            viewbox-height: 12;
+            commands: "M 0 0 L 9 6 L 0 12 Z";
+            fill: touch.has-hover ? white : Theme.text;
         }
         touch := TouchArea {
             clicked => { Ui.panel-open = true; }

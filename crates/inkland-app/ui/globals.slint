@@ -5,7 +5,9 @@ import { TableRow } from "theme.slint";
 
 export { TableRow }
 
-export enum Tool { select, add-pin, brush }
+// The tool of the map: select and move, add a point pin, the heightmap
+// brush, draw a region, a river, a road, or a crop.
+export enum Tool { select, add-pin, brush, region, river, route, crop }
 
 // A point pin. `x` and `y` are its position in the map view.
 export struct PinRow {
@@ -78,6 +80,19 @@ export global AppState {
     in property <length> pointer-y;
     in property <bool> pointer-in-map;
 
+    // A new region: its shape (0 box, 1 circle, 2 polygon) and its kind
+    // (an index in the region kinds).
+    in-out property <int> region-shape;
+    in-out property <int> region-kind: 3;
+    // A new road: 0 road, 1 trail.
+    in-out property <int> road-kind;
+    // The marks over the map, as path commands in map view pixels: the
+    // pins of the open editors, the selected pin, and the drawing.
+    in property <string> overlay-path;
+    in property <string> highlight-path;
+    in property <string> draft-path;
+    in property <[PinRow]> draft-points;
+
     in property <bool> can-undo;
     in property <bool> can-redo;
 
@@ -128,6 +143,16 @@ export global Actions {
     callback pin-place(string);
     callback set-pin-kind(int);
     callback set-pin-port(bool);
+    // The drawing tools.
+    callback start-tool(Tool);
+    callback finish-draft();
+    callback cancel-draft();
+    // The selection of an editor table changed.
+    callback selection-changed();
+    // Edit a field of an item: the editor id, the item id, the field, and
+    // the text.
+    callback edit-item(string, string, string, string);
+    callback remove-item(string, string);
     callback select-pin(string);
     callback rename-pin(string, string);
     callback remove-pin(string);
@@ -161,6 +186,14 @@ export global Lists {
     in property <[TableRow]> brushes;
     // The point pins, then the places that generation adds.
     in property <[TableRow]> burgs;
+    in property <[TableRow]> regions;
+    // The selected region and its fields.
+    in-out property <string> selected-region;
+    in-out property <string> region-name;
+    in property <int> region-kind;
+    in-out property <string> region-lo;
+    in-out property <string> region-hi;
+    in-out property <string> region-edge;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their
@@ -213,23 +246,30 @@ export global Opts {
 export global Dialogs {
     in-out property <bool> heightmap;
     in-out property <bool> burgs;
+    in-out property <bool> regions;
     in-out property <bool> print;
 
     public function open(id: string) {
         if id == "heightmap" { self.heightmap = true; }
         if id == "burgs" { self.burgs = true; }
+        if id == "regions" { self.regions = true; }
+        Actions.selection-changed();
         if id == "print" { self.print = true; }
     }
 
     public function close(id: string) {
         if id == "heightmap" { self.heightmap = false; }
         if id == "burgs" { self.burgs = false; }
+        if id == "regions" { self.regions = false; }
+        Actions.selection-changed();
         if id == "print" { self.print = false; }
     }
 
     public function close-all() {
         self.heightmap = false;
         self.burgs = false;
+        self.regions = false;
+        Actions.selection-changed();
         self.print = false;
     }
 }

@@ -20,6 +20,58 @@ export component MapView inherits Rectangle {
         image-fit: fill;
     }
 
+    // The marks of the open editors and of the drawing.
+    if AppState.overlay-path != "": Path {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: AppState.overlay-path;
+        stroke: #2060c0;
+        stroke-width: 1.5px;
+        fill: #2060c018;
+    }
+    if AppState.highlight-path != "": Path {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: AppState.highlight-path;
+        stroke: #d03020;
+        stroke-width: 2.5px;
+        fill: #d0302020;
+    }
+    if AppState.draft-path != "": Path {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: AppState.draft-path;
+        stroke: #c71d1d;
+        stroke-width: 2px;
+        fill: #c71d1d14;
+    }
+    for q in AppState.draft-points: Rectangle {
+        x: q.x - 4px;
+        y: q.y - 4px;
+        width: 8px;
+        height: 8px;
+        border-radius: 4px;
+        background: #c71d1d;
+    }
+
     for pin in AppState.pins: Rectangle {
         x: pin.x - 7px;
         y: pin.y - 7px;
@@ -66,6 +118,11 @@ export component MapView inherits Rectangle {
 
     TouchArea {
         mouse-cursor: AppState.tool == Tool.select ? MouseCursor.default : MouseCursor.crosshair;
+        double-clicked => {
+            if AppState.tool == Tool.region || AppState.tool == Tool.river || AppState.tool == Tool.route {
+                Actions.finish-draft();
+            }
+        }
         pointer-event(ev) => {
             if ev.kind == PointerEventKind.down {
                 Actions.pointer-down(self.mouse-x, self.mouse-y,

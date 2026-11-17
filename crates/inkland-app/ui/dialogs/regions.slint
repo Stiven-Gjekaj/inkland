@@ -1,0 +1,134 @@
+// The Regions editor: the pinned areas with a forced kind of terrain. Draw
+// a new area on the map as a box, a circle, or a polygon. Select an area to
+// edit its name, kind, height range, and soft edge.
+
+import { Theme, Label, DialogButton, Field, Select, FormRow, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Tool, Lists } from "../globals.slint";
+
+export component RegionsDialog inherits Dialog {
+    id: "regions";
+    title: "Regions Editor";
+    content-width: 470px;
+    pos-x: 420px;
+    pos-y: 60px;
+    property <[string]> kinds: ["sea", "lake", "mountains", "hills", "plains", "marsh", "forest", "desert"];
+    Table {
+        header: ["Area", "Kind", "Shape", "Height"];
+        widths: [110px, 70px, 170px, 50px];
+        rows: Lists.regions;
+        selected: Lists.selected-region;
+        list-height: 160px;
+        select(id) => {
+            Lists.selected-region = id;
+            Actions.selection-changed();
+        }
+    }
+    FormRow {
+        label: Lists.selected-region == "" ? "No area selected" : "Area " + Lists.selected-region;
+        label-width: 130px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            enabled: Lists.selected-region != "";
+            placeholder: "Name of the label";
+            text <=> Lists.region-name;
+            accepted(t) => { Actions.edit-item("regions", Lists.selected-region, "name", t); }
+        }
+    }
+    FormRow {
+        label: "Kind";
+        label-width: 130px;
+        Select {
+            dialog: true;
+            width: 110px;
+            enabled: Lists.selected-region != "";
+            model: root.kinds;
+            current-index: Lists.region-kind;
+            commit: false;
+            selected(i) => { Actions.edit-item("regions", Lists.selected-region, "kind", root.kinds[i]); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        DialogButton {
+            text: "Remove";
+            enabled: Lists.selected-region != "";
+            clicked => { Actions.remove-item("regions", Lists.selected-region); }
+        }
+    }
+    FormRow {
+        label: "Height (0-100)";
+        label-width: 130px;
+        lo := Field {
+            dialog: true;
+            width: 50px;
+            number: true;
+            align: right;
+            enabled: Lists.selected-region != "";
+            text <=> Lists.region-lo;
+            accepted(t) => { Actions.edit-item("regions", Lists.selected-region, "height", t + "," + hi.text); }
+        }
+        Label { dialog: true; text: "to"; }
+        hi := Field {
+            dialog: true;
+            width: 50px;
+            number: true;
+            align: right;
+            enabled: Lists.selected-region != "";
+            text <=> Lists.region-hi;
+            accepted(t) => { Actions.edit-item("regions", Lists.selected-region, "height", lo.text + "," + t); }
+        }
+        DialogButton {
+            text: "Default";
+            enabled: Lists.selected-region != "";
+            clicked => { Actions.edit-item("regions", Lists.selected-region, "height", ","); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    FormRow {
+        label: "Soft edge";
+        label-width: 130px;
+        Field {
+            dialog: true;
+            width: 50px;
+            number: true;
+            align: right;
+            enabled: Lists.selected-region != "";
+            text <=> Lists.region-edge;
+            accepted(t) => { Actions.edit-item("regions", Lists.selected-region, "edge", t); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Rectangle { height: 1px; background: #dddddd; }
+    FormRow {
+        label: "New area";
+        label-width: 130px;
+        Select {
+            dialog: true;
+            width: 90px;
+            model: ["Box", "Circle", "Polygon"];
+            current-index <=> AppState.region-shape;
+        }
+        Select {
+            dialog: true;
+            width: 100px;
+            model: root.kinds;
+            current-index <=> AppState.region-kind;
+        }
+        DialogButton {
+            text: AppState.tool == Tool.region ? "Stop" : "Draw";
+            pressed: AppState.tool == Tool.region;
+            clicked => { Actions.start-tool(Tool.region); }
+        }
+        if AppState.tool == Tool.region && AppState.region-shape == 2: DialogButton {
+            text: "Close";
+            enabled: AppState.draft-points.length >= 3;
+            clicked => { Actions.finish-draft(); }
+        }
+    }
+    Tip {
+        dialog: true;
+        text: AppState.region-shape == 2
+            ? "Click on the map to add the points of the outline. Click the first point, double-click, or press Enter to close it."
+            : "Drag on the map to draw the area. A circle starts at its centre.";
+    }
+}

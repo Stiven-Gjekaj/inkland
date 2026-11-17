@@ -21,6 +21,7 @@ use inkland::{Config, World};
 use inkland_app::catalog;
 use inkland_app::model::{Editor, error_text};
 use inkland_app::options::option_text;
+use inkland_app::pins::{Shape, ShapeKind};
 use inkland_app::view::{View, distance};
 use inkland_app::worker::Worker;
 use inkland_render::page::Page;
@@ -45,8 +46,34 @@ const DESK: [u8; 3] = [0x8a, 0x8f, 0x94];
 const PIN_HIT_PX: f64 = 9.0;
 /// The kinds of the "New pin kind" list, in its order.
 const PIN_KINDS: [&str; 5] = ["village", "town", "city", "fortress", "ruin"];
+/// The pin list of an editor id.
+fn pin_list(list: &str) -> Option<inkland::PinList> {
+    match list {
+        "burgs" => Some(inkland::PinList::Points),
+        "regions" => Some(inkland::PinList::Regions),
+        "rivers" => Some(inkland::PinList::Rivers),
+        "routes" => Some(inkland::PinList::Roads),
+        _ => None,
+    }
+}
+
+/// The kind of a new region: an index in `catalog::REGION_KINDS`.
+fn region_kind(i: i32) -> &'static str {
+    catalog::REGION_KINDS
+        .get(usize::try_from(i).unwrap_or(0))
+        .copied()
+        .unwrap_or("hills")
+}
+
 /// The tools of the Tools tab that the app has now.
-const IMPLEMENTED: &[&str] = &["burgs", "heightmap", "add-burg", "print"];
+const IMPLEMENTED: &[&str] = &[
+    "burgs",
+    "heightmap",
+    "add-burg",
+    "print",
+    "regions",
+    "add-region",
+];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
   "world": { "cells": 8000, "template": "continents" } }"#;
@@ -104,9 +131,20 @@ struct Shown {
 /// What a drag of the pointer does.
 enum Drag {
     None,
-    Pan { last: [f64; 2] },
-    Pin { id: String, start: [f64; 2] },
-    Brush { last: [f64; 2] },
+    Pan {
+        last: [f64; 2],
+    },
+    Pin {
+        id: String,
+        start: [f64; 2],
+    },
+    Brush {
+        last: [f64; 2],
+    },
+    /// A box, a circle, or a crop: from `start` (world) to the pointer.
+    Shape {
+        start: [f64; 2],
+    },
 }
 
 struct State {
@@ -124,6 +162,10 @@ struct State {
     rev: u64,
     done_rev: u64,
     drag: Drag,
+    /// The points (world) of the shape, river, or road that the user draws.
+    draft: Vec<[f64; 2]>,
+    /// The pointer in the map view, if it is there.
+    pointer: Option<[f64; 2]>,
 }
 
 struct Controller {
@@ -341,6 +383,66 @@ impl Controller {
         g.set_pins(model(pins));
         let radius = f64::from(g.get_brush_radius());
         g.set_brush_view_radius((radius * page.scale * st.view.zoom) as f32);
+        self.update_marks(&st, &page);
+    }
+
+    /// The marks of the open editors and of the drawing over the map.
+    fn update_marks(&self, st: &State, page: &Page) {
+        use inkland_app::overlay::{self, Paths};
+        let ui = self.ui();
+        let g = ui.global::<AppState>();
+        let d = ui.global::<Dialogs>();
+        let l = ui.global::<Lists>();
+        let c = st.editor.config();
+        let f = |p: [f64; 2]| st.view.world_to_screen(page, p);
+        let mut all = Paths::default();
+        let mut push = |p: Paths| {
+            for (to, from) in [(&mut all.normal, p.normal), (&mut all.selected, p.selected)] {
+                if !from.is_empty() {
+                    if !to.is_empty() {
+                        to.push(' ');
+                    }
+                    to.push_str(&from);
+                }
+            }
+        };
+        if d.get_regions() || g.get_tool() == Tool::Region {
+            push(overlay::region_paths(c, &l.get_selected_region(), f));
+        }
+        let draft: Vec<[f64; 2]> = st.draft.iter().map(|p| f(*p)).collect();
+        let mut draft_path = String::new();
+        match (&st.drag, st.pointer) {
+            (Drag::Shape { start }, Some(now)) => {
+                let a = f(*start);
+                draft_path = if g.get_tool() == Tool::Region && g.get_region_shape() == 1 {
+                    overlay::circle(a, distance(a, now))
+                } else {
+                    overlay::polyline(&[a, [now[0], a[1]], now, [a[0], now[1]]], true)
+                };
+            }
+            _ if !draft.is_empty() => {
+                let mut pts = draft.clone();
+                if let Some(now) = st.pointer {
+                    pts.push(now);
+                }
+                draft_path = overlay::polyline(&pts, false);
+            }
+            _ => {}
+        }
+        g.set_overlay_path(s(all.normal));
+        g.set_highlight_path(s(all.selected));
+        g.set_draft_path(s(draft_path));
+        g.set_draft_points(model(
+            draft
+                .iter()
+                .map(|p| PinRow {
+                    id: s(""),
+                    label: s(""),
+                    x: p[0] as f32,
+                    y: p[1] as f32,
+                })
+                .collect(),
+        ));
     }
 
     /// Show the state of the editor: pins, selection, layers, variants,
@@ -640,7 +742,100 @@ impl Controller {
                 drop(st);
                 self.stroke(at);
             }
+            Tool::Region => {
+                let Some(at) = Self::world_at(&st, p) else {
+                    return;
+                };
+                let shape = self.ui().global::<AppState>().get_region_shape();
+                if shape < 2 {
+                    st.drag = Drag::Shape { start: at };
+                    return;
+                }
+                // A click near the first point closes the outline.
+                let close = st.draft.len() >= 3
+                    && Self::page(&st).is_some_and(|page| {
+                        distance(st.view.world_to_screen(&page, st.draft[0]), p) < PIN_HIT_PX
+                    });
+                if close {
+                    drop(st);
+                    self.finish_draft();
+                } else {
+                    Self::push_draft(&mut st, at);
+                    drop(st);
+                    self.update_view();
+                }
+            }
+            Tool::River | Tool::Route => {
+                let Some(at) = Self::world_at(&st, p) else {
+                    return;
+                };
+                Self::push_draft(&mut st, at);
+                drop(st);
+                self.update_view();
+            }
+            Tool::Crop => {
+                if let Some(at) = Self::world_at(&st, p) {
+                    st.drag = Drag::Shape { start: at };
+                }
+            }
         }
+    }
+
+    /// Add a point to the drawing. A point on the last point (a double
+    /// click) is not added.
+    fn push_draft(st: &mut State, at: [f64; 2]) {
+        let near = Self::world_len(st, 3.0);
+        if st
+            .draft
+            .last()
+            .is_none_or(|last| distance(*last, at) > near)
+        {
+            st.draft.push(at);
+        }
+    }
+
+    /// The world distance of `px` screen pixels.
+    fn world_len(st: &State, px: f64) -> f64 {
+        Self::page(st).map_or(1.0, |page| px / (page.scale * st.view.zoom))
+    }
+
+    /// Make the item that the user drew: a region outline, a river, or a
+    /// road.
+    fn finish_draft(self: &Rc<Self>) {
+        let ui = self.ui();
+        let g = ui.global::<AppState>();
+        let mut st = self.state.borrow_mut();
+        let draft = std::mem::take(&mut st.draft);
+        if draft.is_empty() {
+            return;
+        }
+        let r = match g.get_tool() {
+            Tool::Region => {
+                let kind = region_kind(g.get_region_kind());
+                st.editor
+                    .add_region(kind, &Shape::Polygon(draft))
+                    .map(|id| format!("add the {kind} region {id}"))
+            }
+            _ => Ok(String::new()),
+        };
+        drop(st);
+        match r {
+            Ok(what) => {
+                g.set_tool(Tool::Select);
+                self.edited(Ok(()), &what);
+            }
+            Err(e) => self.edited(Err(e), "add the drawn item"),
+        }
+        self.update_tools();
+    }
+
+    /// Stop the drawing.
+    fn cancel_draft(self: &Rc<Self>) {
+        let mut st = self.state.borrow_mut();
+        st.draft.clear();
+        st.drag = Drag::None;
+        drop(st);
+        self.update_view();
     }
 
     fn pointer_move(self: &Rc<Self>, p: [f64; 2]) {
@@ -650,6 +845,12 @@ impl Controller {
         g.set_pointer_y(p[1] as f32);
         g.set_pointer_in_map(true);
         let mut st = self.state.borrow_mut();
+        st.pointer = Some(p);
+        if (matches!(st.drag, Drag::Shape { .. }) || !st.draft.is_empty())
+            && let Some(page) = Self::page(&st)
+        {
+            self.update_marks(&st, &page);
+        }
         // The status bar.
         if let Some(page) = Self::page(&st) {
             let w = st.view.screen_to_world(&page, p);
@@ -670,7 +871,7 @@ impl Controller {
             }));
         }
         match &mut st.drag {
-            Drag::None => {}
+            Drag::None | Drag::Shape { .. } => {}
             Drag::Pan { last } => {
                 let d = [p[0] - last[0], p[1] - last[1]];
                 *last = p;
@@ -703,6 +904,10 @@ impl Controller {
     fn pointer_up(self: &Rc<Self>, p: [f64; 2]) {
         let drag = std::mem::replace(&mut self.state.borrow_mut().drag, Drag::None);
         self.ui().global::<AppState>().set_dragging_pin(false);
+        if let Drag::Shape { start } = drag {
+            self.shape_done(start, p);
+            return;
+        }
         if let Drag::Pin { id, start } = drag
             && distance(start, p) > 3.0
         {
@@ -713,6 +918,44 @@ impl Controller {
             };
             self.edited(r, &format!("move the pin {id}"));
         }
+    }
+
+    /// The end of a drag that makes a box or a circle.
+    fn shape_done(self: &Rc<Self>, start: [f64; 2], p: [f64; 2]) {
+        let ui = self.ui();
+        let g = ui.global::<AppState>();
+        let mut st = self.state.borrow_mut();
+        let Some(page) = Self::page(&st) else { return };
+        let end = st.view.screen_to_world(&page, p);
+        let f = &st.editor.config().frame;
+        let end = [end[0].clamp(0.0, f.width), end[1].clamp(0.0, f.height)];
+        let r = match g.get_tool() {
+            Tool::Region => {
+                let kind = region_kind(g.get_region_kind());
+                let shape_kind = if g.get_region_shape() == 1 {
+                    ShapeKind::Circle
+                } else {
+                    ShapeKind::Box
+                };
+                match Shape::from_drag(shape_kind, start, end) {
+                    Some(shape) => st
+                        .editor
+                        .add_region(kind, &shape)
+                        .map(|id| format!("add the {kind} region {id}")),
+                    None => Err("drag to draw the area".to_owned()),
+                }
+            }
+            _ => Ok(String::new()),
+        };
+        drop(st);
+        match r {
+            Ok(what) => {
+                g.set_tool(Tool::Select);
+                self.edited(Ok(()), &what);
+            }
+            Err(e) => self.edited(Err(e), "draw"),
+        }
+        self.update_tools();
     }
 
     fn scroll(self: &Rc<Self>, p: [f64; 2], dy: f64) {
@@ -779,6 +1022,31 @@ impl Controller {
         l.set_brushes(table(rows::brush_rows(c)));
         let world = st.shown.as_ref().map(|m| m.world.as_ref());
         l.set_burgs(table(rows::burg_rows(c, world)));
+        l.set_regions(table(rows::region_rows(c)));
+        let sel = l.get_selected_region();
+        match c.pins.regions.iter().find(|r| r.id == sel.as_str()) {
+            Some(r) => {
+                let [lo, hi] = r.height_range();
+                l.set_region_name(s(r.name.clone().unwrap_or_default()));
+                l.set_region_kind(
+                    catalog::REGION_KINDS
+                        .iter()
+                        .position(|k| *k == rows::kind_text(&r.kind))
+                        .map_or(-1, |i| i as i32),
+                );
+                l.set_region_lo(s(inkland_app::options::number_text(lo)));
+                l.set_region_hi(s(inkland_app::options::number_text(hi)));
+                l.set_region_edge(s(inkland_app::options::number_text(r.edge)));
+            }
+            None => {
+                l.set_selected_region(s(""));
+                l.set_region_name(s(""));
+                l.set_region_kind(-1);
+                l.set_region_lo(s(""));
+                l.set_region_hi(s(""));
+                l.set_region_edge(s(""));
+            }
+        }
         let g = ui.global::<AppState>();
         let selected = st
             .editor
@@ -904,8 +1172,56 @@ impl Controller {
                     Tool::AddPin
                 });
             }
+            "add-region" => {
+                ui.global::<Dialogs>().invoke_open(s("regions"));
+                self.start_tool(Tool::Region);
+            }
             _ => ui.global::<Dialogs>().invoke_open(s(id)),
         }
+        self.update_tools();
+    }
+
+    /// Edit a field of an item of an editor table.
+    fn edit_item(self: &Rc<Self>, list: &str, id: &str, field: &str, text: &str) {
+        let mut st = self.state.borrow_mut();
+        let e = &mut st.editor;
+        let num = |t: &str| {
+            t.trim()
+                .parse::<f64>()
+                .map_err(|_| format!("{t:?} is not a number"))
+        };
+        let r = match (list, field) {
+            (_, "name") => match pin_list(list) {
+                Some(l) => e.rename_in(l, id, text),
+                None => Err(format!("{list:?} has no names")),
+            },
+            ("regions", "kind") => e.set_region_kind(id, text),
+            ("regions", "height") => {
+                let parts: Vec<&str> = text.split(',').collect();
+                match parts.as_slice() {
+                    [lo, hi] if lo.trim().is_empty() && hi.trim().is_empty() => {
+                        e.set_region_height(id, None)
+                    }
+                    [lo, hi] => num(lo)
+                        .and_then(|lo| num(hi).map(|hi| [lo, hi]))
+                        .and_then(|r| e.set_region_height(id, Some(r))),
+                    _ => Err("give the height as low,high".to_owned()),
+                }
+            }
+            ("regions", "edge") => num(text).and_then(|v| e.set_region_edge(id, v)),
+            _ => Err(format!("{list}: there is no field {field:?}")),
+        };
+        drop(st);
+        self.edited(r, &format!("set the {field} of {id}"));
+    }
+
+    /// Start a drawing tool, or stop it if it is on.
+    fn start_tool(self: &Rc<Self>, tool: Tool) {
+        let ui = self.ui();
+        let g = ui.global::<AppState>();
+        let on = g.get_tool() == tool;
+        g.set_tool(if on { Tool::Select } else { tool });
+        self.cancel_draft();
         self.update_tools();
     }
 
@@ -924,7 +1240,8 @@ impl Controller {
                 label: s(t.label),
                 hint: s(t.hint),
                 enabled: t.enabled && IMPLEMENTED.contains(&t.id),
-                active: t.id == "add-burg" && tool == Tool::AddPin,
+                active: (t.id == "add-burg" && tool == Tool::AddPin)
+                    || (t.id == "add-region" && tool == Tool::Region),
             }));
         }
         let l = ui.global::<Lists>();
@@ -994,6 +1311,8 @@ fn main() -> Result<(), slint::PlatformError> {
             rev: 0,
             done_rev: 0,
             drag: Drag::None,
+            draft: Vec::new(),
+            pointer: None,
         }),
         generator,
         rasterizer,
@@ -1013,7 +1332,10 @@ fn main() -> Result<(), slint::PlatformError> {
     let c = Rc::clone(&app);
     a.on_pointer_up(move |x, y| c.pointer_up(pt(x, y)));
     let c = Rc::clone(&app);
-    a.on_pointer_exit(move || c.ui().global::<AppState>().set_pointer_in_map(false));
+    a.on_pointer_exit(move || {
+        c.state.borrow_mut().pointer = None;
+        c.ui().global::<AppState>().set_pointer_in_map(false);
+    });
     let c = Rc::clone(&app);
     a.on_scroll(move |x, y, dy| c.scroll(pt(x, y), f64::from(dy)));
     let c = Rc::clone(&app);
@@ -1125,6 +1447,25 @@ fn main() -> Result<(), slint::PlatformError> {
         };
         drop(st);
         c.edited(r, if on { "make a port" } else { "make not a port" });
+    });
+    let c = Rc::clone(&app);
+    a.on_finish_draft(move || c.finish_draft());
+    let c = Rc::clone(&app);
+    a.on_cancel_draft(move || c.cancel_draft());
+    let c = Rc::clone(&app);
+    a.on_start_tool(move |t| c.start_tool(t));
+    let c = Rc::clone(&app);
+    a.on_selection_changed(move || {
+        c.update_lists(&c.state.borrow());
+        c.update_view();
+    });
+    let c = Rc::clone(&app);
+    a.on_edit_item(move |list, id, field, text| c.edit_item(&list, &id, &field, &text));
+    let c = Rc::clone(&app);
+    a.on_remove_item(move |list, id| {
+        let Some(l) = pin_list(&list) else { return };
+        let r = c.state.borrow_mut().editor.remove_in(l, &id);
+        c.edited(r, &format!("remove {id}"));
     });
     let c = Rc::clone(&app);
     a.on_remove_brush(move |id| {
