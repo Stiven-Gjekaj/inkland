@@ -443,3 +443,38 @@ fn fail(errors: Vec<Error>) -> ! {
     print_json(&json!({ "error": first, "errors": errors }));
     std::process::exit(code.code());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    /// `docs/CLI.md` has a section for each command, and the section names
+    /// each long flag of the command.
+    #[test]
+    fn docs_cli_md_names_each_command_and_flag() {
+        let doc = include_str!("../../../docs/CLI.md");
+        let cli = Cli::command();
+        let mut missing = Vec::new();
+        for sub in cli.get_subcommands() {
+            let name = sub.get_name();
+            let heading = format!("## `inkland {name}`");
+            let Some(start) = doc.find(&heading) else {
+                missing.push(heading);
+                continue;
+            };
+            let rest = &doc[start + heading.len()..];
+            let section = &rest[..rest.find("\n## ").unwrap_or(rest.len())];
+            for arg in sub.get_arguments() {
+                if let Some(long) = arg.get_long()
+                    && long != "help"
+                    && long != "verbose"
+                    && !section.contains(&format!("--{long}"))
+                {
+                    missing.push(format!("{name} --{long}"));
+                }
+            }
+        }
+        assert!(missing.is_empty(), "docs/CLI.md does not name: {missing:?}");
+    }
+}
