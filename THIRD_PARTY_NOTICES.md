@@ -64,9 +64,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Font metrics
+
+`crates/inkland-render/src/metrics_data.rs` holds numbers from four font
+files: the advance width of each character from U+0020 to U+024F, the cap
+height, and the descender. `examples/font_metrics.rs` reads them. inkland
+does not include the font files or their glyph outlines.
+
+- IM Fell English and IM Fell English SC, by Igino Marini. SIL Open Font
+  License 1.1.
+- Caladea, by Carolina Giovagnoli and Andrés Torresi (Huerta Tipográfica).
+  Apache License 2.0.
+- Inter, by Rasmus Andersson. SIL Open Font License 1.1.
+
 ## Rust crates
 
 The `inkland` binary includes Rust crates under MIT, Apache-2.0, ISC,
-BSD-2-Clause, BSD-3-Clause, and Unicode-3.0 licenses. `deny.toml` lists the
+BSD-2-Clause, BSD-3-Clause, Unicode-3.0, and Zlib licenses. `deny.toml` lists the
 licenses that the build accepts. To list each crate with its license, run
 `cargo deny list`.
