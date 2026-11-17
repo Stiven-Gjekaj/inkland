@@ -145,6 +145,42 @@ impl World {
             .collect();
         apply_points(&grid, &mut heights, &points, &regions, sea_level)?;
 
+        // Lakes in deep depressions, then lakes that break into the ocean
+        // (FMG `addDeepDepressionLakes` and `openNearSeaLakes`).
+        // Pins win: the exact sites and the land regions stay as they are.
+        let mut protected = vec![false; grid.len()];
+        for &c in site_cells.values() {
+            protected[c] = true;
+        }
+        let mut keep_lake = vec![false; grid.len()];
+        for c in 0..grid.len() {
+            for r in regions.iter().filter(|r| r.contains(grid.points[c])) {
+                if r.pin.kind.is_water() {
+                    keep_lake[c] |= r.pin.kind == RegionKind::Lake;
+                } else {
+                    protected[c] = true;
+                }
+            }
+        }
+        // The heights of a raster (for example an imported map) hold their
+        // lakes already.
+        if !matches!(config.world.template, Template::Raster { .. }) {
+            crate::lakes::add_depression_lakes(
+                &grid,
+                &mut heights,
+                sea_level,
+                config.world.lake_elevation_limit,
+                &protected,
+            );
+            crate::lakes::open_near_sea_lakes(
+                &grid,
+                &mut heights,
+                sea_level,
+                &protected,
+                &keep_lake,
+            );
+        }
+
         let plan = crate::courses::Plan {
             grid: &grid,
             config,

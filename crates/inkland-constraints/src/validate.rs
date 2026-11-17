@@ -177,6 +177,16 @@ impl<'a> Validator<'a> {
                 format!("jitter must be 0 to 0.9, found {}", w.jitter),
             );
         }
+        if w.lake_elevation_limit > inkland_core::lakes::NO_LAKES_LIMIT {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/lake_elevation_limit",
+                format!(
+                    "lake_elevation_limit must be 0 to 80, found {}",
+                    w.lake_elevation_limit
+                ),
+            );
+        }
         if !(1..=99).contains(&w.sea_level) {
             self.err(
                 ErrorCode::ValueOutOfRange,

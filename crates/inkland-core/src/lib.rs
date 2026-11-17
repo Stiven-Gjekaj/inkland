@@ -15,6 +15,7 @@ pub mod geom;
 pub mod geonames;
 pub mod grid;
 pub mod heightmap;
+pub mod lakes;
 pub mod names;
 pub mod num;
 pub mod overlay;

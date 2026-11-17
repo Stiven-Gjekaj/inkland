@@ -146,6 +146,15 @@ pub struct World {
     #[serde(default = "default_sea_level")]
     #[schemars(range(min = 1, max = 99))]
     pub sea_level: u8,
+    /// A land low point becomes a lake when its water cannot reach other
+    /// water through cells lower than its height plus this limit, on the
+    /// height scale 0 to 100. 0 to 80. 80 makes no such lakes.
+    #[serde(
+        default = "default_lake_elevation_limit",
+        skip_serializing_if = "is_default_lake_elevation_limit"
+    )]
+    #[schemars(range(min = 0, max = 80))]
+    pub lake_elevation_limit: u8,
     /// Climate options.
     #[serde(default)]
     pub climate: Climate,
@@ -194,6 +203,7 @@ impl Default for World {
             jitter: default_jitter(),
             template: Template::default(),
             sea_level: default_sea_level(),
+            lake_elevation_limit: default_lake_elevation_limit(),
             climate: Climate::default(),
             cultures: default_cultures(),
             culture_set: default_culture_set(),
@@ -244,7 +254,7 @@ pub enum Template {
     /// A raster of heights, for example from an imported map.
     Raster {
         /// The raster. Each cell gets the height of the raster value nearest
-        /// to its site.
+        /// to its site. The lake stages do not change these heights.
         raster: Raster,
     },
 }
@@ -944,6 +954,12 @@ fn default_jitter() -> f64 {
 }
 fn is_default_jitter(v: &f64) -> bool {
     *v == default_jitter()
+}
+fn default_lake_elevation_limit() -> u8 {
+    crate::lakes::DEFAULT_ELEVATION_LIMIT
+}
+fn is_default_lake_elevation_limit(v: &u8) -> bool {
+    *v == default_lake_elevation_limit()
 }
 fn default_sea_level() -> u8 {
     20
