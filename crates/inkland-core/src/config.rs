@@ -704,6 +704,9 @@ pub struct Render {
     /// this list is an error.
     #[serde(default = "default_fonts_allowed")]
     pub fonts_allowed: Vec<String>,
+    /// Font sizes, in points.
+    #[serde(default)]
+    pub font_sizes_pt: FontSizes,
     /// Smallest permitted line width, in points.
     #[serde(default = "default_min_line_width_pt")]
     #[schemars(range(min = 0.0))]
@@ -722,9 +725,55 @@ impl Default for Render {
             mode: RenderMode::default(),
             fonts: Fonts::default(),
             fonts_allowed: default_fonts_allowed(),
+            font_sizes_pt: FontSizes::default(),
             min_line_width_pt: default_min_line_width_pt(),
             extras: Extras::default(),
             layers: default_layers(),
+        }
+    }
+}
+
+/// Font sizes, in points.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct FontSizes {
+    /// The map title in the cartouche. Default 12.
+    #[schemars(range(min = 0.0))]
+    pub title: f64,
+    /// State names. Default 10.
+    #[schemars(range(min = 0.0))]
+    pub state: f64,
+    /// Names of pinned regions, for example seas and mountains. Default 8.5.
+    #[schemars(range(min = 0.0))]
+    pub region: f64,
+    /// Cities and capitals. Default 8.
+    #[schemars(range(min = 0.0))]
+    pub place_city: f64,
+    /// Towns, fortresses, ruins, and custom places. Default 7.
+    #[schemars(range(min = 0.0))]
+    pub place_town: f64,
+    /// Villages. Default 6.
+    #[schemars(range(min = 0.0))]
+    pub place_village: f64,
+    /// River names. Default 6.5.
+    #[schemars(range(min = 0.0))]
+    pub river: f64,
+    /// Scale bar, compass, and grid text. Default 7.
+    #[schemars(range(min = 0.0))]
+    pub other: f64,
+}
+
+impl Default for FontSizes {
+    fn default() -> Self {
+        Self {
+            title: 12.0,
+            state: 10.0,
+            region: 8.5,
+            place_city: 8.0,
+            place_town: 7.0,
+            place_village: 6.0,
+            river: 6.5,
+            other: 7.0,
         }
     }
 }
