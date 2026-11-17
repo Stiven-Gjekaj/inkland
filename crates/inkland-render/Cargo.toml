@@ -19,6 +19,8 @@ png = ["dep:resvg"]
 [dependencies]
 inkland-core.workspace = true
 libm.workspace = true
+roxmltree.workspace = true
+serde_json.workspace = true
 resvg = { workspace = true, optional = true }
 
 [dev-dependencies]

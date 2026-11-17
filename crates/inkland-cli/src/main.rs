@@ -55,10 +55,19 @@ enum Command {
         #[arg(short = 'o', long = "out")]
         out: PathBuf,
     },
-    /// Run the print and label checks on an SVG file.
+    /// Run the print checks on an SVG file.
     Check {
         #[arg(long)]
         svg: PathBuf,
+        /// The smallest permitted line width, in points.
+        #[arg(long, default_value_t = 0.5)]
+        min_line_width_pt: f64,
+        /// The permitted font families, separated by commas.
+        #[arg(
+            long,
+            default_value = "Caladea,Inter,IM Fell English,IM Fell English SC"
+        )]
+        fonts_allowed: String,
     },
     /// Print the version and the third-party notices.
     Version {
@@ -120,7 +129,11 @@ fn main() {
         Command::Query { .. } => not_yet("query", 10),
         Command::Export { .. } => not_yet("export", 10),
         Command::Edit { .. } => not_yet("edit", 10),
-        Command::Check { .. } => not_yet("check", 7),
+        Command::Check {
+            svg,
+            min_line_width_pt,
+            fonts_allowed,
+        } => check(&svg, min_line_width_pt, &fonts_allowed),
     };
     match out {
         Ok(value) => {
@@ -261,6 +274,23 @@ fn write_output(
         "variants": variants,
         "checks_failed": out.variants.iter().any(|v| v.checks_failed()),
     }))
+}
+
+fn check(path: &Path, min_line_width_pt: f64, fonts_allowed: &str) -> Result<Value, Vec<Error>> {
+    let text = std::fs::read_to_string(path).map_err(|e| {
+        vec![
+            Error::new(ErrorCode::IoRead, "", format!("cannot read the SVG: {e}"))
+                .with("file", path.display().to_string()),
+        ]
+    })?;
+    let fonts: Vec<String> = fonts_allowed
+        .split(',')
+        .map(|f| f.trim().to_owned())
+        .filter(|f| !f.is_empty())
+        .collect();
+    let checks = inkland::check_svg_with(&text, min_line_width_pt, fonts);
+    let failed = checks.iter().any(|c| c["pass"] == false);
+    Ok(json!({ "svg": path.display().to_string(), "checks": checks, "checks_failed": failed }))
 }
 
 fn not_yet(command: &str, milestone: u32) -> Result<Value, Vec<Error>> {

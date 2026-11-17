@@ -115,10 +115,19 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
         world_json: inkland_io::world::world_json(&world, config, &hash),
         variants: selected
             .into_iter()
-            .map(|v| VariantOutput {
-                name: v.name.clone(),
-                svg: inkland_render::svg::render(&world, config, v),
-                report: inkland_io::report::variant_report(&world, config, &v.name, &hash),
+            .map(|v| {
+                let svg = inkland_render::svg::render(&world, config, v);
+                let mut report = inkland_io::report::variant_report(&world, config, &v.name, &hash);
+                // The print checks run on the written SVG text.
+                let checks = check_svg(&svg, config);
+                if let Some(list) = report["checks"].as_array_mut() {
+                    list.extend(checks);
+                }
+                VariantOutput {
+                    name: v.name.clone(),
+                    svg,
+                    report,
+                }
             })
             .collect(),
     })
@@ -153,6 +162,31 @@ pub fn preview_png(
         })
         .collect();
     Ok((p.png, warnings))
+}
+
+/// Run the print checks on SVG text with the line width and the fonts of a
+/// config.
+pub fn check_svg(svg: &str, config: &Config) -> Vec<Value> {
+    let opts = inkland_render::checks::CheckOptions {
+        min_line_width_pt: config.render.min_line_width_pt,
+        fonts_allowed: config.render.fonts_allowed.clone(),
+    };
+    inkland_render::checks::check_svg(svg, &opts)
+        .iter()
+        .map(|c| c.to_json())
+        .collect()
+}
+
+/// Run the print checks on SVG text with explicit options.
+pub fn check_svg_with(svg: &str, min_line_width_pt: f64, fonts_allowed: Vec<String>) -> Vec<Value> {
+    let opts = inkland_render::checks::CheckOptions {
+        min_line_width_pt,
+        fonts_allowed,
+    };
+    inkland_render::checks::check_svg(svg, &opts)
+        .iter()
+        .map(|c| c.to_json())
+        .collect()
 }
 
 /// The version of the tool and the notices of third-party work.

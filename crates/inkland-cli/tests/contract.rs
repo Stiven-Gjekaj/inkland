@@ -415,3 +415,29 @@ fn a_failed_check_writes_the_output_and_exits_1() {
             .unwrap();
     assert_eq!(report["pins"]["roads"][0]["within_tolerance"], false);
 }
+
+#[test]
+fn check_passes_a_generated_svg_and_fails_a_bad_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = minimal();
+    c["world"] = json!({ "cells": 1000 });
+    let config = write_config(dir.path(), &c);
+    let out = dir.path().join("out");
+    let (code, _) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--out-dir",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0);
+    let svg = out.join("default.svg");
+    let (code, report) = run(&["check", "--svg", svg.to_str().unwrap()]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(report["checks"].as_array().unwrap().len(), 7);
+    let bad = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/svg-bad/opacity.svg");
+    let (code, report) = run(&["check", "--svg", bad.to_str().unwrap()]);
+    assert_eq!(code, 1);
+    assert_eq!(report["checks"][0]["name"], "no_opacity");
+    assert_eq!(report["checks"][0]["pass"], false);
+}

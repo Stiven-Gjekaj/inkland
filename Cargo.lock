@@ -701,6 +701,7 @@ dependencies = [
  "inkland-core",
  "libm",
  "resvg",
+ "roxmltree 0.21.2",
  "serde_json",
 ]
 
