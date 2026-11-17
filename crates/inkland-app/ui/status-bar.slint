@@ -1,0 +1,33 @@
+// The status bar: the pointer position in config units, the height and the
+// biome under the pointer, and the last message.
+
+import { AppState } from "globals.slint";
+
+export component StatusBar inherits Rectangle {
+    height: 26px;
+    background: #e4e4e4;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 16px;
+        Text {
+            text: AppState.status-position;
+            vertical-alignment: center;
+            color: #202020;
+            min-width: 170px;
+        }
+        Text {
+            text: AppState.status-cell;
+            vertical-alignment: center;
+            color: #202020;
+            min-width: 260px;
+        }
+        Text {
+            text: AppState.message;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+            color: AppState.message-is-error ? #b01010 : #202020;
+        }
+    }
+}

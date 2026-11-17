@@ -1,0 +1,81 @@
+// The main window of the inkland desktop app.
+
+import { AboutSlint, Button, VerticalBox } from "std-widgets.slint";
+import { AppState, Actions } from "globals.slint";
+import { MapView } from "map-view.slint";
+import { LayersPanel } from "layers-panel.slint";
+import { StatusBar } from "status-bar.slint";
+
+export { AppState, Actions }
+
+export component AppWindow inherits Window {
+    in property <string> window-title: "inkland";
+    title: root.window-title;
+    preferred-width: 1280px;
+    preferred-height: 820px;
+    min-width: 800px;
+    min-height: 520px;
+    property <bool> show-about;
+
+    MenuBar {
+        Menu {
+            title: "File";
+            MenuItem { title: "Open..."; activated => { Actions.open(); } }
+            MenuItem { title: "Save"; activated => { Actions.save(); } }
+            MenuItem { title: "Save As..."; activated => { Actions.save-as(); } }
+            MenuSeparator {}
+            MenuItem { title: "Quit"; activated => { Actions.quit(); } }
+        }
+        Menu {
+            title: "View";
+            MenuItem { title: "Show the Full Page"; activated => { Actions.fit(); } }
+        }
+        Menu {
+            title: "Help";
+            MenuItem { title: "About inkland"; activated => { root.show-about = true; } }
+        }
+    }
+
+        VerticalLayout {
+            HorizontalLayout {
+                vertical-stretch: 1;
+                // The tools and the layers.
+                VerticalBox {
+                    width: 230px;
+                    alignment: start;
+                    LayersPanel {}
+                }
+                MapView {
+                    horizontal-stretch: 1;
+                }
+            }
+            StatusBar {}
+        }
+
+    if root.show-about: Rectangle {
+        background: #00000080;
+        TouchArea { clicked => { root.show-about = false; } }
+        Rectangle {
+            width: 420px;
+            height: about-box.preferred-height;
+            background: white;
+            border-radius: 6px;
+            about-box := VerticalBox {
+                Text {
+                    text: "inkland";
+                    font-size: 20px;
+                    font-weight: 700;
+                    color: #202020;
+                }
+                Text {
+                    text: "A print-ready fantasy map generator. MIT OR Apache-2.0.\nIt re-implements the algorithms of Azgaar's Fantasy Map Generator (MIT).";
+                    wrap: word-wrap;
+                    color: #202020;
+                }
+                // The Slint Royalty-free License requires this widget.
+                AboutSlint {}
+                Button { text: "Close"; clicked => { root.show-about = false; } }
+            }
+        }
+    }
+}

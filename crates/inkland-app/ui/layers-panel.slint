@@ -1,0 +1,28 @@
+// The variant switcher and the layer toggles.
+
+import { ComboBox, CheckBox, GroupBox } from "std-widgets.slint";
+import { AppState, Actions } from "globals.slint";
+
+export component LayersPanel inherits VerticalLayout {
+    spacing: 6px;
+    alignment: start;
+    GroupBox {
+        title: "Variant";
+        ComboBox {
+            model: AppState.variants;
+            current-index <=> AppState.variant-index;
+            selected(v) => { Actions.select-variant(self.current-index); }
+        }
+    }
+    GroupBox {
+        title: "Layers";
+        VerticalLayout {
+            spacing: 2px;
+            for layer in AppState.layers: CheckBox {
+                text: layer.name;
+                checked: layer.on;
+                toggled => { Actions.set-layer(layer.name, self.checked); }
+            }
+        }
+    }
+}

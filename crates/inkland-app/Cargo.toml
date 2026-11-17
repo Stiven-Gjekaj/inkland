@@ -4,16 +4,41 @@ description = "The inkland desktop app."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+# The app code is MIT OR Apache-2.0. The app binary links Slint under the
+# Slint Royalty-free License 2.0, so the app shows the AboutSlint widget.
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish.workspace = true
 
-[lints]
-workspace = true
+# The workspace lints, but `unsafe_code` is `deny`, not `forbid`. The code
+# that Slint generates has unsafe blocks, and only the `ui` module in
+# `src/main.rs` allows them. The guard script checks that no other app
+# code uses `unsafe`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+disallowed_methods = "deny"
+disallowed_types = "deny"
 
 [dependencies]
-inkland.workspace = true
+inkland = { workspace = true, features = ["png"] }
 inkland-core.workspace = true
-inkland-render.workspace = true
+inkland-render = { workspace = true, features = ["png"] }
 serde_json.workspace = true
+libm.workspace = true
+rfd = { version = "0.18", default-features = false, features = ["xdg-portal"] }
+# The winit backend with the FemtoVG (OpenGL) renderer and the software
+# renderer as a fallback. No system tray.
+slint = { version = "1.18", default-features = false, features = [
+  "std",
+  "compat-1-2",
+  "backend-winit",
+  "renderer-femtovg",
+  "renderer-software",
+  "accessibility",
+] }
+
+[build-dependencies]
+slint-build = "1.18"

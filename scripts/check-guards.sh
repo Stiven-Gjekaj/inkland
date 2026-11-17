@@ -17,4 +17,11 @@ if grep -rnE 'std::(fs|env|time|net|process)\b|SystemTime|Instant::now' \
   fail=1
 fi
 
+# 3. The app code has no unsafe code. Only the code that Slint generates
+#    has unsafe blocks, in the `ui` module of the app.
+if grep -rnE '\bunsafe\b' crates/inkland-app/src crates/inkland-app/build.rs ; then
+  echo "guard: the app code uses unsafe" >&2
+  fail=1
+fi
+
 exit $fail

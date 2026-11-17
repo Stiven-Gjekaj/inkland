@@ -1,0 +1,52 @@
+// The map view: the rendered page and the marks of the tools.
+// Rust does the pan, the zoom, and the hit test.
+
+import { AppState, Actions } from "globals.slint";
+
+export component MapView inherits Rectangle {
+    background: #8a8f94;
+    clip: true;
+
+    changed width => { Actions.viewport-changed(self.width, self.height); }
+    changed height => { Actions.viewport-changed(self.width, self.height); }
+    init => { Actions.viewport-changed(self.width, self.height); }
+
+    if AppState.has-map: Image {
+        x: AppState.img-x;
+        y: AppState.img-y;
+        width: AppState.img-w;
+        height: AppState.img-h;
+        source: AppState.map-image;
+        image-fit: fill;
+    }
+
+    if AppState.generating: Rectangle {
+        x: 8px;
+        y: 8px;
+        width: busy.preferred-width + 16px;
+        height: busy.preferred-height + 8px;
+        border-radius: 4px;
+        background: #000000a0;
+        busy := Text {
+            text: "Generating...";
+            color: white;
+        }
+    }
+
+    TouchArea {
+        pointer-event(ev) => {
+            if ev.kind == PointerEventKind.down {
+                Actions.pointer-down(self.mouse-x, self.mouse-y,
+                    ev.button == PointerEventButton.middle || ev.button == PointerEventButton.right);
+            } else if ev.kind == PointerEventKind.up {
+                Actions.pointer-up(self.mouse-x, self.mouse-y);
+            }
+        }
+        changed mouse-x => { Actions.pointer-move(self.mouse-x, self.mouse-y); }
+        changed mouse-y => { Actions.pointer-move(self.mouse-x, self.mouse-y); }
+        scroll-event(ev) => {
+            Actions.scroll(self.mouse-x, self.mouse-y, ev.delta-y);
+            accept
+        }
+    }
+}

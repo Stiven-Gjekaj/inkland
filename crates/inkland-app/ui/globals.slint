@@ -1,0 +1,51 @@
+// The state that the Rust code gives to the user interface, and the
+// actions that the user interface sends to the Rust code.
+
+
+export struct LayerRow {
+    name: string,
+    on: bool,
+}
+
+export global AppState {
+    // The map image and where it goes in the map view.
+    in property <image> map-image;
+    in property <length> img-x;
+    in property <length> img-y;
+    in property <length> img-w;
+    in property <length> img-h;
+    in property <bool> generating;
+    in property <bool> has-map;
+
+    in property <[string]> variants;
+    in-out property <int> variant-index;
+    in property <[LayerRow]> layers;
+
+    in property <string> status-position;
+    in property <string> status-cell;
+    in property <string> message;
+    in property <bool> message-is-error;
+}
+
+export global Actions {
+    // Pointer events of the map view, in map view coordinates. `pan` is
+    // true for the middle and the right button.
+    callback pointer-down(length, length, bool);
+    callback pointer-move(length, length);
+    callback pointer-up(length, length);
+    callback scroll(length, length, length);
+    callback viewport-changed(length, length);
+    callback fit();
+
+    callback select-variant(int);
+    callback set-layer(string, bool);
+
+    callback open();
+    callback save();
+    callback save-as();
+    callback quit();
+
+    // The Rust code calls this from the event loop when a worker thread
+    // has a result.
+    callback poll();
+}
