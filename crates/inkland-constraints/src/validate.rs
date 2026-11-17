@@ -147,6 +147,22 @@ impl<'a> Validator<'a> {
     fn ranges(&mut self) {
         let c = self.c;
         let w = &c.world;
+        for (i, b) in w.brushes.iter().enumerate() {
+            if !(b.radius > 0.0 && b.radius.is_finite()) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("/world/brushes/{i}/radius"),
+                    format!("a brush radius must be more than 0, found {}", b.radius),
+                );
+            }
+            if !(-100.0..=100.0).contains(&b.delta) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("/world/brushes/{i}/delta"),
+                    format!("a brush delta must be -100 to 100, found {}", b.delta),
+                );
+            }
+        }
         if !(1000..=100_000).contains(&w.cells) {
             self.err(
                 ErrorCode::ValueOutOfRange,

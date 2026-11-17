@@ -929,3 +929,57 @@ mod tests {
         assert!(mid > 0.98 && mid < 0.99);
     }
 }
+
+/// Apply brush strokes to whole-number heights. A stroke adds `delta` at its
+/// centre and less with distance, to 0 at its radius. The result is a whole
+/// number from 0 to 100.
+pub fn apply_brushes(grid: &Grid, heights: &mut [f64], brushes: &[crate::config::Brush]) {
+    for b in brushes {
+        if b.radius <= 0.0 {
+            continue;
+        }
+        for (c, h) in heights.iter_mut().enumerate() {
+            let p = grid.points[c];
+            let d = ((p[0] - b.at[0]).powi(2) + (p[1] - b.at[1]).powi(2)).sqrt();
+            if d < b.radius {
+                *h = (*h + b.delta * (1.0 - d / b.radius))
+                    .trunc()
+                    .clamp(0.0, 100.0);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod brush_tests {
+    use super::*;
+    use crate::config::Brush;
+
+    #[test]
+    fn a_brush_changes_heights_only_inside_its_radius() {
+        let mut rng = Rand::new(crate::seed::SeedTree::new(1).rng(crate::seed::Layer::Terrain));
+        let grid = Grid::new(100.0, 100.0, 1000, &mut rng);
+        let mut h = vec![20.0; grid.len()];
+        let b = Brush {
+            at: [50.0, 50.0],
+            radius: 20.0,
+            delta: 30.0,
+        };
+        apply_brushes(&grid, &mut h, &[b]);
+        let centre = grid.find_cell(50.0, 50.0);
+        assert!(h[centre] > 40.0);
+        let far = grid.find_cell(5.0, 5.0);
+        assert_eq!(h[far], 20.0);
+        assert!(
+            h.iter()
+                .all(|&x| x == x.trunc() && (0.0..=100.0).contains(&x))
+        );
+        let low = Brush {
+            at: [50.0, 50.0],
+            radius: 20.0,
+            delta: -100.0,
+        };
+        apply_brushes(&grid, &mut h, &[low]);
+        assert_eq!(h[centre], 0.0);
+    }
+}

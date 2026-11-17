@@ -157,6 +157,23 @@ pub struct World {
     /// Options for places that generation adds.
     #[serde(default)]
     pub places: PlaceOptions,
+    /// Heightmap brush strokes, applied in order after the template and
+    /// before the pins.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub brushes: Vec<Brush>,
+}
+
+/// One heightmap brush stroke: it adds `delta` at its centre, and less with
+/// distance, to 0 at `radius`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Brush {
+    /// Centre `[x, y]`, in units.
+    pub at: Point,
+    /// Radius, in units. More than 0.
+    pub radius: f64,
+    /// Height change at the centre, on the 0 to 100 scale. -100 to 100.
+    pub delta: f64,
 }
 
 impl Default for World {
@@ -172,6 +189,7 @@ impl Default for World {
             towns: Towns::default(),
             religions: default_religions(),
             places: PlaceOptions::default(),
+            brushes: Vec::new(),
         }
     }
 }

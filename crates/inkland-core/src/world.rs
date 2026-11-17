@@ -118,6 +118,7 @@ impl World {
         }
         hm.run(&steps, &mut height_rng);
         let mut heights = hm.heights;
+        crate::heightmap::apply_brushes(&grid, &mut heights, &config.world.brushes);
 
         let regions = FitRegion::all(&pins.regions, sea_level);
         apply_regions(&grid, &mut heights, &regions, sea_level);
