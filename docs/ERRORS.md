@@ -52,7 +52,7 @@ With more than one error, the exit code comes from the most basic fault:
 | `FONT_NOT_ALLOWED` | 2 | 0.1.0 | A font family is not in `render.fonts_allowed`. `details`: `allowed`. |
 | `RIVER_MOUTH_REGION_KIND` | 2 | 0.1.0 | A river mouth region is not of kind `marsh`, `lake`, or `sea`. |
 | `VALUE_OUT_OF_RANGE` | 2 | 0.1.0 | A value is outside its permitted range. |
-| `TEMPLATE_INVALID` | 2 | 0.1.0 | A step of a custom heightmap template cannot be read. The message names the step. |
+| `TEMPLATE_INVALID` | 2 | 0.1.0 | A step of a custom heightmap template cannot be read, or a raster template does not have `cols` x `rows` values. The message names the step. |
 | `MAP_PARSE` | 2 | 0.1.0 | `inkland import` cannot read the map file: it is not text, gzip, or base64, or a record is missing or not valid. `details`: `record` (the record number, from 0), if a record is the cause. |
 | `MAP_VERSION` | 2 | 0.1.0 | `inkland import` cannot read maps of this version. `details`: `found`, `supported`. |
 | `PIN_OUTSIDE_FRAME` | 3 | 0.1.0 | A pin, a crop, or an overlay item is outside the frame. |
