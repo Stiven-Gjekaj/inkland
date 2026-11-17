@@ -5,6 +5,7 @@
 
 pub use inkland_core::config::Config;
 pub use inkland_core::error::{Error, ErrorCode, ExitCode, Warning, WarningCode, exit_code_of};
+pub use inkland_edit::{Command, History, PinList, Script};
 pub use inkland_io::azgaar::{Import, ImportSummary};
 pub use inkland_io::config::{Override, config_hash, parse_config};
 pub use inkland_io::report::DryRunReport;
@@ -38,6 +39,42 @@ pub fn export(world_text: &str, format: &str, layers: Option<&str>) -> Result<Va
     let layers = inkland_io::geojson::parse_layers(layers)?;
     let (config, world) = read_world(world_text)?;
     Ok(inkland_io::geojson::export(&world, &config, &layers))
+}
+
+/// Apply an edit script to a config. The result is the new config and the
+/// script that undoes the edit. The new config must pass `validate`.
+pub fn edit_config(config: &Config, script_text: &str) -> Result<(Config, Script), Vec<Error>> {
+    let script = Script::parse(script_text).map_err(|e| vec![e])?;
+    let (next, undo) = script.apply(config).map_err(|e| vec![e])?;
+    let errors = validate(&next);
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    Ok((next, undo))
+}
+
+/// The result of an edit of a world file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorldEdit {
+    /// The text of the new `world.json`.
+    pub world_json: String,
+    /// The script that undoes the edit.
+    pub undo: Script,
+    /// The number of commands applied.
+    pub applied: usize,
+}
+
+/// Apply an edit script to a world file: edit its config and make the world
+/// again.
+pub fn edit_world(world_text: &str, script_text: &str) -> Result<WorldEdit, Vec<Error>> {
+    let (config, _) = read_world(world_text).map_err(|e| vec![e])?;
+    let (next, undo) = edit_config(&config, script_text)?;
+    let world = inkland_core::world::World::build(&next).map_err(|e| vec![e])?;
+    Ok(WorldEdit {
+        world_json: inkland_io::world::world_json(&world, &next),
+        applied: undo.commands.len(),
+        undo,
+    })
 }
 
 /// The JSON Schema of the config.
@@ -463,6 +500,37 @@ mod tests {
         );
         assert!(out.variants[0].checks_failed());
         assert!(!out.variants[0].svg.contains("label-region-hills"));
+    }
+
+    #[test]
+    fn the_undo_script_of_an_edit_gives_back_the_same_world_bytes() {
+        let c = config(json!({
+            "world": { "cells": 1500, "template": "pangea" },
+            "pins": { "points": [
+                { "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [20, 40] },
+                { "id": "harrow", "kind": "town", "at": [80, 40] }
+            ]}
+        }));
+        let world = generate(&c, None).unwrap().world_json;
+        let script = r#"{ "version": 1, "commands": [
+            { "op": "move_pin", "id": "harrow", "at": [70, 30] },
+            { "op": "brush", "at": [50, 40], "radius": 15, "delta": 25 },
+            { "op": "rename", "list": "points", "id": "ostrey", "name": "Old Ostrey" },
+            { "op": "add_pin", "list": "points", "pin": { "id": "mere", "kind": "village", "at": [50, 60] } },
+            { "op": "set", "path": "/world/sea_level", "value": 22 }
+        ]}"#;
+        let e = edit_world(&world, script).unwrap();
+        assert_eq!(e.applied, 5);
+        assert_ne!(e.world_json, world);
+        let undo = serde_json::to_string(&e.undo).unwrap();
+        let back = edit_world(&e.world_json, &undo).unwrap();
+        assert_eq!(back.world_json, world);
+        // An edit that makes the config invalid is refused.
+        let bad = r#"{ "version": 1, "commands": [{ "op": "move_pin", "id": "harrow", "at": [500, 30] }] }"#;
+        assert_eq!(
+            edit_world(&world, bad).unwrap_err()[0].code,
+            ErrorCode::PinOutsideFrame
+        );
     }
 
     #[test]

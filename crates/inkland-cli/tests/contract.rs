@@ -438,6 +438,75 @@ fn export_gives_geojson_of_the_asked_layers() {
 }
 
 #[test]
+fn edit_writes_a_new_world_and_its_undo_script_restores_the_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    let world = generated_world(dir.path());
+    let script = dir.path().join("edits.json");
+    std::fs::write(
+        &script,
+        r#"{ "version": 1, "commands": [
+            { "op": "move_pin", "id": "ostrey", "at": [45, 35] },
+            { "op": "brush", "at": [30, 30], "radius": 10, "delta": 20 }
+        ]}"#,
+    )
+    .unwrap();
+    let edited = dir.path().join("edited.json");
+    let (code, v) = run(&[
+        "edit",
+        "--world",
+        world.to_str().unwrap(),
+        "--script",
+        script.to_str().unwrap(),
+        "-o",
+        edited.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["applied"], 2);
+    let undo = dir.path().join("undo.json");
+    std::fs::write(&undo, serde_json::to_string(&v["undo"]).unwrap()).unwrap();
+    let back = dir.path().join("back.json");
+    let (code, _) = run(&[
+        "edit",
+        "--world",
+        edited.to_str().unwrap(),
+        "--script",
+        undo.to_str().unwrap(),
+        "-o",
+        back.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0);
+    assert_eq!(
+        std::fs::read(&back).unwrap(),
+        std::fs::read(&world).unwrap()
+    );
+    let (code, q) = run(&[
+        "query",
+        "--world",
+        edited.to_str().unwrap(),
+        "--at",
+        "45,35",
+    ]);
+    assert_eq!(code, 0);
+    assert_eq!(q["nearest_place"]["id"], "ostrey");
+    std::fs::write(
+        &script,
+        r#"{ "version": 1, "commands": [{ "op": "jump" }] }"#,
+    )
+    .unwrap();
+    let (code, e) = run(&[
+        "edit",
+        "--world",
+        world.to_str().unwrap(),
+        "--script",
+        script.to_str().unwrap(),
+        "-o",
+        edited.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 2);
+    assert_eq!(e["error"]["code"], "EDIT_SCRIPT_INVALID");
+}
+
+#[test]
 fn generate_twice_gives_the_same_bytes() {
     let dir = tempfile::tempdir().unwrap();
     let mut c = minimal();

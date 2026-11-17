@@ -633,6 +633,7 @@ version = "0.1.0"
 dependencies = [
  "inkland-constraints",
  "inkland-core",
+ "inkland-edit",
  "inkland-io",
  "inkland-render",
  "serde_json",

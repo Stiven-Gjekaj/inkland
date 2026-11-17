@@ -58,12 +58,19 @@ enum Command {
         #[arg(long)]
         layers: Option<String>,
     },
-    /// Apply an edit script to a world.
+    /// Apply an edit script to a world file or to a config file.
+    #[command(group(clap::ArgGroup::new("input").required(true).args(["world", "config"])))]
     Edit {
+        /// A `world.json`. The output is a new `world.json`.
         #[arg(long)]
-        world: PathBuf,
+        world: Option<PathBuf>,
+        /// A config file. The output is a new config file.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// The edit script.
         #[arg(long)]
         script: PathBuf,
+        /// The file to write.
         #[arg(short = 'o', long = "out")]
         out: PathBuf,
     },
@@ -148,7 +155,12 @@ fn main() {
             layers,
         } => read_text(&world, "world")
             .and_then(|t| inkland::export(&t, &format, layers.as_deref()).map_err(|e| vec![e])),
-        Command::Edit { .. } => not_yet("edit", 10),
+        Command::Edit {
+            world,
+            config,
+            script,
+            out,
+        } => edit(world.as_deref(), config.as_deref(), &script, &out, verbose),
         Command::Check {
             svg,
             min_line_width_pt,
@@ -347,6 +359,54 @@ fn check(path: &Path, min_line_width_pt: f64, fonts_allowed: &str) -> Result<Val
     Ok(json!({ "svg": path.display().to_string(), "checks": checks, "checks_failed": failed }))
 }
 
+fn edit(
+    world: Option<&Path>,
+    config: Option<&Path>,
+    script: &Path,
+    out: &Path,
+    verbose: bool,
+) -> Result<Value, Vec<Error>> {
+    let script_text = read_text(script, "edit script")?;
+    let (text, undo, applied, what) = match (world, config) {
+        (Some(w), _) => {
+            let e = inkland::edit_world(&read_text(w, "world")?, &script_text)?;
+            (e.world_json, e.undo, e.applied, "world")
+        }
+        (None, Some(c)) => {
+            let config =
+                inkland::parse_config(&read_text(c, "config")?, &[]).map_err(|e| vec![e])?;
+            let (next, undo) = inkland::edit_config(&config, &script_text)?;
+            let mut text =
+                serde_json::to_string_pretty(&next).expect("a config always converts to JSON");
+            text.push('\n');
+            let n = undo.commands.len();
+            (text, undo, n, "config")
+        }
+        (None, None) => unreachable!("clap asks for --world or --config"),
+    };
+    std::fs::write(out, text).map_err(|e| {
+        vec![
+            Error::new(
+                ErrorCode::IoWrite,
+                "",
+                format!("cannot write the {what}: {e}"),
+            )
+            .with("file", out.display().to_string()),
+        ]
+    })?;
+    if verbose {
+        eprintln!(
+            "inkland: applied {applied} commands, wrote {}",
+            out.display()
+        );
+    }
+    Ok(json!({
+        what: out.display().to_string(),
+        "applied": applied,
+        "undo": undo,
+    }))
+}
+
 /// The text of an input file, or an `IO_READ` error.
 fn read_text(path: &Path, what: &str) -> Result<String, Vec<Error>> {
     std::fs::read_to_string(path).map_err(|e| {
@@ -359,14 +419,6 @@ fn read_text(path: &Path, what: &str) -> Result<String, Vec<Error>> {
             .with("file", path.display().to_string()),
         ]
     })
-}
-
-fn not_yet(command: &str, milestone: u32) -> Result<Value, Vec<Error>> {
-    Err(vec![Error::new(
-        ErrorCode::NotImplemented,
-        "",
-        format!("the {command} command comes in milestone {milestone}"),
-    )])
 }
 
 fn print_json(value: &Value) {
