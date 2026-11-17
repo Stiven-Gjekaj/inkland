@@ -681,6 +681,25 @@ and the test that closes each milestone. We stop for a review after each one.
 - Proptest: undo of any command sequence gives back the exact config. Test:
   the undo script of an edit gives back the same `world.json` bytes.
 
+## 6.11 Notes from Milestone 14
+
+- Speed: a 20000-cell world with one variant takes about 0.1 s in a release
+  build on the development machine. CI fails when the static Linux build
+  takes 2 s or more for it.
+- `docs/CONFIG.md` is made from the JSON Schema with
+  `inkland schema --markdown`. A test fails when the file and the schema do
+  not agree.
+- `docs/CLI.md` is written by hand. A test fails when it does not name each
+  command and each flag.
+- `.github/workflows/release.yml` builds the command line tool for
+  x86_64 Linux (static musl), arm64 and x86_64 macOS, and x86_64 Windows. A
+  tag `v*` puts the packages and `SHA256SUMS.txt` in a GitHub release.
+- Area labels try up to 40 anchor cells, each at least 3 mm from the
+  others, and tight letter spacing as a second choice.
+- At 50000 cells, the pinned road of `roads-book-layout` is 265 units
+  against a target of 240 with a tolerance of 5 %. The report gives this as
+  a failed check. A road target depends on the cell size.
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
