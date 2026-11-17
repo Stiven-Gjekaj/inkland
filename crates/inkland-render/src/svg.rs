@@ -755,8 +755,11 @@ mod tests {
         c.world.cells = 5000;
         let w = World::build(&c).unwrap();
         let s = render(&w, &c, &c.variants[0]).svg;
+        let page = Page::new(&c, &c.variants[0]);
+        let hidden = crate::labels::place(&w, &c, &c.variants[0], &page).hidden_places;
         assert!(w.society.places.len() > 5);
-        for p in &w.society.places {
+        // A required label can hide the symbol of a generated place.
+        for p in w.society.places.iter().filter(|p| !hidden.contains(&p.id)) {
             assert!(
                 s.contains(&format!("<g id=\"place-{}\">", p.id)),
                 "place-{}",

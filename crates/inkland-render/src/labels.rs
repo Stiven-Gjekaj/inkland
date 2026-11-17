@@ -1390,7 +1390,7 @@ mod tests {
     #[test]
     fn a_large_generated_river_gets_an_optional_label() {
         // A label can collide with the names of a world, so some of a few
-        // worlds must place a river label.
+        // worlds with few towns must place a river label.
         let mut placed = 0;
         for seed in 11..16 {
             placed += river_labels_of(seed);
@@ -1402,7 +1402,7 @@ mod tests {
         let (w, c) = world(
             seed,
             "continents",
-            json!({ "world": { "cells": 8000, "template": "continents" } }),
+            json!({ "world": { "cells": 8000, "template": "continents", "towns": 20 } }),
         );
         let labels = check_no_overlap(&w, &c);
         let rivers: Vec<&Placed> = labels

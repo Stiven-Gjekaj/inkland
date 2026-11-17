@@ -73,24 +73,22 @@ pub fn apply(world: &World, config: &Config, name: &str) -> Result<World, Error>
         let name = match &pin.name {
             Some(n) => n.clone(),
             None => {
-                let k = culture.max(1) as usize - 1;
-                let base = soc.cultures.get(k).map_or(0, |c| c.base);
+                let base = match culture {
+                    0 => crate::cultures::WILDLANDS_BASE,
+                    k => soc.cultures.get(k as usize - 1).map_or(0, |c| c.base),
+                };
                 Chain::new(base).name(&mut rng, &mut used)
             }
         };
         used.insert(name.clone());
         soc.places.push(Place {
-            id,
             pin: Some(pin.id.clone()),
-            name,
-            kind: pin.kind,
-            cell,
-            at: pin.at,
             port: pin.port,
-            capital: false,
+            landmass: w.features.of_cell[cell],
             culture,
             state: soc.cell_state[cell],
             province: soc.cell_province[cell],
+            ..Place::new(id, name, pin.kind, cell, pin.at)
         });
     }
     for p in soc.places.iter_mut() {

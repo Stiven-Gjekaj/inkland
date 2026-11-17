@@ -14,7 +14,7 @@
 
 use crate::biomes::HABITABILITY;
 use crate::config::{Config, PlaceKind};
-use crate::features::{FeatureKind, Features};
+use crate::features::Features;
 use crate::grid::Grid;
 use crate::names::Chain;
 use crate::rand::Rand;
@@ -27,7 +27,7 @@ pub const NONE: u32 = 0;
 
 pub use crate::cultures::Culture;
 
-/// A place: a pinned place, a capital, or a town.
+/// A place: a pinned place, a capital, or a town (a burg of FMG).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Place {
     /// 1, 2, 3, ... Pinned places first, in config order.
@@ -37,12 +37,39 @@ pub struct Place {
     pub name: String,
     pub kind: PlaceKind,
     pub cell: usize,
+    /// The position. A pinned place is exactly at its pin. A generated port
+    /// moves to the edge of its cell, and a river place to a bank.
     pub at: [f64; 2],
     pub port: bool,
+    /// The water feature of a port, or 0.
+    pub water: u32,
+    /// The land feature of the place.
+    pub landmass: u32,
     pub capital: bool,
     pub culture: u32,
     pub state: u32,
     pub province: u32,
+}
+
+impl Place {
+    /// A place with no port, culture, state, or province.
+    pub fn new(id: u32, name: String, kind: PlaceKind, cell: usize, at: [f64; 2]) -> Place {
+        Place {
+            id,
+            pin: None,
+            name,
+            kind,
+            cell,
+            at,
+            port: false,
+            water: NONE,
+            landmass: NONE,
+            capital: false,
+            culture: NONE,
+            state: NONE,
+            province: NONE,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -168,9 +195,7 @@ pub fn build(input: &Input) -> Society {
     let n = grid.len();
     let tree = SeedTree::new(config.seed);
     let land = |c: usize| features.is_land(c);
-    let ocean = |c: usize| features.get(features.of_cell[c]).kind == FeatureKind::Ocean;
     let mean_width = (grid.step_x + grid.step_y) / 2.0;
-    let (w, h) = (config.frame.width, config.frame.height);
 
     // Suitability and population (rankCells).
     let cells = crate::population::Cells::new(&crate::population::Input {
@@ -185,12 +210,6 @@ pub fn build(input: &Input) -> Society {
         river_threshold,
     });
     let suitability = &cells.s;
-    let mut ranked: Vec<usize> = (0..n).filter(|&c| suitability[c] > 0.0).collect();
-    ranked.sort_by(|&a, &b| suitability[b].total_cmp(&suitability[a]).then(a.cmp(&b)));
-    if ranked.is_empty() {
-        // No habitable land: use all land cells.
-        ranked = (0..n).filter(|&c| land(c)).collect();
-    }
 
     // Step cost over the map: land is cheap, water is dear, steep is dear.
     let step_cost = |a: usize, b: usize| -> f64 {
@@ -220,7 +239,7 @@ pub fn build(input: &Input) -> Society {
         .collect();
     let chain_of = |cell: usize| &chains[cell_culture[cell] as usize];
 
-    // Places: pinned first.
+    // Places (FMG burgs generate and assignPorts).
     let mut nrng = Rand::new(tree.part_rng(Layer::Names, "places"));
     let mut used_names: BTreeSet<String> = config
         .pins
@@ -228,129 +247,20 @@ pub fn build(input: &Input) -> Society {
         .iter()
         .filter_map(|p| p.name.clone())
         .collect();
-    let mut places: Vec<Place> = Vec::new();
-    for (i, pin) in config.pins.points.iter().enumerate() {
-        let cell = pin_cells[i];
-        let name = match &pin.name {
-            Some(n) => n.clone(),
-            None => chain_of(cell).name(&mut nrng, &mut used_names),
-        };
-        places.push(Place {
-            id: places.len() as u32 + 1,
-            pin: Some(pin.id.clone()),
-            name,
-            kind: pin.kind,
-            cell,
-            at: pin.at,
-            port: pin.port,
-            capital: pin.capital_of.is_some(),
-            culture: cell_culture[cell],
-            state: NONE,
-            province: NONE,
-        });
-    }
-    let pin_points: Vec<[f64; 2]> = config.pins.points.iter().map(|p| p.at).collect();
-    let pin_gap = config
-        .world
-        .places
-        .min_distance_from_pins
-        .unwrap_or(3.0 * mean_width);
-
-    // Capitals: the pinned capitals, and generated ones up to the state count.
-    let mut state_names: Vec<String> = Vec::new();
-    for pin in &config.pins.points {
-        if let Some(s) = &pin.capital_of
-            && !state_names.contains(s)
-        {
-            state_names.push(s.clone());
-        }
-    }
-    let state_count = (config.world.states as usize).max(state_names.len());
-    let free: Vec<usize> = ranked
-        .iter()
-        .copied()
-        .filter(|&c| !places.iter().any(|p| p.cell == c))
-        .filter(|&c| {
-            pin_points
-                .iter()
-                .all(|&p| dist(p, grid.points[c]) >= pin_gap)
-        })
-        .collect();
-    let mut prng = Rand::new(tree.part_rng(Layer::Places, "capitals"));
-    let pinned_capitals = places.iter().filter(|p| p.capital).count();
-    let more = state_count.saturating_sub(pinned_capitals);
-    let taken: Vec<[f64; 2]> = places.iter().map(|p| p.at).collect();
-    let cap_cells = spread(
-        &free,
-        more,
-        (w + h) / 2.0 / state_count.max(1) as f64,
-        &taken,
-        0.0,
+    let burg_input = crate::burgs::Input {
+        config,
         grid,
-        &mut prng,
-    );
-    for c in cap_cells {
-        let name = chain_of(c).name(&mut nrng, &mut used_names);
-        places.push(new_place(
-            &places,
-            name,
-            PlaceKind::City,
-            c,
-            grid,
-            true,
-            &cell_culture,
-            ocean,
-        ));
-    }
-
-    // Towns.
-    let land_cells = (0..n).filter(|&c| land(c)).count();
-    let towns = match config.world.towns {
-        crate::config::Towns::Count(k) => k as usize,
-        crate::config::Towns::Auto(_) => (land_cells / 150).max(3),
+        cells: &cells,
+        features,
+        rivers,
+        temperature,
+        cell_culture: &cell_culture,
+        pin_cells,
+        chains: &chains,
     };
-    let land_area = land_cells as f64 * grid.step_x * grid.step_y;
-    let town_gap = 0.7 * (land_area / towns.max(1) as f64).sqrt();
-    let taken: Vec<[f64; 2]> = places.iter().map(|p| p.at).collect();
-    let free: Vec<usize> = ranked
-        .iter()
-        .copied()
-        .filter(|&c| !places.iter().any(|p| p.cell == c))
-        .filter(|&c| {
-            pin_points
-                .iter()
-                .all(|&p| dist(p, grid.points[c]) >= pin_gap)
-        })
-        .collect();
-    let mut trng = Rand::new(tree.part_rng(Layer::Places, "towns"));
-    let town_cells = spread(
-        &free,
-        towns,
-        town_gap,
-        &taken,
-        town_gap * 0.5,
-        grid,
-        &mut trng,
-    );
-    let cut = (town_cells.len() as f64 * 0.3).ceil() as usize;
-    for (k, c) in town_cells.into_iter().enumerate() {
-        let kind = if k < cut {
-            PlaceKind::Town
-        } else {
-            PlaceKind::Village
-        };
-        let name = chain_of(c).name(&mut nrng, &mut used_names);
-        places.push(new_place(
-            &places,
-            name,
-            kind,
-            c,
-            grid,
-            false,
-            &cell_culture,
-            ocean,
-        ));
-    }
+    let mut prng = Rand::new(tree.part_rng(Layer::Places, "generate"));
+    let mut places = crate::burgs::generate(&burg_input, &mut used_names, &mut prng, &mut nrng);
+    crate::burgs::assign_ports(&burg_input, &mut places);
 
     // States: one for each capital.
     let mut srng = Rand::new(tree.part_rng(Layer::States, "states"));
@@ -475,78 +385,6 @@ pub fn build(input: &Input) -> Society {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn new_place(
-    places: &[Place],
-    name: String,
-    kind: PlaceKind,
-    cell: usize,
-    grid: &Grid,
-    capital: bool,
-    cell_culture: &[u32],
-    ocean: impl Fn(usize) -> bool,
-) -> Place {
-    Place {
-        id: places.len() as u32 + 1,
-        pin: None,
-        name,
-        kind,
-        cell,
-        at: grid.points[cell],
-        port: grid.neighbors(cell).any(ocean),
-        capital,
-        culture: cell_culture[cell],
-        state: NONE,
-        province: NONE,
-    }
-}
-
-/// Pick up to `count` cells from `ranked` (best first), each at least `gap`
-/// from the cells picked before and from `taken`. A random part of the
-/// order lets a slightly worse cell win. If not enough cells fit, the gap
-/// becomes smaller, but not smaller than `floor`.
-fn spread(
-    ranked: &[usize],
-    count: usize,
-    gap: f64,
-    taken: &[[f64; 2]],
-    floor: f64,
-    grid: &Grid,
-    rng: &mut Rand,
-) -> Vec<usize> {
-    if count == 0 || ranked.is_empty() {
-        return Vec::new();
-    }
-    // Order: the rank, moved by a random amount, so that the result is not
-    // only the best cells in one area.
-    let mut order: Vec<(f64, usize)> = ranked
-        .iter()
-        .enumerate()
-        .map(|(i, &c)| (i as f64 * rng.uniform(0.5, 1.5), c))
-        .collect();
-    order.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-    let mut gap = gap;
-    let mut picked: Vec<usize> = Vec::new();
-    for _ in 0..20 {
-        for &(_, c) in &order {
-            if picked.len() >= count {
-                break;
-            }
-            let p = grid.points[c];
-            let far = picked.iter().all(|&q| dist(grid.points[q], p) >= gap)
-                && taken.iter().all(|&q| dist(q, p) >= gap);
-            if far && !picked.contains(&c) {
-                picked.push(c);
-            }
-        }
-        if picked.len() >= count || gap <= floor {
-            break;
-        }
-        gap = (gap * 0.8).max(floor);
-    }
-    picked
-}
-
 #[cfg(test)]
 mod tests {
     use crate::config::Config;
@@ -630,7 +468,8 @@ mod tests {
             for p in &s.places {
                 prop_assert!(w.features.is_land(p.cell), "{} is not on land", p.name.clone());
                 prop_assert!(names.insert(p.name.clone()), "{} twice", p.name.clone());
-                prop_assert_eq!(w.grid.points[p.cell], p.at);
+                // A generated port or river place moves inside its cell.
+                prop_assert_eq!(w.grid.find_cell(p.at[0], p.at[1]), p.cell);
             }
             for (i, pin) in c.pins.points.iter().enumerate() {
                 prop_assert_eq!(s.places[i].at, pin.at);
