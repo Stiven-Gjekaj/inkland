@@ -72,7 +72,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
     for layer in &config.render.layers {
         use inkland_core::config::LayerName;
         match layer {
-            LayerName::Coast => write_coast(&mut s, world, &page, coast_w, min),
+            LayerName::Coast => write_coast(&mut s, world, config, &page, coast_w, min),
             LayerName::Relief => write_relief(&mut s, world, config, &page, min, &labels),
             LayerName::Rivers => write_rivers(&mut s, world, config, variant, &page),
             LayerName::Regions => write_borders(&mut s, world, config, &page),
@@ -180,7 +180,14 @@ fn write_labels(s: &mut String, labels: &crate::labels::Labels) {
     s.push_str("</g>\n");
 }
 
-fn write_coast(s: &mut String, world: &World, page: &Page, coast_w: f64, min: f64) {
+fn write_coast(
+    s: &mut String,
+    world: &World,
+    config: &Config,
+    page: &Page,
+    coast_w: f64,
+    min: f64,
+) {
     // Water lines: two thin lines in the water along each coast.
     let _ = writeln!(
         s,
@@ -205,6 +212,21 @@ fn write_coast(s: &mut String, world: &World, page: &Page, coast_w: f64, min: f6
         "<g id=\"coast\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\" stroke-linecap=\"round\">",
         n(coast_w)
     );
+    if config.render.coastline == Some(inkland_core::config::CoastlineDetail::Fractal) {
+        // The fractal coastline of the original program: one closed path for
+        // each island and each lake.
+        let px = crate::fmg::geom::Px::new(page, config.frame.width, config.frame.height);
+        let map = |p: [f64; 2]| page.to_page([p[0] / px.unit_px, p[1] / px.unit_px]);
+        let settings = crate::fmg::geom::CoastSettings::DEFAULT;
+        for o in crate::fmg::geom::outlines(world, px.unit_px, &settings) {
+            let d = crate::fmg::geom::coast_path(&o.shape, &map, 3);
+            if !d.is_empty() {
+                let _ = writeln!(s, "<path id=\"coast-feature-{}\" d=\"{d}\"/>", o.feature);
+            }
+        }
+        s.push_str("</g>\n");
+        return;
+    }
     for line in &world.coastlines {
         let smooth = crate::decor::chaikin(&line.points, line.closed, 2);
         let d = path_data(page, &smooth, line.closed);
@@ -702,6 +724,23 @@ mod tests {
         }
         assert!(s.contains("<g id=\"borders-states\""));
         assert!(s.contains("id=\"border-state-1\""));
+    }
+
+    #[test]
+    fn the_fractal_coastline_has_a_closed_path_for_each_island() {
+        let mut c = config();
+        c.render.coastline = Some(inkland_core::config::CoastlineDetail::Fractal);
+        let w = World::build(&c).unwrap();
+        let s = render(&w, &c, &c.variants[0]).svg;
+        let islands = w.features.list.iter().filter(|f| f.kind.is_land()).count();
+        assert!(islands > 0);
+        assert!(s.matches("id=\"coast-feature-").count() >= islands);
+        assert!(!s.contains("id=\"coast-1\""));
+        // Fractal detail makes more points than the smooth coast.
+        let smooth = render(&w, &config(), &c.variants[0]).svg;
+        assert!(s.len() > smooth.len());
+        assert_eq!(s, render(&w, &c, &c.variants[0]).svg);
+        assert!(roxmltree::Document::parse(&s).is_ok());
     }
 
     #[test]
