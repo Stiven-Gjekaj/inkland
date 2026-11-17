@@ -277,7 +277,7 @@ The type system enforces this: an overlay has no field that can do it.
 | `mode` | `print-safe`, `colour` | `print-safe` |
 | `fonts` | `{title, labels, labels_sc, other}` family names | `title`, `labels`: `IM Fell English`. `labels_sc` (small capitals, for region names): `IM Fell English SC`. `other` (scale bar, compass, grid, notes): `Caladea`. |
 | `fonts_allowed` | array of family names | `["Caladea", "Inter", "IM Fell English", "IM Fell English SC"]` |
-| `font_sizes_pt` | `{title, region, place_city, place_town, river, other}` | to decide in M7 |
+| `font_sizes_pt` | `{title, state, region, place_city, place_town, place_village, river, other}` | 12, 10, 8.5, 8, 7, 6, 6.5, 7 |
 | `min_line_width_pt` | number | `0.5` |
 | `extras` | `{scale_bar, compass, cartouche: {title}, grid: {step}}` | all off |
 | `layers` | ordered array of layer names | all layers |
@@ -577,6 +577,47 @@ and the test that closes each milestone. We stop for a review after each one.
   place stays exactly where the map has it, on land. The land and the sea
   of each world agree with the map, except for the cells that the places
   force to land.
+
+## 6.8 Notes from Milestone 8
+
+- Label placement uses a table of font metrics, not the font files. The
+  table has the advance widths, the cap height, and the descender of IM
+  Fell English, IM Fell English SC, Caladea, and Inter.
+  `examples/font_metrics.rs` makes it from local font files. A family that
+  is not in the table uses the IM Fell English widths.
+- Labels: each place in the view, each state, each pinned region with a
+  `name`, and each pinned river with a `name`. Generated rivers have no
+  names in this version.
+- Families: places and rivers use `fonts.labels`. States and regions use
+  `fonts.labels_sc`. Sizes come from `render.font_sizes_pt`.
+- The placer takes the labels in this order: pinned places and capitals,
+  then pinned rivers, then states and regions, then other cities, towns,
+  and villages. In each group the order is by id. Each label gets the
+  candidate with the lowest cost that does not overlap a placed label, a
+  place symbol, the scale bar, the compass, or the cartouche, and that is
+  inside the map.
+- A place label has eight candidates around its symbol: right, top right,
+  bottom right, left, top left, bottom left, top, bottom.
+- An area label goes on the cells that are farthest from the edge of the
+  area. The text is along the page or upright (bottom to top). Letter
+  spacing makes the text fill about 70 % of the width of the area, between
+  limits. A label part outside the area costs more.
+- A river label follows a straight part of its river (chord at least 0.8 of
+  the length), above the line, from left to right. It is a `<textPath>` on a
+  path in `<defs>` with the id `path-<label id>`.
+- A label that crosses a river costs more. Each label has a white halo:
+  `stroke="#ffffff"` with `paint-order="stroke"`.
+- Relief symbols under a label are left out.
+- The scale bar goes in the bottom-right corner when fewer place symbols are
+  there than in the bottom-left corner.
+- The report: `labels.placed` is the number of placed labels.
+  `labels.unplaced` lists each label without a place, with `reason`
+  (`collision` or `outside`) and `required`. Required labels are the labels
+  of pins, capitals, and states. The check `all_labels_placed` fails only
+  for required labels, and each one gives a `LABEL_UNPLACED` warning. Other
+  labels, such as generated villages, can be left out without a failure.
+- Proptest: no two placed label boxes overlap, and no label box leaves the
+  map or covers a symbol or an extra.
 
 ## 7. Road lengths in the report
 
