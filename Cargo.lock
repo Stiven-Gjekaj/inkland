@@ -643,6 +643,11 @@ dependencies = [
 [[package]]
 name = "inkland-app"
 version = "0.1.0"
+dependencies = [
+ "inkland",
+ "inkland-core",
+ "serde_json",
+]
 
 [[package]]
 name = "inkland-cli"
