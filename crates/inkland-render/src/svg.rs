@@ -17,6 +17,8 @@ pub const NEATLINE_WIDTH_PT: f64 = 1.0;
 pub const STATE_BORDER_PT: f64 = 0.8;
 pub const PROVINCE_BORDER_PT: f64 = 0.5;
 pub const PLACE_LINE_PT: f64 = 0.5;
+pub const ROAD_PT: f64 = 0.7;
+pub const TRAIL_PT: f64 = 0.5;
 pub const RIVER_MIN_PT: f64 = 0.5;
 pub const RIVER_STEP_PT: f64 = 0.35;
 pub const RIVER_MAX_PT: f64 = 2.0;
@@ -74,6 +76,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> String {
     s.push_str("</g>\n");
     write_rivers(&mut s, world, config, &page);
     write_borders(&mut s, world, config, &page);
+    write_roads(&mut s, world, config, &page);
     write_places(&mut s, world, config, &page);
     let _ = writeln!(
         s,
@@ -237,6 +240,90 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
         }
     }
     s.push_str("</g>\n</g>\n");
+}
+
+fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
+    use inkland_core::config::RoadKind;
+    use std::collections::BTreeSet;
+    let min = config.render.min_line_width_pt;
+    let style = |kind: RoadKind| match kind {
+        RoadKind::Road => (n(pt(ROAD_PT.max(min))), "1.6 0.5"),
+        RoadKind::Trail => (n(pt(TRAIL_PT.max(min))), "0.5 0.6"),
+    };
+    let _ = writeln!(
+        s,
+        "<g id=\"roads\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    );
+    // Pinned roads, each with its config id.
+    let mut pinned_edges: BTreeSet<(usize, usize)> = BTreeSet::new();
+    let mut items: Vec<(String, String, RoadKind)> = Vec::new();
+    for r in world.roads.iter() {
+        let Some(k) = r.pin else { continue };
+        for w in r.cells.windows(2) {
+            pinned_edges.insert((w[0].min(w[1]), w[0].max(w[1])));
+        }
+        let d = path_data(page, &r.points, false);
+        if !d.is_empty() {
+            items.push((format!("road-{}", config.pins.roads[k].id), d, r.kind));
+        }
+    }
+    items.sort_by(|a, b| a.0.cmp(&b.0));
+    for (id, d, kind) in items {
+        let (w, dash) = style(kind);
+        let _ = writeln!(
+            s,
+            "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{w}\" stroke-dasharray=\"{dash}\"/>"
+        );
+    }
+    // The generated network: shared edges are drawn once.
+    for kind in [RoadKind::Road, RoadKind::Trail] {
+        let mut edges: BTreeSet<(usize, usize)> = BTreeSet::new();
+        for r in world
+            .roads
+            .iter()
+            .filter(|r| r.pin.is_none() && r.kind == kind)
+        {
+            for w in r.cells.windows(2) {
+                let e = (w[0].min(w[1]), w[0].max(w[1]));
+                if !pinned_edges.contains(&e) {
+                    edges.insert(e);
+                }
+            }
+        }
+        if kind == RoadKind::Trail {
+            // A trail edge that a road uses is a road.
+            for r in world
+                .roads
+                .iter()
+                .filter(|r| r.pin.is_none() && r.kind == RoadKind::Road)
+            {
+                for w in r.cells.windows(2) {
+                    edges.remove(&(w[0].min(w[1]), w[0].max(w[1])));
+                }
+            }
+        }
+        let list: Vec<(u32, u32)> = edges.iter().map(|&(a, b)| (a as u32, b as u32)).collect();
+        let (w, dash) = style(kind);
+        let name = match kind {
+            RoadKind::Road => "road-net",
+            RoadKind::Trail => "trail-net",
+        };
+        for (i, line) in chain_edges(&list).iter().enumerate() {
+            let pts: Vec<[f64; 2]> = line
+                .iter()
+                .map(|&c| world.grid.points[c as usize])
+                .collect();
+            let d = path_data(page, &pts, false);
+            if !d.is_empty() {
+                let _ = writeln!(
+                    s,
+                    "<path id=\"{name}-{}\" d=\"{d}\" stroke-width=\"{w}\" stroke-dasharray=\"{dash}\"/>",
+                    i + 1
+                );
+            }
+        }
+    }
+    s.push_str("</g>\n");
 }
 
 /// The symbol of a place: a circle for a city or a town, a dot for a village,
