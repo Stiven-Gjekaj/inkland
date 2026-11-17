@@ -34,12 +34,18 @@ pub fn world_value(world: &World, config: &Config, config_hash: &str) -> Value {
             "points": g.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
         },
         "heights": world.heights.iter().map(|&h| h as u8).collect::<Vec<_>>(),
+        "elevation": world.drainage.elevation.iter().map(|&e| round(e, 3)).collect::<Vec<_>>(),
+        "temperature": world.temperature.iter().map(|&t| t as i32).collect::<Vec<_>>(),
+        "precipitation": world.precipitation.iter().map(|&p| p as u32).collect::<Vec<_>>(),
+        "flux": world.drainage.flux.iter().map(|&f| round(f, 3)).collect::<Vec<_>>(),
+        "biomes": world.biomes.iter().map(|&b| inkland_core::biomes::NAMES[b as usize]).collect::<Vec<_>>(),
         "features": world.features.list.iter().map(|f| json!({
             "id": f.id,
             "kind": f.kind.name(),
             "cells": f.cells,
             "border": f.border,
         })).collect::<Vec<_>>(),
+        "rivers": world.rivers.iter().map(|r| river_value(r, config)).collect::<Vec<_>>(),
         "coastlines": world.coastlines.iter().map(|c| json!({
             "id": c.id,
             "land": c.land,
@@ -47,6 +53,28 @@ pub fn world_value(world: &World, config: &Config, config_hash: &str) -> Value {
             "closed": c.closed,
             "points": c.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
+    })
+}
+
+/// The JSON value of one river.
+fn river_value(r: &inkland_core::rivers::River, config: &Config) -> Value {
+    use inkland_core::rivers::Mouth;
+    let pin = r.course.map(|k| &config.pins.rivers[k]);
+    let mouth = match r.mouth {
+        Mouth::Water(c) => json!({ "kind": "water", "cell": c }),
+        Mouth::Join(c) => json!({ "kind": "join", "cell": c }),
+        Mouth::Sink => json!({ "kind": "sink" }),
+    };
+    json!({
+        "id": r.id,
+        "pin": pin.map(|p| p.id.clone()),
+        "name": pin.and_then(|p| p.name.clone()),
+        "parent": r.parent,
+        "mouth": mouth,
+        "flux": round(r.flux, 3),
+        "length": round(r.length, 3),
+        "cells": r.cells,
+        "points": r.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
     })
 }
 
