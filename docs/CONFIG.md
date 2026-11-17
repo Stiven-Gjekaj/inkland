@@ -79,6 +79,7 @@ Climate options.
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
+| `geography` | [`Geography`](#geography) |  |  | The size and the position of the map on the globe, as in FMG. If it is given, it sets the latitudes, and `latitude_range` has no effect. A value that it does not give comes from a random draw. |
 | `latitude_range` | array of 2 number |  | `[30.0,55.0]` | Latitude of the south edge and of the north edge, in degrees. |
 | `wind` | array of 6 number |  |  | Winds, one for each 30 degree latitude band from 90 north to 90 south: the direction to which the wind blows, in degrees clockwise from north. Default: `[225, 45, 225, 315, 135, 315]`. |
 
@@ -149,6 +150,16 @@ The frame of the world: its size and the direction of its axes.
 | `width` | number | yes |  | Width of the world, in units. Must be more than 0. |
 | `x_axis` | [`XAxis`](#xaxis) |  | `"east"` | The direction in which x increases. Only `east`. |
 | `y_axis` | [`YAxis`](#yaxis) |  | `"south"` | The direction in which y increases: `south` with origin `top-left`, `north` with origin `bottom-left`. |
+
+### Geography
+
+The size and the position of the map on the globe.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `latitude` | number |  |  | The north-south position in percent. 0 to 100. 0 puts the north edge at the north pole, and 100 puts the south edge at the south pole. |
+| `longitude` | number |  |  | The west-east position in percent. 0 to 100. |
+| `map_size` | number |  |  | The map size in percent of the world. 1 to 100. 100 is the full globe from pole to pole. |
 
 ### Grid
 

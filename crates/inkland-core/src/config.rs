@@ -331,6 +331,11 @@ pub struct Climate {
     /// Latitude of the south edge and of the north edge, in degrees.
     #[serde(default = "default_latitude_range")]
     pub latitude_range: [f64; 2],
+    /// The size and the position of the map on the globe, as in FMG. If it
+    /// is given, it sets the latitudes, and `latitude_range` has no effect.
+    /// A value that it does not give comes from a random draw.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geography: Option<Geography>,
     /// Winds, one for each 30 degree latitude band from 90 north to 90
     /// south: the direction to which the wind blows, in degrees clockwise
     /// from north. Default: `[225, 45, 225, 315, 135, 315]`.
@@ -342,9 +347,31 @@ impl Default for Climate {
     fn default() -> Self {
         Self {
             latitude_range: default_latitude_range(),
+            geography: None,
             wind: None,
         }
     }
+}
+
+/// The size and the position of the map on the globe.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Geography {
+    /// The map size in percent of the world. 1 to 100. 100 is the full
+    /// globe from pole to pole.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1.0, max = 100.0))]
+    pub map_size: Option<f64>,
+    /// The north-south position in percent. 0 to 100. 0 puts the north
+    /// edge at the north pole, and 100 puts the south edge at the south
+    /// pole.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 100.0))]
+    pub latitude: Option<f64>,
+    /// The west-east position in percent. 0 to 100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 100.0))]
+    pub longitude: Option<f64>,
 }
 
 /// A count, or `auto`.

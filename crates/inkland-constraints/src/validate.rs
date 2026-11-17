@@ -249,6 +249,24 @@ impl<'a> Validator<'a> {
                 "latitude_range must be [south, north], each from -90 to 90, with south less than north",
             );
         }
+        if let Some(g) = &w.climate.geography {
+            let checks = [
+                ("map_size", g.map_size, 1.0, 100.0),
+                ("latitude", g.latitude, 0.0, 100.0),
+                ("longitude", g.longitude, 0.0, 100.0),
+            ];
+            for (name, value, lo, hi) in checks {
+                if let Some(v) = value
+                    && !(lo..=hi).contains(&v)
+                {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("/world/climate/geography/{name}"),
+                        format!("{name} must be {lo} to {hi}, found {v}"),
+                    );
+                }
+            }
+        }
         if let Some(h) = c.units.per_cell_hint {
             if !(h.is_finite() && h > 0.0) {
                 self.err(

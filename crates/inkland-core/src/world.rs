@@ -29,6 +29,9 @@ pub struct World {
     /// The cell of each point pin, in config order. The site of the cell is
     /// the exact position of the pin.
     pub pin_cells: Vec<usize>,
+    /// The size of the map as a part of the world, and its latitude and
+    /// longitude box.
+    pub coordinates: crate::coordinates::Coordinates,
     /// The temperature of each cell, in degrees C.
     pub temperature: Vec<f64>,
     /// The precipitation of each cell.
@@ -181,6 +184,15 @@ impl World {
             );
         }
 
+        // The place of the map on the globe (FMG `Coordinates.generate`).
+        let partial = Features::mark(&grid, &heights, sea_level)
+            .list
+            .iter()
+            .any(|f| f.kind.is_land() && f.border);
+        let mut coord_rng = Rand::new(tree.part_rng(Layer::Climate, "coordinates"));
+        let coordinates = crate::coordinates::coordinates(config, partial, &mut coord_rng);
+        let latitudes = coordinates.latitude_range();
+
         let plan = crate::courses::Plan {
             grid: &grid,
             config,
@@ -212,10 +224,16 @@ impl World {
         }
         let coastlines = coastlines(&grid, &features);
 
-        let temperature = crate::climate::temperatures(&grid, &heights, config);
+        let temperature = crate::climate::temperatures(&grid, &heights, config, latitudes);
         let mut rain_rng = Rand::new(tree.part_rng(Layer::Climate, "rain"));
-        let precipitation =
-            crate::climate::precipitation(&grid, &heights, &temperature, config, &mut rain_rng);
+        let precipitation = crate::climate::precipitation(
+            &grid,
+            &heights,
+            &temperature,
+            config,
+            latitudes,
+            &mut rain_rng,
+        );
         let drainage = drain(&grid, &heights, &features, &precipitation, &courses);
         let rivers = trace(
             &grid,
@@ -289,6 +307,7 @@ impl World {
             features,
             coastlines,
             pin_cells,
+            coordinates,
             temperature,
             precipitation,
             drainage,

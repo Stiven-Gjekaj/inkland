@@ -7,6 +7,7 @@ pub mod biomes;
 pub mod borders;
 pub mod climate;
 pub mod config;
+pub mod coordinates;
 pub mod courses;
 pub mod error;
 pub mod features;

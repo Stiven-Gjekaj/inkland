@@ -33,6 +33,15 @@ pub fn world_value(world: &World, config: &Config) -> Value {
         "units": config.units.name,
         "frame": config.frame,
         "sea_level": world.sea_level,
+        "coordinates": {
+            "map_size": round(world.coordinates.map_size, 3),
+            "latitude": round(world.coordinates.latitude, 3),
+            "longitude": round(world.coordinates.longitude, 3),
+            "lat_n": round(world.coordinates.lat_n, 3),
+            "lat_s": round(world.coordinates.lat_s, 3),
+            "lon_w": round(world.coordinates.lon_w, 3),
+            "lon_e": round(world.coordinates.lon_e, 3),
+        },
         "grid": {
             "cells_x": g.cells_x,
             "cells_y": g.cells_y,

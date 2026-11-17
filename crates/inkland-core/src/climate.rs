@@ -35,9 +35,16 @@ const LATITUDE_FACTOR: [f64; 18] = [
 /// A wind does not pass a cell higher than this.
 const MAX_PASSABLE_HEIGHT: f64 = 85.0;
 
-/// The latitude of a position, in degrees.
+/// The latitude of a position, in degrees, for the latitude range of the
+/// config.
 pub fn latitude(config: &Config, y: f64) -> f64 {
-    let [south, north] = config.world.climate.latitude_range;
+    latitude_in(config.world.climate.latitude_range, config, y)
+}
+
+/// The latitude of a position, in degrees, for a latitude range
+/// `[south, north]`.
+pub fn latitude_in(range: [f64; 2], config: &Config, y: f64) -> f64 {
+    let [south, north] = range;
     let t = y / config.frame.height;
     match config.frame.origin {
         Origin::TopLeft => north - (north - south) * t,
@@ -68,27 +75,30 @@ pub fn metres(h: f64, sea_level: f64) -> f64 {
     }
 }
 
-/// The temperature of each cell, in whole degrees C.
-pub fn temperatures(grid: &Grid, heights: &[f64], config: &Config) -> Vec<f64> {
+/// The temperature of each cell, in whole degrees C, for a latitude range
+/// `[south, north]`.
+pub fn temperatures(grid: &Grid, heights: &[f64], config: &Config, range: [f64; 2]) -> Vec<f64> {
     let sea = f64::from(config.world.sea_level);
     (0..grid.len())
         .map(|c| {
-            let base = sea_level_temperature(latitude(config, grid.points[c][1]));
+            let base = sea_level_temperature(latitude_in(range, config, grid.points[c][1]));
             let drop = metres(heights[c], sea) / 1000.0 * 6.5;
             (base - drop).round()
         })
         .collect()
 }
 
-/// The precipitation of each cell. The mean over land is about 10 to 30
-/// for the default winds.
+/// The precipitation of each cell, for a latitude range `[south, north]`.
+/// The mean over land is about 10 to 30 for the default winds.
 pub fn precipitation(
     grid: &Grid,
     heights: &[f64],
     temps: &[f64],
     config: &Config,
+    range: [f64; 2],
     rng: &mut Rand,
 ) -> Vec<f64> {
+    let latitude = |_: &Config, y: f64| latitude_in(range, config, y);
     let n = grid.len();
     let (cx, cy) = (grid.cells_x as usize, grid.cells_y as usize);
     let sea = f64::from(config.world.sea_level);
@@ -235,13 +245,15 @@ mod tests {
         let c = config([30.0, 55.0], "top-left");
         let g = grid();
         let flat = vec![25.0; g.len()];
-        let t = temperatures(&g, &flat, &c);
+        let t = temperatures(&g, &flat, &c, c.world.climate.latitude_range);
         let north = g.slot(200.0, 2.0);
         let south = g.slot(200.0, 298.0);
         assert!(t[north] < t[south]);
         let mut high = flat.clone();
         high[south] = 90.0;
-        assert!(temperatures(&g, &high, &c)[south] < t[south] - 20.0);
+        assert!(
+            temperatures(&g, &high, &c, c.world.climate.latitude_range)[south] < t[south] - 20.0
+        );
     }
 
     #[test]
@@ -262,12 +274,14 @@ mod tests {
                 }
             })
             .collect();
-        let t = temperatures(&g, &h, &c);
+        let range = c.world.climate.latitude_range;
+        let t = temperatures(&g, &h, &c, range);
         let p = precipitation(
             &g,
             &h,
             &t,
             &c,
+            range,
             &mut Rand::new(SeedTree::new(1).part_rng(Layer::Climate, "rain")),
         );
         let land: f64 = (0..g.len()).filter(|&i| h[i] >= 20.0).map(|i| p[i]).sum();
