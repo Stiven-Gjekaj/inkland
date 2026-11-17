@@ -13,6 +13,8 @@ import { PrintDialog } from "dialogs/print.slint";
 import { RegionsDialog } from "dialogs/regions.slint";
 import { RiversDialog } from "dialogs/rivers.slint";
 import { RoutesDialog } from "dialogs/routes.slint";
+import { SubmapDialog } from "dialogs/submap.slint";
+import { VariantsDialog } from "dialogs/variants.slint";
 
 export { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts, Theme }
 
@@ -102,6 +104,8 @@ export component AppWindow inherits Window {
         if Dialogs.regions: RegionsDialog {}
         if Dialogs.rivers: RiversDialog {}
         if Dialogs.routes: RoutesDialog {}
+        if Dialogs.submap: SubmapDialog {}
+        if Dialogs.variants: VariantsDialog {}
     }
 
     public function focus-keys() {

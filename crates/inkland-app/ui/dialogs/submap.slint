@@ -1,0 +1,48 @@
+// The Submap tool: drag a rectangle on the map to crop the shown variant,
+// or to add a new variant that shows only the rectangle.
+
+import { Theme, Label, DialogButton, Check, FormRow, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Tool, Lists } from "../globals.slint";
+
+export component SubmapDialog inherits Dialog {
+    id: "submap";
+    title: "Submap";
+    content-width: 380px;
+    pos-x: 440px;
+    pos-y: 460px;
+    Label {
+        dialog: true;
+        text: "Variant " + (AppState.variant-index >= 0 && AppState.variant-index < AppState.variants.length ? AppState.variants[AppState.variant-index] : "") + ". " + Lists.variant-crop;
+        wrap: word-wrap;
+    }
+    FormRow {
+        label: "Crop";
+        label-width: 80px;
+        DialogButton {
+            text: AppState.tool == Tool.crop ? "Stop" : "Draw on the map";
+            pressed: AppState.tool == Tool.crop;
+            clicked => { Actions.start-tool(Tool.crop); }
+        }
+        Check {
+            dialog: true;
+            text: "As a new variant";
+            checked: AppState.crop-new;
+            toggled(on) => { AppState.crop-new = on; }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    FormRow {
+        label: "";
+        label-width: 80px;
+        DialogButton {
+            text: "Show the full frame";
+            clicked => { Actions.edit-item("variants", AppState.variant-index, "crop", ""); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Tip {
+        dialog: true;
+        text: "Drag a rectangle on the map. A new variant keeps the page width and gets the shape of the rectangle.";
+    }
+}

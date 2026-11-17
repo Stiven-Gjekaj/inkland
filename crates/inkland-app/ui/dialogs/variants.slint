@@ -1,0 +1,131 @@
+// The Variants and overlays editor: the maps that the config renders, and
+// the overlays that a variant can show.
+
+import { Theme, Label, DialogButton, Field, Select, FormRow, Table, Tip, Heading } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component VariantsDialog inherits Dialog {
+    id: "variants";
+    title: "Variants and Overlays";
+    content-width: 500px;
+    pos-x: 420px;
+    pos-y: 50px;
+    property <bool> has-variant: Lists.selected-variant != "";
+    Table {
+        header: ["Variant", "Overlay", "Page", "Crop"];
+        widths: [96px, 80px, 100px, 170px];
+        rows: Lists.variant-rows;
+        selected: Lists.selected-variant;
+        list-height: 100px;
+        select(id) => {
+            Lists.selected-variant = id;
+            Actions.selection-changed();
+        }
+    }
+    FormRow {
+        label: "Name";
+        label-width: 70px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            enabled: root.has-variant;
+            text <=> Lists.variant-name;
+            accepted(t) => { Actions.edit-item("variants", Lists.selected-variant, "name", t); }
+        }
+        Label { dialog: true; text: "Overlay"; }
+        Select {
+            dialog: true;
+            width: 110px;
+            enabled: root.has-variant;
+            model: Lists.overlay-names;
+            current-index: Lists.variant-overlay;
+            commit: false;
+            selected(i) => { Actions.edit-item("variants", Lists.selected-variant, "overlay", i == 0 ? "" : Lists.overlay-names[i]); }
+        }
+    }
+    FormRow {
+        label: "Page (mm)";
+        label-width: 70px;
+        Field {
+            dialog: true;
+            width: 50px;
+            number: true;
+            align: right;
+            enabled: root.has-variant;
+            text <=> Lists.variant-w;
+            accepted(t) => { Actions.edit-item("variants", Lists.selected-variant, "w_mm", t); }
+        }
+        Label { dialog: true; text: "x"; }
+        Field {
+            dialog: true;
+            width: 50px;
+            number: true;
+            align: right;
+            enabled: root.has-variant;
+            text <=> Lists.variant-h;
+            accepted(t) => { Actions.edit-item("variants", Lists.selected-variant, "h_mm", t); }
+        }
+        Label { dialog: true; text: "margin"; }
+        Field {
+            dialog: true;
+            width: 40px;
+            number: true;
+            align: right;
+            enabled: root.has-variant;
+            text <=> Lists.variant-margin;
+            accepted(t) => { Actions.edit-item("variants", Lists.selected-variant, "margin_mm", t); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: end;
+        DialogButton {
+            text: "Show";
+            enabled: root.has-variant;
+            clicked => { Actions.select-variant(Lists.selected-variant.to-float()); }
+        }
+        DialogButton {
+            text: "Copy";
+            enabled: root.has-variant;
+            clicked => { Actions.edit-item("variants", Lists.selected-variant, "copy", ""); }
+        }
+        DialogButton {
+            text: "Remove";
+            enabled: root.has-variant && Lists.variant-rows.length > 1;
+            clicked => { Actions.remove-item("variants", Lists.selected-variant); }
+        }
+    }
+    Rectangle { height: 1px; background: #dddddd; }
+    Table {
+        header: ["Overlay", "Added", "Removed", "Renamed", "Labels"];
+        widths: [140px, 60px, 66px, 66px, 60px];
+        rows: Lists.overlay-rows;
+        selected: Lists.selected-overlay;
+        list-height: 80px;
+        select(id) => { Lists.selected-overlay = id; }
+    }
+    FormRow {
+        label: "New overlay";
+        label-width: 90px;
+        name := Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            placeholder: "name, for example war-1";
+        }
+        DialogButton {
+            text: "Add";
+            clicked => { Actions.edit-item("overlays", "", "add", name.text); }
+        }
+        DialogButton {
+            text: "Remove";
+            enabled: Lists.selected-overlay != "";
+            clicked => { Actions.remove-item("overlays", Lists.selected-overlay); }
+        }
+    }
+    Tip {
+        dialog: true;
+        text: "An overlay adds, hides, or renames items in the variants that show it. It does not change the terrain. The Labels editor adds an overlay when a variant has none.";
+    }
+}

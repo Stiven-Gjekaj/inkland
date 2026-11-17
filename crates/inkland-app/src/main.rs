@@ -22,6 +22,7 @@ use inkland_app::catalog;
 use inkland_app::model::{Editor, error_text};
 use inkland_app::options::option_text;
 use inkland_app::pins::{Shape, ShapeKind, anchor_at, waypoint_at};
+use inkland_app::variants::crop_from_drag;
 use inkland_app::view::{View, distance};
 use inkland_app::worker::Worker;
 use inkland_render::page::Page;
@@ -77,6 +78,8 @@ const IMPLEMENTED: &[&str] = &[
     "add-river",
     "routes",
     "add-route",
+    "submap",
+    "variants",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -418,6 +421,14 @@ impl Controller {
         }
         if d.get_routes() || g.get_tool() == Tool::Route {
             push(overlay::road_paths(c, &l.get_selected_route(), f));
+        }
+        if d.get_submap()
+            && let Some(crop) = c.variants.get(st.editor.variant).and_then(|v| v.crop)
+        {
+            push(Paths {
+                normal: String::new(),
+                selected: overlay::rect(crop, &f),
+            });
         }
         let draft: Vec<[f64; 2]> = st.draft.iter().map(|p| f(*p)).collect();
         let mut draft_path = String::new();
@@ -976,6 +987,24 @@ impl Controller {
                     None => Err("drag to draw the area".to_owned()),
                 }
             }
+            Tool::Crop => match crop_from_drag(start, end) {
+                Some(crop) => {
+                    let v = st.editor.variant;
+                    if g.get_crop_new() {
+                        st.editor.add_variant(v, Some(crop)).map(|i| {
+                            st.editor.variant = i;
+                            st.fit_next = true;
+                            format!("add the variant {}", st.editor.variant_name())
+                        })
+                    } else {
+                        st.fit_next = true;
+                        st.editor
+                            .set_crop(v, Some(crop))
+                            .map(|_| format!("crop the variant {}", st.editor.variant_name()))
+                    }
+                }
+                None => Err("drag to draw the crop".to_owned()),
+            },
             _ => Ok(String::new()),
         };
         drop(st);
@@ -1054,6 +1083,56 @@ impl Controller {
         let world = st.shown.as_ref().map(|m| m.world.as_ref());
         l.set_burgs(table(rows::burg_rows(c, world)));
         l.set_regions(table(rows::region_rows(c)));
+        l.set_variant_rows(table(inkland_app::variants::variant_rows(c)));
+        l.set_overlay_rows(table(inkland_app::variants::overlay_rows(c)));
+        let mut overlays = vec![s("none")];
+        overlays.extend(c.overlays.keys().map(s));
+        l.set_overlay_names(model(overlays));
+        let current = c.variants.get(st.editor.variant);
+        l.set_variant_crop(s(current.and_then(|v| v.crop).map_or(
+            "The variant shows the full frame.".to_owned(),
+            |r| {
+                use inkland_app::options::number_text as n;
+                format!(
+                    "The variant shows {}, {} to {}, {}.",
+                    n(r[0]),
+                    n(r[1]),
+                    n(r[2]),
+                    n(r[3])
+                )
+            },
+        )));
+        let sel = l.get_selected_variant();
+        match sel.parse::<usize>().ok().and_then(|i| c.variants.get(i)) {
+            Some(v) => {
+                use inkland_app::options::number_text as n;
+                l.set_variant_name(s(&v.name));
+                l.set_variant_w(s(n(v.page.w_mm)));
+                l.set_variant_h(s(n(v.page.h_mm)));
+                l.set_variant_margin(s(n(v.page.margin_mm)));
+                l.set_variant_overlay(
+                    v.overlay
+                        .as_ref()
+                        .and_then(|o| c.overlays.keys().position(|k| k == o))
+                        .map_or(0, |i| i as i32 + 1),
+                );
+            }
+            None => {
+                l.set_selected_variant(s(""));
+                for set in [
+                    Lists::set_variant_name,
+                    Lists::set_variant_w,
+                    Lists::set_variant_h,
+                    Lists::set_variant_margin,
+                ] {
+                    set(&l, s(""));
+                }
+                l.set_variant_overlay(-1);
+            }
+        }
+        if !c.overlays.contains_key(l.get_selected_overlay().as_str()) {
+            l.set_selected_overlay(s(""));
+        }
         l.set_rivers(table(rows::river_rows(c, world)));
         let sel = l.get_selected_river();
         match c.pins.rivers.iter().find(|r| r.id == sel.as_str()) {
@@ -1254,7 +1333,17 @@ impl Controller {
                 .parse::<f64>()
                 .map_err(|_| format!("{t:?} is not a number"))
         };
+        let index = id
+            .parse::<usize>()
+            .map_err(|_| format!("{id:?} is not a variant"));
         let r = match (list, field) {
+            ("variants", "overlay") => {
+                index.and_then(|v| e.set_variant_overlay(v, (!text.is_empty()).then_some(text)))
+            }
+            ("variants", "crop") => index.and_then(|v| e.set_crop(v, None)),
+            ("variants", "copy") => index.and_then(|v| e.add_variant(v, None).map(|_| ())),
+            ("variants", _) => index.and_then(|v| e.set_variant_field(v, field, text)),
+            ("overlays", "add") => e.add_overlay(text),
             (_, "name") => match pin_list(list) {
                 Some(l) => e.rename_in(l, id, text),
                 None => Err(format!("{list:?} has no names")),
@@ -1532,8 +1621,20 @@ fn main() -> Result<(), slint::PlatformError> {
     a.on_edit_item(move |list, id, field, text| c.edit_item(&list, &id, &field, &text));
     let c = Rc::clone(&app);
     a.on_remove_item(move |list, id| {
-        let Some(l) = pin_list(&list) else { return };
-        let r = c.state.borrow_mut().editor.remove_in(l, &id);
+        let mut st = c.state.borrow_mut();
+        let r = match (list.as_str(), pin_list(&list)) {
+            (_, Some(l)) => st.editor.remove_in(l, &id),
+            ("variants", _) => match id.parse::<usize>() {
+                Ok(i) => {
+                    st.fit_next = true;
+                    st.editor.remove_variant(i)
+                }
+                Err(_) => Err(format!("{id:?} is not a variant")),
+            },
+            ("overlays", _) => st.editor.remove_overlay(&id),
+            _ => Err(format!("{list:?} has no items")),
+        };
+        drop(st);
         c.edited(r, &format!("remove {id}"));
     });
     let c = Rc::clone(&app);

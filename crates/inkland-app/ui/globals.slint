@@ -86,6 +86,9 @@ export global AppState {
     in-out property <int> region-kind: 3;
     // A new road: 0 road, 1 trail.
     in-out property <int> road-kind;
+    // `true`: a crop makes a new variant. `false`: it crops the shown
+    // variant.
+    in-out property <bool> crop-new;
     // The marks over the map, as path commands in map view pixels: the
     // pins of the open editors, the selected pin, and the drawing.
     in property <string> overlay-path;
@@ -202,6 +205,20 @@ export global Lists {
     // The wanted length, and the tolerance in percent.
     in-out property <string> route-target;
     in-out property <string> route-tolerance;
+    // The variants and the overlays.
+    in property <[TableRow]> variant-rows;
+    in property <[TableRow]> overlay-rows;
+    // "none" and the overlay names.
+    in property <[string]> overlay-names;
+    // The crop of the shown variant, as a sentence.
+    in property <string> variant-crop;
+    in-out property <string> selected-variant;
+    in-out property <string> variant-name;
+    in-out property <string> variant-w;
+    in-out property <string> variant-h;
+    in-out property <string> variant-margin;
+    in property <int> variant-overlay;
+    in-out property <string> selected-overlay;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their
@@ -257,6 +274,8 @@ export global Dialogs {
     in-out property <bool> regions;
     in-out property <bool> rivers;
     in-out property <bool> routes;
+    in-out property <bool> submap;
+    in-out property <bool> variants;
     in-out property <bool> print;
 
     public function open(id: string) {
@@ -265,6 +284,8 @@ export global Dialogs {
         if id == "regions" { self.regions = true; }
         if id == "rivers" { self.rivers = true; }
         if id == "routes" { self.routes = true; }
+        if id == "submap" { self.submap = true; }
+        if id == "variants" { self.variants = true; }
         Actions.selection-changed();
         if id == "print" { self.print = true; }
     }
@@ -275,6 +296,8 @@ export global Dialogs {
         if id == "regions" { self.regions = false; }
         if id == "rivers" { self.rivers = false; }
         if id == "routes" { self.routes = false; }
+        if id == "submap" { self.submap = false; }
+        if id == "variants" { self.variants = false; }
         Actions.selection-changed();
         if id == "print" { self.print = false; }
     }
@@ -285,6 +308,8 @@ export global Dialogs {
         self.regions = false;
         self.rivers = false;
         self.routes = false;
+        self.submap = false;
+        self.variants = false;
         Actions.selection-changed();
         self.print = false;
     }
