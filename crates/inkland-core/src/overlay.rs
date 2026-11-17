@@ -116,6 +116,7 @@ pub fn apply(world: &World, config: &Config, name: &str) -> Result<World, Error>
             rivers: &w.rivers,
             flux: &w.drainage.flux,
             river_threshold: crate::rivers::river_threshold(w.grid.len()),
+            temperature: &w.temperature,
             society: &w.society,
         },
         &w.roads,

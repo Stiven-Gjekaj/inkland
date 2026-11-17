@@ -31,6 +31,7 @@ pub mod rand;
 pub mod religions;
 pub mod rivers;
 pub mod roads;
+pub mod routes;
 pub mod seed;
 pub mod society;
 pub mod states;

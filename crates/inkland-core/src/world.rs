@@ -73,8 +73,11 @@ pub struct World {
     pub biomes: Vec<u8>,
     /// Cultures, places, states, and provinces.
     pub society: crate::society::Society,
-    /// Pinned roads first, in config order, then the generated network.
+    /// Pinned roads first, in config order, then the generated roads and
+    /// trails.
     pub roads: Vec<crate::roads::Road>,
+    /// The sea routes between ports.
+    pub sea_routes: Vec<crate::roads::Road>,
     /// Names and groups of rivers, islands, and lakes.
     pub names: crate::geonames::Names,
     /// Folk and organized religions.
@@ -373,7 +376,7 @@ impl World {
             features: &features,
             society: &society,
         });
-        let roads = crate::roads::build(&crate::roads::Input {
+        let routes = crate::roads::build(&crate::roads::Input {
             config,
             grid: &grid,
             heights: &heights,
@@ -382,8 +385,10 @@ impl World {
             rivers: &rivers,
             flux: &drainage.flux,
             river_threshold: river_threshold(grid.len()),
+            temperature: &temperature,
             society: &society,
         })?;
+        let (roads, sea_routes) = (routes.roads, routes.sea);
         Ok(World {
             seed: config.seed,
             width: w,
@@ -413,6 +418,7 @@ impl World {
             biomes,
             society,
             roads,
+            sea_routes,
             names,
             religions,
         })

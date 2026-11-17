@@ -22,7 +22,7 @@ use crate::grid::Grid;
 use crate::rivers::River;
 use crate::society::Society;
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::BinaryHeap;
 
 /// A place on a road.
 #[derive(Debug, Clone, PartialEq)]
@@ -54,11 +54,27 @@ pub struct Road {
     /// The id of a road that an overlay adds.
     pub overlay: Option<String>,
     pub kind: RoadKind,
+    /// The route group of FMG: `roads`, `trails`, or `searoutes`.
+    pub group: &'static str,
+    /// The name of a generated route, from FMG `generateName`.
+    pub name: Option<String>,
+    /// The land feature of a road, or the water feature of a sea route.
+    pub feature: u32,
     pub cells: Vec<usize>,
     pub points: Vec<[f64; 2]>,
     pub length: f64,
     pub stops: Vec<Stop>,
     pub crossings: Vec<Crossing>,
+}
+
+/// The roads of a world and the sea routes between its ports.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Routes {
+    /// Pinned roads first, in config order, then the generated roads and
+    /// trails.
+    pub roads: Vec<Road>,
+    /// The sea routes between ports, over water and navigable rivers.
+    pub sea: Vec<Road>,
 }
 
 struct Key(f64);
@@ -89,6 +105,7 @@ pub struct Input<'a> {
     pub rivers: &'a [River],
     pub flux: &'a [f64],
     pub river_threshold: f64,
+    pub temperature: &'a [f64],
     pub society: &'a Society,
 }
 
@@ -203,7 +220,7 @@ impl Router<'_> {
 }
 
 /// Route all roads.
-pub fn build(input: &Input) -> Result<Vec<Road>, Error> {
+pub fn build(input: &Input) -> Result<Routes, Error> {
     let grid = input.grid;
     let n = grid.len();
     let mut river_of = vec![0u32; n];
@@ -244,79 +261,9 @@ pub fn build(input: &Input) -> Result<Vec<Road>, Error> {
         ));
     }
 
-    // The generated network: a shortest tree over the capitals of each
-    // landmass, then a trail from each town.
-    let soc = input.society;
-    let landmass = |c: usize| input.features.of_cell[c];
-    let capitals: Vec<usize> = soc
-        .places
-        .iter()
-        .filter(|p| p.capital)
-        .map(|p| p.cell)
-        .collect();
-    let mut groups: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
-    for &c in &capitals {
-        groups.entry(landmass(c)).or_default().push(c);
-    }
-    for cells in groups.values() {
-        for (a, b) in shortest_tree(grid, cells) {
-            if let Some(path) = router.route(a, b, &vec![false; n]) {
-                for &c in &path {
-                    router.used[c] = true;
-                }
-                roads.push(finish(
-                    input,
-                    &router.river_of,
-                    roads.len() as u32 + 1,
-                    None,
-                    RoadKind::Road,
-                    path,
-                ));
-            }
-        }
-    }
-    let mut on_network: Vec<usize> = soc
-        .places
-        .iter()
-        .filter(|p| router.used[p.cell])
-        .map(|p| p.cell)
-        .collect();
-    let towns: Vec<(usize, [f64; 2])> = soc
-        .places
-        .iter()
-        .filter(|p| p.kind == crate::config::PlaceKind::Town)
-        .map(|p| (p.cell, p.at))
-        .collect();
-    for (cell, at) in towns {
-        if router.used[cell] {
-            continue;
-        }
-        let target = on_network
-            .iter()
-            .copied()
-            .filter(|&c| landmass(c) == landmass(cell))
-            .min_by(|&a, &b| {
-                dist(grid.points[a], at)
-                    .total_cmp(&dist(grid.points[b], at))
-                    .then(a.cmp(&b))
-            });
-        let Some(t) = target else { continue };
-        if let Some(path) = router.route(cell, t, &vec![false; n]) {
-            for &c in &path {
-                router.used[c] = true;
-            }
-            on_network.push(cell);
-            roads.push(finish(
-                input,
-                &router.river_of,
-                roads.len() as u32 + 1,
-                None,
-                RoadKind::Trail,
-                path,
-            ));
-        }
-    }
-    Ok(roads)
+    // The generated network of FMG: sea routes, roads, and trails.
+    let sea = crate::routes::network(input, &router.river_of, &mut roads);
+    Ok(Routes { roads, sea })
 }
 
 /// Route more roads on a finished world, for example the roads of an
@@ -374,35 +321,6 @@ pub fn route_more(
         out.push(road);
     }
     Ok(out)
-}
-
-/// The edges of a shortest tree (Kruskal) over points, by distance.
-fn shortest_tree(grid: &Grid, cells: &[usize]) -> Vec<(usize, usize)> {
-    let mut edges: Vec<(f64, usize, usize)> = Vec::new();
-    for (i, &a) in cells.iter().enumerate() {
-        for &b in &cells[i + 1..] {
-            edges.push((dist(grid.points[a], grid.points[b]), a, b));
-        }
-    }
-    edges.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)).then(x.2.cmp(&y.2)));
-    let mut parent: BTreeMap<usize, usize> = cells.iter().map(|&c| (c, c)).collect();
-    fn root(parent: &mut BTreeMap<usize, usize>, c: usize) -> usize {
-        let mut r = c;
-        while parent[&r] != r {
-            r = parent[&r];
-        }
-        parent.insert(c, r);
-        r
-    }
-    let mut out = Vec::new();
-    for (_, a, b) in edges {
-        let (ra, rb) = (root(&mut parent, a), root(&mut parent, b));
-        if ra != rb {
-            parent.insert(ra, rb);
-            out.push((a, b));
-        }
-    }
-    out
 }
 
 fn route_pinned(
@@ -552,7 +470,7 @@ fn route_pinned(
 }
 
 /// Make a road from its cells: points, length, stops, and crossings.
-fn finish(
+pub(crate) fn finish(
     input: &Input,
     river_of: &[u32],
     id: u32,
@@ -648,6 +566,12 @@ fn finish(
         pin,
         overlay: None,
         kind,
+        group: match kind {
+            RoadKind::Road => "roads",
+            RoadKind::Trail => "trails",
+        },
+        name: None,
+        feature: cells.first().map_or(0, |&c| input.features.of_cell[c]),
         cells,
         points,
         length,
