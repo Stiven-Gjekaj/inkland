@@ -25,6 +25,12 @@ Some data tables come from it. This file keeps its license notice.
   - The biome list and the moisture-temperature biome matrix, from
     `src/model/physical/biomes-generator.ts`. In inkland:
     `crates/inkland-core/src/biomes.rs`.
+  - The habitability of each biome, from
+    `src/model/physical/biomes-generator.ts`. In inkland:
+    `HABITABILITY` in `crates/inkland-core/src/biomes.rs`.
+  - The 43 name bases, from `src/data/name-bases.ts`, and the culture names
+    of five culture sets, from `src/model/society/cultures-generator.ts`. In
+    inkland: `crates/inkland-core/src/names/data.rs`.
 
 ```text
 MIT License
