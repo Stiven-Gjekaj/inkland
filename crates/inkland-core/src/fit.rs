@@ -12,10 +12,10 @@
 //! only make sure of land. Outside a region with an `edge`, the heights blend
 //! from the region to the free terrain over the edge width.
 //!
-//! Places: the cell of each place is land. The ring of cells around a place
-//! that is not a port is land too, except cells in forced water. A port needs
-//! one water cell next to it. If it has none, a short channel connects it to
-//! the nearest water.
+//! Places: the cell of each place is land. Its neighbors keep their terrain,
+//! so a place can be on the coast. A port needs one water cell next to it.
+//! If it has none, a short channel connects it to the nearest water. The
+//! channel does not go through the cell of a place or through forced land.
 
 use crate::config::{PointPin, RegionKind, RegionPin};
 use crate::error::{Error, ErrorCode};
@@ -154,11 +154,6 @@ pub fn apply_points(
     sea_level: f64,
 ) -> Result<(), Error> {
     let n = grid.len();
-    let in_water_region = |c: usize| {
-        regions
-            .iter()
-            .any(|r| r.pin.kind.is_water() && r.contains(grid.points[c]))
-    };
     let in_land_region = |c: usize| {
         regions
             .iter()
@@ -170,14 +165,6 @@ pub fn apply_points(
     for p in points {
         keep_land[p.cell] = true;
         heights[p.cell] = heights[p.cell].max(sea_level);
-    }
-    for p in points.iter().filter(|p| !p.pin.port) {
-        for m in grid.neighbors(p.cell) {
-            if !in_water_region(m) {
-                heights[m] = heights[m].max(sea_level);
-                keep_land[m] = true;
-            }
-        }
     }
     for p in points.iter().filter(|p| p.pin.port) {
         if grid.neighbors(p.cell).any(|m| heights[m] < sea_level) {
