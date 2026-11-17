@@ -22,6 +22,7 @@ pub mod names;
 pub mod num;
 pub mod overlay;
 pub mod pack;
+pub mod population;
 pub mod rand;
 pub mod religions;
 pub mod rivers;

@@ -75,7 +75,8 @@ pub struct Province {
 /// The society of a world.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Society {
-    pub suitability: Vec<f64>,
+    /// The cell data of FMG, with suitability and rural population.
+    pub cells: crate::population::Cells,
     pub cultures: Vec<Culture>,
     pub cell_culture: Vec<u32>,
     pub places: Vec<Place>,
@@ -93,7 +94,9 @@ pub struct Input<'a> {
     pub sea_level: f64,
     pub features: &'a Features,
     pub biomes: &'a [u8],
-    pub flux: &'a [f64],
+    pub temperature: &'a [f64],
+    pub drainage: &'a crate::rivers::Drainage,
+    pub rivers: &'a [crate::rivers::River],
     pub river_threshold: f64,
     pub pin_cells: &'a [usize],
 }
@@ -165,7 +168,9 @@ pub fn build(input: &Input) -> Society {
         sea_level,
         features,
         biomes,
-        flux,
+        temperature,
+        drainage,
+        rivers,
         river_threshold,
         pin_cells,
     } = *input;
@@ -176,26 +181,19 @@ pub fn build(input: &Input) -> Society {
     let mean_width = (grid.step_x + grid.step_y) / 2.0;
     let (w, h) = (config.frame.width, config.frame.height);
 
-    // Suitability.
-    let suitability: Vec<f64> = (0..n)
-        .map(|c| {
-            if !land(c) {
-                return 0.0;
-            }
-            let mut s = HABITABILITY[biomes[c] as usize];
-            if s <= 0.0 {
-                return 0.0;
-            }
-            s += (flux[c] / river_threshold).min(4.0) * 10.0;
-            if grid.neighbors(c).any(ocean) {
-                s += 20.0;
-            } else if grid.neighbors(c).any(|m| !land(m)) {
-                s += 10.0;
-            }
-            s -= (heights[c] - sea_level - 20.0).max(0.0) / 2.0;
-            s.max(0.0)
-        })
-        .collect();
+    // Suitability and population (rankCells).
+    let cells = crate::population::Cells::new(&crate::population::Input {
+        grid,
+        heights,
+        sea_level,
+        features,
+        biomes,
+        temperature,
+        drainage,
+        rivers,
+        river_threshold,
+    });
+    let suitability = &cells.s;
     let mut ranked: Vec<usize> = (0..n).filter(|&c| suitability[c] > 0.0).collect();
     ranked.sort_by(|&a, &b| suitability[b].total_cmp(&suitability[a]).then(a.cmp(&b)));
     if ranked.is_empty() {
@@ -493,7 +491,7 @@ pub fn build(input: &Input) -> Society {
     }
 
     Society {
-        suitability,
+        cells,
         cultures,
         cell_culture,
         places,

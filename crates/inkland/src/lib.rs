@@ -420,9 +420,9 @@ mod tests {
             ],
             "roads": [{ "id": "kings-road", "from": "ostrey", "to": "harrow" }]
         });
-        // A flat land with no water: no depression lake, so that the state
-        // labels have room.
-        let world = json!({ "cells": 1500, "template": { "steps": ["Add 35 all"] },
+        // A flat land with no water: no depression lake, and two states, so
+        // that the state labels have room.
+        let world = json!({ "cells": 1500, "states": 2, "template": { "steps": ["Add 35 all"] },
                             "lake_elevation_limit": 80 });
         let base = config(json!({ "world": world, "pins": pins }));
         let c = config(json!({

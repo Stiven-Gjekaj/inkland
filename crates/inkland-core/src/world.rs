@@ -349,7 +349,9 @@ impl World {
             sea_level,
             features: &features,
             biomes: &biomes,
-            flux: &drainage.flux,
+            temperature: &temperature,
+            drainage: &drainage,
+            rivers: &rivers,
             river_threshold: river_threshold(grid.len()),
             pin_cells: &pin_cells,
         });

@@ -104,7 +104,7 @@ pub fn build(input: &Input) -> Religions {
     places.sort_by(|a, b| {
         b.capital
             .cmp(&a.capital)
-            .then(soc.suitability[b.cell].total_cmp(&soc.suitability[a.cell]))
+            .then(soc.cells.s[b.cell].total_cmp(&soc.cells.s[a.cell]))
             .then(a.id.cmp(&b.id))
     });
     let count = input.config.world.religions as usize;
