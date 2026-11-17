@@ -9,6 +9,7 @@
 //! elements in a fixed order, so the output is the same on each run.
 
 pub mod color;
+pub mod data;
 pub mod geom;
 pub mod icons;
 mod icons_data;

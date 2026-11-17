@@ -1,5 +1,6 @@
 //! The layers of `colour` mode, and the definitions that they use.
 
+pub(crate) mod areas;
 mod base;
 mod decor;
 mod palette;
@@ -23,12 +24,12 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Heightmap => base::heightmap(s, ctx),
         Lakes => base::lakes(s, ctx),
         Coastline => base::coastline(s, ctx),
-        Biomes => {}
-        Religions => {}
-        Cultures => {}
-        States => {}
-        Provinces => {}
-        Zones => {}
+        Biomes => areas::biomes(s, ctx),
+        Religions => areas::religions(s, ctx),
+        Cultures => areas::cultures(s, ctx),
+        States => areas::states(s, ctx),
+        Provinces => areas::provinces(s, ctx),
+        Zones => areas::zones(s, ctx),
         Borders => {}
         Routes => {}
         Rivers => {}
