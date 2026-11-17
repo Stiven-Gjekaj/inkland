@@ -104,9 +104,48 @@ pub fn drain(
             heap.push(Reverse((Key(elevation[c]), c)));
         }
     }
-    // Fixed courses, in config order. A later course can end in an earlier
-    // one, so its elevations rise from the elevation of that cell.
+    // A course that ends in a lake: that lake cell is a sink with the
+    // height of the lake, so the flood cannot raise it above the course.
     for course in courses {
+        if let CourseEnd::Into(t) = course.end
+            && !fixed[t]
+            && !features.is_land(t)
+        {
+            elevation[t] = heights[t];
+            fixed[t] = true;
+            heap.push(Reverse((Key(elevation[t]), t)));
+        }
+    }
+    // Fixed courses. A course can end in another course, so it gets its
+    // elevations after that course, and they rise from the cell it joins.
+    let mut course_cell = vec![usize::MAX; n];
+    for (k, course) in courses.iter().enumerate() {
+        for &c in &course.cells {
+            course_cell[c] = k;
+        }
+    }
+    let mut order: Vec<usize> = Vec::new();
+    let mut placed = vec![false; courses.len()];
+    while order.len() < courses.len() {
+        let before = order.len();
+        for (k, course) in courses.iter().enumerate() {
+            if placed[k] {
+                continue;
+            }
+            let waits = match course.end {
+                CourseEnd::Into(t) => {
+                    course_cell[t] != usize::MAX && course_cell[t] != k && !placed[course_cell[t]]
+                }
+                CourseEnd::Sink => false,
+            };
+            if !waits {
+                placed[k] = true;
+                order.push(k);
+            }
+        }
+        assert!(order.len() > before, "courses join each other in a loop");
+    }
+    for course in order.iter().map(|&k| &courses[k]) {
         let m = course.cells.len();
         let gap = 0.5 / (m as f64 + 1.0);
         let base = match course.end {
