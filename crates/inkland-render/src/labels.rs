@@ -202,7 +202,8 @@ pub struct Unplaced {
     /// `collision`, `outside`, or `hidden` (a required label covers the
     /// symbol of the place).
     pub reason: &'static str,
-    /// `true` for the labels of pins, capitals, and states.
+    /// `true` for the labels of pins, capitals, and states with their
+    /// capital in the view.
     pub required: bool,
 }
 
@@ -973,6 +974,14 @@ pub fn place_with(
         let look = style("state");
         let name = look.text(&st.name);
         let f = FontMetrics::of(&look.family);
+        // A state whose capital is outside the view can show only a small
+        // part in the view. Its label is optional.
+        let capital_in_view = world
+            .society
+            .places
+            .iter()
+            .find(|p| p.id == st.capital)
+            .is_some_and(|p| in_view(p.at));
         requests.push(Request {
             place: None,
             candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.15, 0.8)),
@@ -982,7 +991,7 @@ pub fn place_with(
             text: name,
             family: look.family,
             size,
-            required: true,
+            required: capital_in_view,
             rank: 2,
         });
     }
