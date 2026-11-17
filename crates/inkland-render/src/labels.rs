@@ -766,27 +766,69 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
         river_lines.push(r.points.iter().map(|&p| page.to_page(p)).collect());
     }
     for (i, r) in world.rivers.iter().enumerate() {
-        let Some(k) = r.course else { continue };
-        let pin = &config.pins.rivers[k];
-        if !shown("river", &pin.id) {
-            continue;
-        }
-        let Some(name) = name_of("river", &pin.id, pin.name.as_deref()) else {
-            continue;
+        let generated = world.names.rivers.get(i);
+        // A pinned river with a name has a required label. Another river of
+        // the type `river` has an optional label with its generated name.
+        let (key, name, required) = match r.course {
+            Some(k) => {
+                let pin = &config.pins.rivers[k];
+                if !shown("river", &pin.id) {
+                    continue;
+                }
+                match name_of("river", &pin.id, pin.name.as_deref()) {
+                    Some(n) => (pin.id.clone(), n, true),
+                    None => match generated {
+                        Some(g) if !g.name.is_empty() => (pin.id.clone(), g.name.clone(), false),
+                        _ => continue,
+                    },
+                }
+            }
+            None => match generated {
+                Some(g) if g.kind == "river" && !g.name.is_empty() => {
+                    (r.id.to_string(), g.name.clone(), false)
+                }
+                _ => continue,
+            },
         };
-        let name = name.as_str();
-        let size = size_of("river", &pin.id, sizes.river);
+        let size = size_of("river", &key, sizes.river);
         let f = FontMetrics::of(&fonts.labels);
         let spacing = 0.1 * size;
         requests.push(Request {
-            candidates: river_candidates(&river_lines[i], inner, i, name, f, size, spacing),
-            id: format!("label-river-{}", pin.id),
+            candidates: river_candidates(&river_lines[i], inner, i, &name, f, size, spacing),
+            id: format!("label-river-{key}"),
             kind: Kind::River,
+            text: name,
+            family: fonts.labels.clone(),
+            size,
+            required,
+            rank: if required { 1 } else { 6 },
+        });
+    }
+
+    // Named lakes, with optional labels.
+    for n in &world.names.features {
+        let Some(name) = n.name.as_deref() else {
+            continue;
+        };
+        if !matches!(n.group, "freshwater" | "frozen") {
+            continue;
+        }
+        let g = &world.grid;
+        let area: Vec<bool> = world.features.of_cell.iter().map(|&f| f == n.id).collect();
+        if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
+            continue;
+        }
+        let size = pt(sizes.river);
+        let f = FontMetrics::of(&fonts.labels);
+        requests.push(Request {
+            candidates: area_candidates(world, page, inner, &area, name, f, size, (0.05, 0.3)),
+            id: format!("label-lake-{}", n.id),
+            kind: Kind::Region,
             text: name.to_owned(),
             family: fonts.labels.clone(),
             size,
-            required: true,
-            rank: 1,
+            required: false,
+            rank: 6,
         });
     }
 
@@ -1130,6 +1172,33 @@ mod tests {
                 assert!(points[points.len() - 1][0] > points[0][0]);
             }
             Geometry::Point { .. } => panic!("a river label follows a path"),
+        }
+    }
+
+    #[test]
+    fn a_large_generated_river_gets_an_optional_label() {
+        let (w, c) = world(
+            11,
+            "continents",
+            json!({ "world": { "cells": 8000, "template": "continents" } }),
+        );
+        let labels = check_no_overlap(&w, &c);
+        let rivers: Vec<&Placed> = labels
+            .placed
+            .iter()
+            .filter(|l| l.kind == Kind::River)
+            .collect();
+        assert!(!rivers.is_empty(), "no river label");
+        for l in &rivers {
+            let id: u32 = l.id.trim_start_matches("label-river-").parse().unwrap();
+            let i = w.rivers.iter().position(|r| r.id == id).unwrap();
+            assert_eq!(w.names.rivers[i].kind, "river");
+            assert_eq!(l.text, w.names.rivers[i].name);
+        }
+        for u in &labels.unplaced {
+            if u.id.starts_with("label-river-") || u.id.starts_with("label-lake-") {
+                assert!(!u.required);
+            }
         }
     }
 
