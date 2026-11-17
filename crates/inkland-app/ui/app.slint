@@ -4,6 +4,7 @@ import { AboutSlint, Button, TabWidget, VerticalBox } from "std-widgets.slint";
 import { AppState, Actions, Tool } from "globals.slint";
 import { MapView } from "map-view.slint";
 import { LayersPanel } from "layers-panel.slint";
+import { BrushTool } from "brush-tool.slint";
 import { PinEditor } from "pin-editor.slint";
 import { StatusBar } from "status-bar.slint";
 
@@ -54,6 +55,8 @@ export component AppWindow inherits Window {
                     Text { text: "Tools"; font-weight: 600; }
                     ToolButton { text: "Select and move pins"; tool: Tool.select; }
                     ToolButton { text: "Add point pin"; tool: Tool.add-pin; }
+                    ToolButton { text: "Heightmap brush"; tool: Tool.brush; }
+                    if AppState.tool == Tool.brush: BrushTool {}
                     LayersPanel {}
                 }
                 MapView {

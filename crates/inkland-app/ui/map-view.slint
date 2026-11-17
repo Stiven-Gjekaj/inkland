@@ -41,6 +41,16 @@ export component MapView inherits Rectangle {
         background: #d0302060;
     }
 
+    if AppState.tool == Tool.brush && AppState.pointer-in-map: Rectangle {
+        x: AppState.pointer-x - AppState.brush-view-radius;
+        y: AppState.pointer-y - AppState.brush-view-radius;
+        width: AppState.brush-view-radius * 2;
+        height: AppState.brush-view-radius * 2;
+        border-radius: AppState.brush-view-radius;
+        border-width: 1.5px;
+        border-color: AppState.brush-raise ? #c05010 : #1050c0;
+    }
+
     if AppState.generating: Rectangle {
         x: 8px;
         y: 8px;
@@ -66,6 +76,9 @@ export component MapView inherits Rectangle {
         }
         changed mouse-x => { Actions.pointer-move(self.mouse-x, self.mouse-y); }
         changed mouse-y => { Actions.pointer-move(self.mouse-x, self.mouse-y); }
+        changed has-hover => {
+            if !self.has-hover { Actions.pointer-exit(); }
+        }
         scroll-event(ev) => {
             Actions.scroll(self.mouse-x, self.mouse-y, ev.delta-y);
             accept

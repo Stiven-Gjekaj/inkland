@@ -92,6 +92,7 @@ enum Drag {
     None,
     Pan { last: [f64; 2] },
     Pin { id: String, start: [f64; 2] },
+    Brush { last: [f64; 2] },
 }
 
 struct State {
@@ -293,6 +294,8 @@ impl Controller {
             })
             .collect();
         g.set_pins(model(pins));
+        let radius = f64::from(g.get_brush_radius());
+        g.set_brush_view_radius((radius * page.scale * st.view.zoom) as f32);
     }
 
     /// Show the state of the editor: pins, selection, layers, variants,
@@ -323,6 +326,7 @@ impl Controller {
         ));
         g.set_variants(model(c.variants.iter().map(|v| s(&v.name)).collect()));
         g.set_variant_index(e.variant as i32);
+        g.set_brush_radius_max((c.frame.width.max(c.frame.height) / 4.0).max(2.0) as f32);
         let file = st
             .path
             .as_ref()
@@ -455,6 +459,24 @@ impl Controller {
         (w[0] >= 0.0 && w[1] >= 0.0 && w[0] <= f.width && w[1] <= f.height).then_some(w)
     }
 
+    fn brush_delta(&self) -> (f64, f64) {
+        let ui = self.ui();
+        let g = ui.global::<AppState>();
+        let strength = f64::from(g.get_brush_strength()).round();
+        let delta = if g.get_brush_raise() {
+            strength
+        } else {
+            -strength
+        };
+        (f64::from(g.get_brush_radius()), delta)
+    }
+
+    fn stroke(&self, at: [f64; 2]) {
+        let (radius, delta) = self.brush_delta();
+        let r = self.state.borrow_mut().editor.brush(at, radius, delta);
+        self.edited(r, &format!("brush at ({:.1}, {:.1})", at[0], at[1]));
+    }
+
     fn pointer_down(self: &Rc<Self>, p: [f64; 2], pan: bool) {
         let mut st = self.state.borrow_mut();
         if pan {
@@ -490,12 +512,23 @@ impl Controller {
                 };
                 self.edited(r.map(|_| ()), &what);
             }
+            Tool::Brush => {
+                let Some(at) = Self::world_at(&st, p) else {
+                    return;
+                };
+                st.drag = Drag::Brush { last: at };
+                drop(st);
+                self.stroke(at);
+            }
         }
     }
 
     fn pointer_move(self: &Rc<Self>, p: [f64; 2]) {
         let ui = self.ui();
         let g = ui.global::<AppState>();
+        g.set_pointer_x(p[0] as f32);
+        g.set_pointer_y(p[1] as f32);
+        g.set_pointer_in_map(true);
         let mut st = self.state.borrow_mut();
         // The status bar.
         if let Some(page) = Self::page(&st) {
@@ -531,6 +564,18 @@ impl Controller {
                 g.set_dragging_pin(moved);
                 g.set_drag_x(p[0] as f32);
                 g.set_drag_y(p[1] as f32);
+            }
+            Drag::Brush { last } => {
+                let last = *last;
+                let Some(at) = Self::world_at(&st, p) else {
+                    return;
+                };
+                let (radius, _) = self.brush_delta();
+                if distance(at, last) >= radius * 0.5 {
+                    st.drag = Drag::Brush { last: at };
+                    drop(st);
+                    self.stroke(at);
+                }
             }
         }
     }
@@ -684,6 +729,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let c = Rc::clone(&app);
     a.on_pointer_up(move |x, y| c.pointer_up(pt(x, y)));
     let c = Rc::clone(&app);
+    a.on_pointer_exit(move || c.ui().global::<AppState>().set_pointer_in_map(false));
+    let c = Rc::clone(&app);
     a.on_scroll(move |x, y, dy| c.scroll(pt(x, y), f64::from(dy)));
     let c = Rc::clone(&app);
     a.on_viewport_changed(move |w, h| {
@@ -760,6 +807,9 @@ fn main() -> Result<(), slint::PlatformError> {
     a.on_quit(|| {
         let _ = slint::quit_event_loop();
     });
+    // A change of the brush radius changes the outline in the view.
+    let c = Rc::clone(&app);
+    a.on_brush_changed(move || c.update_view());
 
     app.update_editor();
     match std::env::args_os().nth(1) {

@@ -1,7 +1,7 @@
 // The state that the Rust code gives to the user interface, and the
 // actions that the user interface sends to the Rust code.
 
-export enum Tool { select, add-pin }
+export enum Tool { select, add-pin, brush }
 
 // A point pin. `x` and `y` are its position in the map view.
 export struct PinRow {
@@ -40,6 +40,17 @@ export global AppState {
     in property <length> drag-y;
     in-out property <int> new-pin-kind;
 
+    // The brush: radius in config units, strength in height units.
+    in-out property <float> brush-radius: 20;
+    in property <float> brush-radius-max: 100;
+    in-out property <float> brush-strength: 10;
+    in-out property <bool> brush-raise: true;
+    // The brush radius in the map view, and the pointer position.
+    in property <length> brush-view-radius;
+    in property <length> pointer-x;
+    in property <length> pointer-y;
+    in property <bool> pointer-in-map;
+
     in property <string> status-position;
     in property <string> status-cell;
     in property <string> message;
@@ -52,9 +63,11 @@ export global Actions {
     callback pointer-down(length, length, bool);
     callback pointer-move(length, length);
     callback pointer-up(length, length);
+    callback pointer-exit();
     callback scroll(length, length, length);
     callback viewport-changed(length, length);
     callback fit();
+    callback brush-changed();
 
     callback select-variant(int);
     callback set-layer(string, bool);

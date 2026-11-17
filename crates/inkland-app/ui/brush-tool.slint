@@ -1,0 +1,28 @@
+// The settings of the heightmap brush.
+
+import { Slider, Switch, GroupBox } from "std-widgets.slint";
+import { AppState, Actions } from "globals.slint";
+
+export component BrushTool inherits GroupBox {
+    title: "Heightmap brush";
+    VerticalLayout {
+        spacing: 4px;
+        Text { text: "Radius: \{Math.round(AppState.brush-radius * 10) / 10} units"; }
+        Slider {
+            minimum: 1;
+            maximum: AppState.brush-radius-max;
+            value <=> AppState.brush-radius;
+            changed(v) => { Actions.brush-changed(); }
+        }
+        Text { text: "Strength: \{Math.round(AppState.brush-strength)}"; }
+        Slider {
+            minimum: 1;
+            maximum: 50;
+            value <=> AppState.brush-strength;
+        }
+        Switch {
+            text: AppState.brush-raise ? "Raise" : "Lower";
+            checked <=> AppState.brush-raise;
+        }
+    }
+}
