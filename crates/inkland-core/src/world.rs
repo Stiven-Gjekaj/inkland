@@ -97,8 +97,15 @@ impl World {
             add_site(p);
         }
         let mut grid_rng = Rand::new(tree.part_rng(Layer::Terrain, "grid"));
-        let (grid, site_cells) =
-            Grid::with_sites(w, h, cell_count(config) as u32, &sites, &mut grid_rng);
+        let (grid, site_cells) = Grid::generate(
+            w,
+            h,
+            cell_count(config) as u32,
+            config.world.lattice,
+            config.world.jitter,
+            &sites,
+            &mut grid_rng,
+        );
         let pin_cells: Vec<usize> = place_sites.iter().map(|&i| site_cells[i]).collect();
         let site_cells: BTreeMap<(u64, u64), usize> = site_index
             .into_iter()

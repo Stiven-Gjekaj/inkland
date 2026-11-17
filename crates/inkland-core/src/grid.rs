@@ -2,11 +2,14 @@
 //!
 //! The points are in rows, from the low y edge to the high y edge, and from
 //! the low x edge to the high x edge in each row. Thus `slot(x, y)` finds
-//! the cell near a position at once.
+//! the cell near a position at once. The lattice is square, hexagonal,
+//! diamond, or triangular, as in Azgaar's Fantasy Map Generator (FMG,
+//! `model/graph/lattice.ts`). Each lattice has rows of `cells_x` slots.
 //!
 //! A ring of boundary points outside the frame closes each cell. The edges
 //! between a real cell and a boundary point are outside the frame.
 
+use crate::config::Lattice;
 use crate::rand::Rand;
 use delaunator::{EMPTY, Point as DPoint, triangulate};
 
@@ -15,6 +18,22 @@ pub type Id = u32;
 
 /// Mark for a polygon edge that is next to a boundary point, not a cell.
 pub const OUTSIDE: Id = Id::MAX;
+
+/// The form of the lattice of a grid.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LatticeInfo {
+    pub kind: Lattice,
+    /// The jitter of the points, as a fraction of half the neighbor distance.
+    pub jitter: f64,
+    /// The side of a square with the mean area of a cell, in units.
+    pub spacing: f64,
+    /// Odd rows are this far right of even rows, in units.
+    pub row_offset: f64,
+    /// Triangle centres are this far from the middle of their row, in units.
+    pub triangle_shift: f64,
+    /// The distance between two neighbor lattice points, in units.
+    pub neighbor_distance: f64,
+}
 
 /// The grid of one world.
 #[derive(Debug, Clone, PartialEq)]
@@ -29,6 +48,8 @@ pub struct Grid {
     pub step_x: f64,
     /// Distance between rows, in units.
     pub step_y: f64,
+    /// The lattice of the grid points.
+    pub lattice: LatticeInfo,
     /// The site of each cell, in units.
     pub points: Vec<[f64; 2]>,
     /// The neighbor cells of each cell, in the order of its polygon edges.
@@ -44,22 +65,113 @@ pub struct Grid {
 }
 
 /// How far each point can move from its lattice position, as a fraction of
-/// the lattice step.
+/// the lattice step. This is the default of FMG.
 pub const JITTER: f64 = 0.9;
 
+const SQRT3: f64 = 1.732_050_807_568_877_2;
+
+impl LatticeInfo {
+    /// The lattice of a kind for a frame and a cell count. Return the
+    /// lattice, the column and row counts, and the column and row steps.
+    fn plan(
+        kind: Lattice,
+        jitter: f64,
+        width: f64,
+        height: f64,
+        cells: u32,
+    ) -> (Self, u32, u32, f64, f64) {
+        let spacing = libm::sqrt(width * height / f64::from(cells.max(1)));
+        let hex_side = libm::sqrt(2.0 / SQRT3);
+        // (dx, dy, row offset, triangle shift, neighbor distance), as in
+        // FMG `Lattice.computeSteps`.
+        let (dx, dy, row_offset, triangle_shift, neighbor_distance) = match kind {
+            Lattice::Square => {
+                let cells_x = ((width / spacing).round() as u32).max(2);
+                let cells_y = ((height / spacing).round() as u32).max(2);
+                let info = LatticeInfo {
+                    kind,
+                    jitter,
+                    spacing,
+                    row_offset: 0.0,
+                    triangle_shift: 0.0,
+                    neighbor_distance: spacing,
+                };
+                return (
+                    info,
+                    cells_x,
+                    cells_y,
+                    width / f64::from(cells_x),
+                    height / f64::from(cells_y),
+                );
+            }
+            Lattice::HexPointy => {
+                let dx = spacing * hex_side;
+                (dx, dx * SQRT3 / 2.0, dx / 2.0, 0.0, dx)
+            }
+            Lattice::HexFlat => {
+                let column = spacing * hex_side * SQRT3 / 2.0;
+                (
+                    column * 2.0,
+                    spacing * hex_side / 2.0,
+                    column,
+                    0.0,
+                    spacing * hex_side,
+                )
+            }
+            Lattice::Diamond => {
+                let half = spacing / core::f64::consts::SQRT_2;
+                (
+                    spacing * core::f64::consts::SQRT_2,
+                    half,
+                    half,
+                    0.0,
+                    spacing,
+                )
+            }
+            Lattice::Triangle => {
+                let side = spacing * libm::sqrt(4.0 / SQRT3);
+                let dy = side * SQRT3 / 2.0;
+                (side / 2.0, dy, 0.0, dy / 6.0, side / SQRT3)
+            }
+        };
+        let cells_x = (((width - row_offset / 2.0 + 0.5 * dx - 1e-10) / dx).floor() as u32).max(2);
+        let cells_y = (((height - triangle_shift + 0.5 * dy - 1e-10) / dy).floor() as u32).max(2);
+        let info = LatticeInfo {
+            kind,
+            jitter,
+            spacing,
+            row_offset,
+            triangle_shift,
+            neighbor_distance,
+        };
+        (info, cells_x, cells_y, dx, dy)
+    }
+
+    /// Even rows move left and odd rows move right by half the offset.
+    fn row_shift(&self, row: i64) -> f64 {
+        ((row & 1) as f64 - 0.5) * self.row_offset
+    }
+
+    /// Triangle centres are below the middle of an upward triangle and
+    /// above it in a downward one.
+    fn triangle_offset(&self, row: i64, col: i64) -> f64 {
+        if (row + col) & 1 == 1 {
+            -self.triangle_shift
+        } else {
+            self.triangle_shift
+        }
+    }
+}
+
 impl Grid {
-    /// Make a grid of about `cells` cells on a `width` x `height` frame.
+    /// Make a square grid of about `cells` cells on a `width` x `height`
+    /// frame.
     pub fn new(width: f64, height: f64, cells: u32, rng: &mut Rand) -> Grid {
         Self::with_sites(width, height, cells, &[], rng).0
     }
 
-    /// Make a grid in which each of `sites` is exactly the site of a cell.
-    /// Return the grid and the cell of each site.
-    ///
-    /// A site takes the lattice slot that contains it. If an earlier site
-    /// has that slot, the site takes the nearest free slot. The sites must
-    /// be different from each other. The random numbers do not depend on the
-    /// sites, so a new site does not move the other cells.
+    /// Make a square grid in which each of `sites` is exactly the site of a
+    /// cell. See `generate`.
     pub fn with_sites(
         width: f64,
         height: f64,
@@ -67,45 +179,126 @@ impl Grid {
         sites: &[[f64; 2]],
         rng: &mut Rand,
     ) -> (Grid, Vec<usize>) {
-        let spacing = (width * height / f64::from(cells.max(1))).sqrt();
-        let cells_x = ((width / spacing).round() as u32).max(2);
-        let cells_y = ((height / spacing).round() as u32).max(2);
-        let step_x = width / f64::from(cells_x);
-        let step_y = height / f64::from(cells_y);
+        Self::generate(width, height, cells, Lattice::Square, JITTER, sites, rng)
+    }
+
+    /// Make a grid on a lattice, in which each of `sites` is exactly the
+    /// site of a cell. Return the grid and the cell of each site.
+    ///
+    /// A site takes the lattice slot that contains it. If an earlier site
+    /// has that slot, the site takes the nearest free slot. The sites must
+    /// be different from each other. The random numbers do not depend on the
+    /// sites, so a new site does not move the other cells.
+    pub fn generate(
+        width: f64,
+        height: f64,
+        cells: u32,
+        kind: Lattice,
+        jitter: f64,
+        sites: &[[f64; 2]],
+        rng: &mut Rand,
+    ) -> (Grid, Vec<usize>) {
+        let (lattice, cells_x, cells_y, step_x, step_y) =
+            LatticeInfo::plan(kind, jitter, width, height, cells);
 
         let mut points = Vec::with_capacity((cells_x * cells_y) as usize);
+        // Two random numbers for each point, for each lattice.
+        let max_jitter = lattice.neighbor_distance / 2.0 * jitter;
         for row in 0..cells_y {
             for col in 0..cells_x {
-                let jx = (rng.unit() - 0.5) * JITTER * step_x;
-                let jy = (rng.unit() - 0.5) * JITTER * step_y;
+                if kind == Lattice::Square {
+                    let jx = (rng.unit() - 0.5) * jitter * step_x;
+                    let jy = (rng.unit() - 0.5) * jitter * step_y;
+                    points.push([
+                        (f64::from(col) + 0.5) * step_x + jx,
+                        (f64::from(row) + 0.5) * step_y + jy,
+                    ]);
+                    continue;
+                }
+                // Off the square lattice the neighbors are at an angle, so a
+                // point moves inside a circle.
+                let radius = max_jitter * libm::sqrt(rng.unit());
+                let angle = 2.0 * core::f64::consts::PI * rng.unit();
+                let (r, c) = (i64::from(row), i64::from(col));
+                let x = step_x / 2.0 + f64::from(col) * step_x + lattice.row_shift(r);
+                let y = step_y / 2.0 + f64::from(row) * step_y + lattice.triangle_offset(r, c);
                 points.push([
-                    (f64::from(col) + 0.5) * step_x + jx,
-                    (f64::from(row) + 0.5) * step_y + jy,
+                    (x + radius * libm::cos(angle)).clamp(0.0, width),
+                    (y + radius * libm::sin(angle)).clamp(0.0, height),
                 ]);
             }
         }
-        let slot_of = |x: f64, y: f64| -> (i64, i64) {
-            let col = ((x / step_x).floor() as i64).clamp(0, i64::from(cells_x) - 1);
-            let row = ((y / step_y).floor() as i64).clamp(0, i64::from(cells_y) - 1);
-            (col, row)
+        let mut grid = Grid {
+            width,
+            height,
+            cells_x,
+            cells_y,
+            step_x,
+            step_y,
+            lattice,
+            points: Vec::new(),
+            edge_cells: Vec::new(),
+            polygons: Vec::new(),
+            vertices: Vec::new(),
+            border: Vec::new(),
         };
         let mut taken = vec![false; points.len()];
         let mut site_cells = Vec::with_capacity(sites.len());
         for &site in sites {
-            let (col, row) = slot_of(site[0], site[1]);
+            let slot = grid.slot(site[0], site[1]);
+            let (col, row) = (
+                (slot % cells_x as usize) as i64,
+                (slot / cells_x as usize) as i64,
+            );
             let slot = nearest_free_slot(col, row, cells_x, cells_y, &taken)
                 .expect("a grid has more slots than pins");
             taken[slot] = true;
             points[slot] = site;
             site_cells.push(slot);
         }
-        (
-            Self::from_points(width, height, cells_x, cells_y, points),
-            site_cells,
-        )
+        let boundary = grid.boundary();
+        grid.set_points(points, &boundary);
+        (grid, site_cells)
     }
 
-    /// Make the cells of the given lattice points.
+    /// The boundary points of the lattice of the grid. A square lattice
+    /// with the default jitter has one ring of points one step outside each
+    /// edge. Other lattices have the lattice slots of two rings around the
+    /// frame that are not inside it, as in FMG `getLatticeRing`.
+    pub fn boundary(&self) -> Vec<[f64; 2]> {
+        let (w, h) = (self.width, self.height);
+        let (sx, sy) = (self.step_x, self.step_y);
+        let (cx, cy) = (i64::from(self.cells_x), i64::from(self.cells_y));
+        let mut ring = Vec::new();
+        if self.lattice.kind == Lattice::Square {
+            for col in -1..=cx {
+                let x = (col as f64 + 0.5) * sx;
+                ring.push([x, -sy]);
+                ring.push([x, h + sy]);
+            }
+            for row in 0..cy {
+                let y = (row as f64 + 0.5) * sy;
+                ring.push([-sx, y]);
+                ring.push([w + sx, y]);
+            }
+            return ring;
+        }
+        for row in -2..cy + 2 {
+            let inside = row >= 0 && row < cy;
+            let mut col = -2;
+            while col < cx + 2 {
+                let x = sx / 2.0 + col as f64 * sx + self.lattice.row_shift(row);
+                let y = sy / 2.0 + row as f64 * sy + self.lattice.triangle_offset(row, col);
+                if x <= 0.0 || y <= 0.0 || x >= w || y >= h {
+                    ring.push([x, y]);
+                }
+                col = if inside && col == -1 { cx } else { col + 1 };
+            }
+        }
+        ring
+    }
+
+    /// Make the cells of the given square lattice points.
     pub fn from_points(
         width: f64,
         height: f64,
@@ -113,28 +306,42 @@ impl Grid {
         cells_y: u32,
         points: Vec<[f64; 2]>,
     ) -> Grid {
-        let step_x = width / f64::from(cells_x);
-        let step_y = height / f64::from(cells_y);
-        let n = points.len();
+        let spacing = libm::sqrt(width * height / f64::from(cells_x * cells_y));
+        let mut grid = Grid {
+            width,
+            height,
+            cells_x,
+            cells_y,
+            step_x: width / f64::from(cells_x),
+            step_y: height / f64::from(cells_y),
+            lattice: LatticeInfo {
+                kind: Lattice::Square,
+                jitter: JITTER,
+                spacing,
+                row_offset: 0.0,
+                triangle_shift: 0.0,
+                neighbor_distance: spacing,
+            },
+            points: Vec::new(),
+            edge_cells: Vec::new(),
+            polygons: Vec::new(),
+            vertices: Vec::new(),
+            border: Vec::new(),
+        };
+        let boundary = grid.boundary();
+        grid.set_points(points, &boundary);
+        grid
+    }
 
-        // Boundary points: one lattice step outside each edge.
-        let mut all: Vec<DPoint> = points.iter().map(|p| DPoint { x: p[0], y: p[1] }).collect();
-        for col in -1..=(cells_x as i64) {
-            let x = (col as f64 + 0.5) * step_x;
-            all.push(DPoint { x, y: -step_y });
-            all.push(DPoint {
-                x,
-                y: height + step_y,
-            });
-        }
-        for row in 0..(cells_y as i64) {
-            let y = (row as f64 + 0.5) * step_y;
-            all.push(DPoint { x: -step_x, y });
-            all.push(DPoint {
-                x: width + step_x,
-                y,
-            });
-        }
+    /// Set the sites of the grid and make their Voronoi cells. The
+    /// boundary points close the cells at the frame edge.
+    pub fn set_points(&mut self, points: Vec<[f64; 2]>, boundary: &[[f64; 2]]) {
+        let n = points.len();
+        let all: Vec<DPoint> = points
+            .iter()
+            .chain(boundary)
+            .map(|p| DPoint { x: p[0], y: p[1] })
+            .collect();
 
         let t = triangulate(&all);
         let tri_count = t.triangles.len() / 3;
@@ -192,19 +399,11 @@ impl Grid {
             edge_cells.push(neighbors);
         }
 
-        Grid {
-            width,
-            height,
-            cells_x,
-            cells_y,
-            step_x,
-            step_y,
-            points,
-            edge_cells,
-            polygons,
-            vertices,
-            border,
-        }
+        self.points = points;
+        self.edge_cells = edge_cells;
+        self.polygons = polygons;
+        self.vertices = vertices;
+        self.border = border;
     }
 
     pub fn len(&self) -> usize {
@@ -225,8 +424,9 @@ impl Grid {
 
     /// The lattice slot that contains a position. The slot is a cell index.
     pub fn slot(&self, x: f64, y: f64) -> usize {
-        let col = ((x / self.step_x).floor() as i64).clamp(0, i64::from(self.cells_x) - 1);
         let row = ((y / self.step_y).floor() as i64).clamp(0, i64::from(self.cells_y) - 1);
+        let col = (((x - self.lattice.row_shift(row)) / self.step_x).floor() as i64)
+            .clamp(0, i64::from(self.cells_x) - 1);
         (row * i64::from(self.cells_x) + col) as usize
     }
 
@@ -422,5 +622,90 @@ mod tests {
     #[test]
     fn same_seed_gives_the_same_grid() {
         assert_eq!(grid(2000), grid(2000));
+    }
+
+    const LATTICES: [Lattice; 5] = [
+        Lattice::Square,
+        Lattice::HexPointy,
+        Lattice::HexFlat,
+        Lattice::Diamond,
+        Lattice::Triangle,
+    ];
+
+    fn lattice_grid(kind: Lattice, jitter: f64, sites: &[[f64; 2]]) -> (Grid, Vec<usize>) {
+        let mut rng = Rand::new(SeedTree::new(7).part_rng(Layer::Terrain, "grid"));
+        Grid::generate(400.0, 300.0, 3000, kind, jitter, sites, &mut rng)
+    }
+
+    #[test]
+    fn each_lattice_gives_closed_cells_near_the_wanted_count() {
+        for kind in LATTICES {
+            let (g, _) = lattice_grid(kind, JITTER, &[]);
+            let n = g.len() as f64;
+            assert!((n - 3000.0).abs() / 3000.0 < 0.05, "{kind:?}: {n}");
+            assert_eq!(g.len(), (g.cells_x * g.cells_y) as usize);
+            // Each slot covers the area of one cell.
+            let area = g.step_x * g.step_y;
+            assert!(
+                (area - g.lattice.spacing.powi(2)).abs() < 0.05 * area,
+                "{kind:?}"
+            );
+            for c in 0..g.len() {
+                let [x, y] = g.points[c];
+                assert!((0.0..=400.0).contains(&x) && (0.0..=300.0).contains(&y));
+                assert!(g.polygons[c].len() >= 3, "{kind:?} cell {c}");
+                for m in g.neighbors(c) {
+                    assert!(g.neighbors(m).any(|k| k == c), "{kind:?} {c} -> {m}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_regular_lattice_has_its_form() {
+        // Without jitter, an inner cell of a hexagon lattice has 6
+        // neighbors. (The points of the other lattices are on common
+        // circles, so their Delaunay edges are not unique.)
+        for (kind, want) in [(Lattice::HexPointy, 6), (Lattice::HexFlat, 6)] {
+            let (g, _) = lattice_grid(kind, 0.0, &[]);
+            let c = g.slot(200.0, 150.0);
+            assert_eq!(g.neighbors(c).count(), want, "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn the_slot_of_a_cell_site_is_near_the_cell() {
+        for kind in LATTICES {
+            let (g, _) = lattice_grid(kind, JITTER, &[]);
+            for c in (0..g.len()).step_by(7) {
+                let [x, y] = g.points[c];
+                let s = g.slot(x, y);
+                let d = ((g.points[s][0] - x).powi(2) + (g.points[s][1] - y).powi(2)).sqrt();
+                assert!(
+                    d <= 2.5 * g.lattice.neighbor_distance,
+                    "{kind:?} cell {c}: {d}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn sites_are_exact_on_each_lattice() {
+        let sites = [[120.0, 88.0], [120.5, 88.5], [0.0, 0.0], [400.0, 150.0]];
+        for kind in LATTICES {
+            let (g, cells) = lattice_grid(kind, JITTER, &sites);
+            for (site, &cell) in sites.iter().zip(&cells) {
+                assert_eq!(g.points[cell], *site, "{kind:?}");
+                assert_eq!(g.find_cell(site[0], site[1]), cell, "{kind:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_square_lattice_keeps_the_old_points() {
+        // The square lattice with the default jitter is the grid of `new`.
+        let (g, _) = lattice_grid(Lattice::Square, JITTER, &[]);
+        let mut rng = Rand::new(SeedTree::new(7).part_rng(Layer::Terrain, "grid"));
+        assert_eq!(g, Grid::new(400.0, 300.0, 3000, &mut rng));
     }
 }

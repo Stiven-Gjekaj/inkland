@@ -167,6 +167,18 @@ Label options.
 | `hide` | boolean |  | `false` | `true`: do not show the label. |
 | `size_pt` | number |  |  | Font size, in points. Default: the size of the label kind. |
 
+### Lattice
+
+The lattice of the points of the first grid.
+
+One of:
+
+- `"square"`: Rows and columns of squares.
+- `"hex-pointy"`: Hexagons with a point at the top. Odd rows move half a step.
+- `"hex-flat"`: Hexagons with a flat top.
+- `"diamond"`: Squares turned 45 degrees.
+- `"triangle"`: Triangles that point up and down in turn.
+
 ### LayerName
 
 Names of the map layers.
@@ -418,6 +430,8 @@ Generation options.
 | `climate` | [`Climate`](#climate) |  |  | Climate options. |
 | `culture_set` | string |  | `"european"` | Name of the culture set, for example `european`. |
 | `cultures` | integer |  | `6` | Number of cultures. |
+| `jitter` | number |  |  | How far each point of the first grid can move from its lattice position, as a fraction of half the distance between neighbor points. 0 to 0.9. 0 gives a regular lattice. |
+| `lattice` | [`Lattice`](#lattice) |  |  | The lattice of the points of the first grid: `square`, `hex-pointy`, `hex-flat`, `diamond`, or `triangle`. |
 | `places` | [`PlaceOptions`](#placeoptions) |  |  | Options for places that generation adds. |
 | `religions` | integer |  | `4` | Number of religions. |
 | `sea_level` | integer |  | `20` | Sea level on the height scale 0 to 100. Cells below it are water. |

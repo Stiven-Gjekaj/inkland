@@ -170,6 +170,13 @@ impl<'a> Validator<'a> {
                 format!("cells must be 1000 to 100000, found {}", w.cells),
             );
         }
+        if !(0.0..=0.9).contains(&w.jitter) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/jitter",
+                format!("jitter must be 0 to 0.9, found {}", w.jitter),
+            );
+        }
         if !(1..=99).contains(&w.sea_level) {
             self.err(
                 ErrorCode::ValueOutOfRange,

@@ -129,6 +129,16 @@ pub struct World {
     #[serde(default = "default_cells")]
     #[schemars(range(min = 1000, max = 100000))]
     pub cells: u32,
+    /// The lattice of the points of the first grid: `square`, `hex-pointy`,
+    /// `hex-flat`, `diamond`, or `triangle`.
+    #[serde(default, skip_serializing_if = "Lattice::is_square")]
+    pub lattice: Lattice,
+    /// How far each point of the first grid can move from its lattice
+    /// position, as a fraction of half the distance between neighbor
+    /// points. 0 to 0.9. 0 gives a regular lattice.
+    #[serde(default = "default_jitter", skip_serializing_if = "is_default_jitter")]
+    #[schemars(range(min = 0.0, max = 0.9))]
+    pub jitter: f64,
     /// Heightmap template: a template name, or a list of steps.
     #[serde(default)]
     pub template: Template,
@@ -180,6 +190,8 @@ impl Default for World {
     fn default() -> Self {
         Self {
             cells: default_cells(),
+            lattice: Lattice::default(),
+            jitter: default_jitter(),
             template: Template::default(),
             sea_level: default_sea_level(),
             climate: Climate::default(),
@@ -191,6 +203,29 @@ impl Default for World {
             places: PlaceOptions::default(),
             brushes: Vec::new(),
         }
+    }
+}
+
+/// The lattice of the points of the first grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Lattice {
+    /// Rows and columns of squares.
+    #[default]
+    Square,
+    /// Hexagons with a point at the top. Odd rows move half a step.
+    HexPointy,
+    /// Hexagons with a flat top.
+    HexFlat,
+    /// Squares turned 45 degrees.
+    Diamond,
+    /// Triangles that point up and down in turn.
+    Triangle,
+}
+
+impl Lattice {
+    pub fn is_square(&self) -> bool {
+        *self == Lattice::Square
     }
 }
 
@@ -903,6 +938,12 @@ fn default_unit_name() -> String {
 }
 fn default_cells() -> u32 {
     10_000
+}
+fn default_jitter() -> f64 {
+    0.9
+}
+fn is_default_jitter(v: &f64) -> bool {
+    *v == default_jitter()
 }
 fn default_sea_level() -> u8 {
     20
