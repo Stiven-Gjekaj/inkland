@@ -56,6 +56,7 @@ With more than one error, the exit code comes from the most basic fault:
 | `MAP_PARSE` | 2 | 0.1.0 | `inkland import` cannot read the map file: it is not text, gzip, or base64, or a record is missing or not valid. `details`: `record` (the record number, from 0), if a record is the cause. |
 | `MAP_VERSION` | 2 | 0.1.0 | `inkland import` cannot read maps of this version. `details`: `found`, `supported`. |
 | `WORLD_PARSE` | 2 | 0.1.0 | A world file is not a `world.json` of inkland, it has a format version that this version cannot read, or its config does not agree with its `world_hash`. |
+| `EDIT_SCRIPT_INVALID` | 2 | 0.1.0 | An edit script is not valid JSON, has a version other than 1, or has a command that `inkland edit` does not know. `details`: `line`, `column` for a JSON error. |
 | `PIN_OUTSIDE_FRAME` | 3 | 0.1.0 | A pin, a crop, or an overlay item is outside the frame. |
 | `PIN_IN_FORCED_SEA` | 3 | 0.1.0 | A place is inside a `sea` or `lake` region. `details`: `region`. |
 | `PIN_SAME_POSITION` | 3 | 0.1.0 | Two point pins have the same position. Each place needs its own cell. `details`: `other`. |

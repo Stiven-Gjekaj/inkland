@@ -11,3 +11,12 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+inkland-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

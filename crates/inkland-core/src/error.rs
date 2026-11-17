@@ -99,6 +99,8 @@ codes! {
         /// A world file is not a `world.json` of inkland, or its config does
         /// not agree with its hash.
         WorldParse = "WORLD_PARSE" => InvalidConfig,
+        /// An edit script is not valid JSON, or a command in it is unknown.
+        EditScriptInvalid = "EDIT_SCRIPT_INVALID" => InvalidConfig,
         /// A pin or a crop is outside the frame.
         PinOutsideFrame = "PIN_OUTSIDE_FRAME" => Infeasible,
         /// A point pin is in a `sea` or `lake` region.

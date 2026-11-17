@@ -681,6 +681,13 @@ dependencies = [
 [[package]]
 name = "inkland-edit"
 version = "0.1.0"
+dependencies = [
+ "inkland-core",
+ "proptest",
+ "schemars",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "inkland-io"

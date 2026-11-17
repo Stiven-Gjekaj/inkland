@@ -16,6 +16,7 @@ inkland-core = { path = "crates/inkland-core" }
 inkland-constraints = { path = "crates/inkland-constraints" }
 inkland-io = { path = "crates/inkland-io" }
 inkland-render = { path = "crates/inkland-render" }
+inkland-edit = { path = "crates/inkland-edit" }
 inkland = { path = "crates/inkland" }
 rand_chacha = "0.10"
 rand_core = "0.10"
