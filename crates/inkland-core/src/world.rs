@@ -47,6 +47,8 @@ pub struct World {
     pub roads: Vec<crate::roads::Road>,
     /// Names and groups of rivers, islands, and lakes.
     pub names: crate::geonames::Names,
+    /// Folk and organized religions.
+    pub religions: crate::religions::Religions,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -215,6 +217,14 @@ impl World {
             river_threshold: river_threshold(grid.len()),
             society: &society,
         });
+        let religions = crate::religions::build(&crate::religions::Input {
+            config,
+            grid: &grid,
+            heights: &heights,
+            sea_level,
+            features: &features,
+            society: &society,
+        });
         let roads = crate::roads::build(&crate::roads::Input {
             config,
             grid: &grid,
@@ -245,6 +255,7 @@ impl World {
             society,
             roads,
             names,
+            religions,
         })
     }
 

@@ -19,6 +19,7 @@ pub mod names;
 pub mod num;
 pub mod overlay;
 pub mod rand;
+pub mod religions;
 pub mod rivers;
 pub mod roads;
 pub mod seed;
