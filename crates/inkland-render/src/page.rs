@@ -67,6 +67,17 @@ impl Page {
         [x, y]
     }
 
+    /// A page point, in mm, in the world.
+    pub fn to_world(&self, q: [f64; 2]) -> [f64; 2] {
+        let x = self.view[0] + (q[0] - self.ox) / self.scale;
+        let y = if self.flip_y {
+            self.view[3] - (q[1] - self.oy) / self.scale
+        } else {
+            self.view[1] + (q[1] - self.oy) / self.scale
+        };
+        [x, y]
+    }
+
     /// The map area on the page: `[x, y, width, height]` in mm.
     pub fn map_rect(&self) -> [f64; 4] {
         [
@@ -116,6 +127,16 @@ mod tests {
         // y = 0 is the top of the page with top-left, the bottom with bottom-left.
         assert!(a.to_page([0.0, 0.0])[1] < a.to_page([0.0, 300.0])[1]);
         assert!(b.to_page([0.0, 0.0])[1] > b.to_page([0.0, 300.0])[1]);
+    }
+
+    #[test]
+    fn to_world_inverts_to_page() {
+        for origin in ["top-left", "bottom-left"] {
+            let c = config(origin);
+            let p = Page::new(&c, &c.variants[0]);
+            let w = p.to_world(p.to_page([123.0, 45.0]));
+            assert!((w[0] - 123.0).abs() < 1e-9 && (w[1] - 45.0).abs() < 1e-9);
+        }
     }
 
     #[test]
