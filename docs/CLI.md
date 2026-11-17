@@ -114,7 +114,7 @@ inkland export --world out/world.json --format geojson --layers coast,rivers,roa
 |---|---|
 | `--world FILE` | The `world.json` of a generated world. |
 | `--format geojson` | The format. Only `geojson`. |
-| `--layers LIST` | The layers, separated by commas: `coast`, `rivers`, `regions`, `roads`, `places`, `borders`. Default: all. |
+| `--layers LIST` | The layers, separated by commas: `coast`, `rivers`, `regions`, `sea_routes`, `roads`, `places`, `markers`, `borders`. Default: all. |
 
 The coordinates are config units of the frame with 3 decimals, not WGS84.
 `crs` is `inkland:local`. Each feature has `layer`, an id, and, where they
