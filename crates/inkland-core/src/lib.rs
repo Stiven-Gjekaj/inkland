@@ -15,6 +15,7 @@ pub mod grid;
 pub mod heightmap;
 pub mod names;
 pub mod num;
+pub mod overlay;
 pub mod rand;
 pub mod rivers;
 pub mod roads;

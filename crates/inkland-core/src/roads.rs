@@ -51,6 +51,8 @@ pub struct Road {
     pub id: u32,
     /// The index of the pinned road in the config.
     pub pin: Option<usize>,
+    /// The id of a road that an overlay adds.
+    pub overlay: Option<String>,
     pub kind: RoadKind,
     pub cells: Vec<usize>,
     pub points: Vec<[f64; 2]>,
@@ -228,7 +230,7 @@ pub fn build(input: &Input) -> Result<Vec<Road>, Error> {
     };
 
     for (k, pin) in input.config.pins.roads.iter().enumerate() {
-        let cells = route_pinned(&router, input, k, pin, &place_cell)?;
+        let cells = route_pinned(&router, input, format!("/pins/roads/{k}"), pin, &place_cell)?;
         for &c in &cells {
             router.used[c] = true;
         }
@@ -317,6 +319,63 @@ pub fn build(input: &Input) -> Result<Vec<Road>, Error> {
     Ok(roads)
 }
 
+/// Route more roads on a finished world, for example the roads of an
+/// overlay. They reuse the cells of the `existing` roads at a lower cost.
+/// `path` is the JSON Pointer of the list of roads, for errors. Each road
+/// gets its config id in `overlay`.
+pub fn route_more(
+    input: &Input,
+    existing: &[Road],
+    roads: &[RoadPin],
+    path: &str,
+) -> Result<Vec<Road>, Error> {
+    let n = input.grid.len();
+    let mut river_of = vec![0u32; n];
+    for r in input.rivers {
+        for &c in &r.cells {
+            river_of[c] = r.id;
+        }
+    }
+    let mut used = vec![false; n];
+    for r in existing {
+        for &c in &r.cells {
+            used[c] = true;
+        }
+    }
+    let mut router = Router {
+        input,
+        river_of,
+        used,
+        distance_only: false,
+    };
+    let place_cell = |id: &str| -> Option<usize> {
+        input
+            .society
+            .places
+            .iter()
+            .find(|p| p.pin.as_deref() == Some(id))
+            .map(|p| p.cell)
+    };
+    let mut out = Vec::new();
+    for (k, pin) in roads.iter().enumerate() {
+        let cells = route_pinned(&router, input, format!("{path}/{k}"), pin, &place_cell)?;
+        for &c in &cells {
+            router.used[c] = true;
+        }
+        let mut road = finish(
+            input,
+            &router.river_of,
+            (existing.len() + out.len()) as u32 + 1,
+            None,
+            pin.kind,
+            cells,
+        );
+        road.overlay = Some(pin.id.clone());
+        out.push(road);
+    }
+    Ok(out)
+}
+
 /// The edges of a shortest tree (Kruskal) over points, by distance.
 fn shortest_tree(grid: &Grid, cells: &[usize]) -> Vec<(usize, usize)> {
     let mut edges: Vec<(f64, usize, usize)> = Vec::new();
@@ -349,12 +408,11 @@ fn shortest_tree(grid: &Grid, cells: &[usize]) -> Vec<(usize, usize)> {
 fn route_pinned(
     router: &Router,
     input: &Input,
-    k: usize,
+    path: String,
     pin: &RoadPin,
     place_cell: &dyn Fn(&str) -> Option<usize>,
 ) -> Result<Vec<usize>, Error> {
     let grid = input.grid;
-    let path = format!("/pins/roads/{k}");
     let no_path = || {
         Error::new(
             ErrorCode::RoadNoPath,
@@ -588,6 +646,7 @@ fn finish(
     Road {
         id,
         pin,
+        overlay: None,
         kind,
         cells,
         points,
