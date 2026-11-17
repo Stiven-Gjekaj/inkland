@@ -83,9 +83,6 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
     };
     let p = &config.pins;
     let mut not_yet = Vec::new();
-    if !p.rivers.is_empty() {
-        not_yet.push(later("/pins/rivers", "pinned rivers", 4));
-    }
     if !p.roads.is_empty() {
         not_yet.push(later("/pins/roads", "pinned roads", 6));
     }
@@ -232,6 +229,32 @@ mod tests {
         assert_eq!(pins["points"][0]["land"], true);
         assert_eq!(pins["regions"][0]["in_range"], true);
         assert!(pins["regions"][0]["cells"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn report_gives_each_pinned_river() {
+        let c = config(json!({
+            "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": "pangea" },
+            "pins": {
+                "points": [{ "id": "ford", "kind": "village", "at": [150, 150] }],
+                "regions": [
+                    { "id": "sea", "kind": "sea", "box": [0, 0, 20, 300] },
+                    { "id": "peaks", "kind": "mountains", "box": [260, 100, 320, 200] }
+                ],
+                "rivers": [{ "id": "brann", "name": "Brann", "source": { "region": "peaks" },
+                             "through": [{ "place": "ford" }], "mouth": [10, 150] }]
+            }
+        }));
+        let out = generate(&c, None).unwrap();
+        let r = &out.variants[0].report["pins"]["rivers"][0];
+        assert_eq!(r["id"], "brann");
+        assert_eq!(r["through_ok"], true);
+        assert_eq!(r["max_deviation"], 0.0);
+        assert_eq!(r["downhill"], true);
+        assert_eq!(r["mouth"]["at"], json!([10.0, 150.0]));
+        assert!(r["length"].as_f64().unwrap() > 140.0);
+        assert!(out.variants[0].svg.contains("id=\"river-brann\""));
     }
 
     #[test]

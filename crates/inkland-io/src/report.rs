@@ -78,11 +78,12 @@ pub fn variant_report(
                 "island": count(FeatureKind::Island),
             },
             "coastlines": world.coastlines.len(),
+            "rivers": world.rivers.len(),
         },
         "pins": {
             "points": point_pins(world, config),
             "regions": region_pins(world, config),
-            "rivers": [],
+            "rivers": river_pins(world, config),
             "roads": [],
         },
         "labels": { "placed": 0, "unplaced": [] },
@@ -165,4 +166,86 @@ fn region_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde
             })
         })
         .collect()
+}
+
+/// The report of each pinned river: its anchors, its course, and its
+/// length in units.
+fn river_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
+    use inkland_core::config::Anchor;
+    use inkland_core::geom::Shape;
+    use inkland_core::num::round;
+    use inkland_core::rivers::{Mouth, NONE};
+    let place_at = |id: &str| config.pins.points.iter().find(|p| p.id == id).map(|p| p.at);
+    config
+        .pins
+        .rivers
+        .iter()
+        .enumerate()
+        .map(|(k, pin)| {
+            let Some(river) = world.rivers.iter().find(|r| r.course == Some(k)) else {
+                return serde_json::json!({ "id": pin.id, "found": false });
+            };
+            // The distance from each point or place anchor to the nearest
+            // point of the line, and whether the course enters each region.
+            let mut max_dev: f64 = 0.0;
+            let mut through_ok = true;
+            for a in &pin.through {
+                match a {
+                    Anchor::Point(p) => max_dev = max_dev.max(nearest(&river.points, *p)),
+                    Anchor::Place(r) => {
+                        if let Some(p) = place_at(&r.place) {
+                            max_dev = max_dev.max(nearest(&river.points, p));
+                        }
+                    }
+                    Anchor::Region(r) => {
+                        let shape = config
+                            .pins
+                            .regions
+                            .iter()
+                            .find(|g| g.id == r.region)
+                            .and_then(Shape::of);
+                        let enters = shape.is_some_and(|s| {
+                            river
+                                .cells
+                                .iter()
+                                .any(|&c| s.contains(world.grid.points[c]))
+                        });
+                        through_ok &= enters;
+                    }
+                }
+            }
+            through_ok &= max_dev == 0.0;
+            let e = &world.drainage.elevation;
+            let mut downhill = river.cells.windows(2).all(|w| e[w[1]] < e[w[0]]);
+            let last = *river.cells.last().expect("a river has cells");
+            let r = world.drainage.receiver[last];
+            if r != NONE {
+                downhill &= e[r] < e[last];
+            }
+            let mouth = match river.mouth {
+                Mouth::Water(_) => "water",
+                Mouth::Join(_) => "join",
+                Mouth::Sink => "sink",
+            };
+            let end = river.points[river.points.len() - 1];
+            serde_json::json!({
+                "id": pin.id,
+                "found": true,
+                "source": [round(river.points[0][0], 3), round(river.points[0][1], 3)],
+                "mouth": { "kind": mouth, "at": [round(end[0], 3), round(end[1], 3)] },
+                "through_ok": through_ok,
+                "max_deviation": round(max_dev, 3),
+                "downhill": downhill,
+                "length": round(river.length, 3),
+                "cells": river.cells.len(),
+            })
+        })
+        .collect()
+}
+
+fn nearest(points: &[[f64; 2]], p: [f64; 2]) -> f64 {
+    points
+        .iter()
+        .map(|q| ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt())
+        .fold(f64::INFINITY, f64::min)
 }
