@@ -13,5 +13,6 @@ pub mod grid;
 pub mod heightmap;
 pub mod num;
 pub mod rand;
+pub mod rivers;
 pub mod seed;
 pub mod world;
