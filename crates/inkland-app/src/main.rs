@@ -82,6 +82,10 @@ const IMPLEMENTED: &[&str] = &[
     "variants",
     "labels",
     "units",
+    "states",
+    "cultures",
+    "religions",
+    "provinces",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -1154,6 +1158,24 @@ impl Controller {
             l.set_selected_label(s(""));
             l.set_label_hide(false);
             l.set_label_size(s(""));
+        }
+        match world {
+            Some(w) => {
+                l.set_states(table(rows::state_rows(w)));
+                l.set_cultures(table(rows::culture_rows(w)));
+                l.set_religions(table(rows::religion_rows(w)));
+                l.set_provinces(table(rows::province_rows(w)));
+            }
+            None => {
+                for set in [
+                    Lists::set_states,
+                    Lists::set_cultures,
+                    Lists::set_religions,
+                    Lists::set_provinces,
+                ] {
+                    set(&l, table(Vec::new()));
+                }
+            }
         }
         l.set_rivers(table(rows::river_rows(c, world)));
         let sel = l.get_selected_river();

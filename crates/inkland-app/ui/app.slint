@@ -17,6 +17,7 @@ import { SubmapDialog } from "dialogs/submap.slint";
 import { VariantsDialog } from "dialogs/variants.slint";
 import { LabelsDialog } from "dialogs/labels.slint";
 import { UnitsDialog } from "dialogs/units.slint";
+import { SocietyDialog } from "dialogs/society.slint";
 
 export { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts, Theme }
 
@@ -110,6 +111,38 @@ export component AppWindow inherits Window {
         if Dialogs.variants: VariantsDialog {}
         if Dialogs.labels: LabelsDialog {}
         if Dialogs.units: UnitsDialog {}
+        if Dialogs.states: SocietyDialog {
+            id: "states";
+            title: "States Editor";
+            pos-y: 60px;
+            header: ["State", "Capital", "Culture", "Cells", "Burgs"];
+            widths: [130px, 100px, 90px, 50px, 40px];
+            rows: Lists.states;
+        }
+        if Dialogs.cultures: SocietyDialog {
+            id: "cultures";
+            title: "Cultures Editor";
+            pos-y: 80px;
+            header: ["Culture", "Cells", "Burgs"];
+            widths: [200px, 60px, 60px];
+            rows: Lists.cultures;
+        }
+        if Dialogs.religions: SocietyDialog {
+            id: "religions";
+            title: "Religions Editor";
+            pos-y: 100px;
+            header: ["Religion", "Type", "Culture", "Cells"];
+            widths: [150px, 70px, 110px, 50px];
+            rows: Lists.religions;
+        }
+        if Dialogs.provinces: SocietyDialog {
+            id: "provinces";
+            title: "Provinces Editor";
+            pos-y: 120px;
+            header: ["Province", "State", "Seat", "Cells"];
+            widths: [140px, 110px, 100px, 50px];
+            rows: Lists.provinces;
+        }
     }
 
     public function focus-keys() {

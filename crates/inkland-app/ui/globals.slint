@@ -224,6 +224,11 @@ export global Lists {
     in-out property <string> selected-label;
     in property <bool> label-hide;
     in-out property <string> label-size;
+    // The society of the shown world. Read only.
+    in property <[TableRow]> states;
+    in property <[TableRow]> cultures;
+    in property <[TableRow]> religions;
+    in property <[TableRow]> provinces;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their
@@ -284,6 +289,10 @@ export global Dialogs {
     in-out property <bool> variants;
     in-out property <bool> labels;
     in-out property <bool> units;
+    in-out property <bool> states;
+    in-out property <bool> cultures;
+    in-out property <bool> religions;
+    in-out property <bool> provinces;
     in-out property <bool> print;
 
     public function open(id: string) {
@@ -296,6 +305,10 @@ export global Dialogs {
         if id == "variants" { self.variants = true; }
         if id == "labels" { self.labels = true; }
         if id == "units" { self.units = true; }
+        if id == "states" { self.states = true; }
+        if id == "cultures" { self.cultures = true; }
+        if id == "religions" { self.religions = true; }
+        if id == "provinces" { self.provinces = true; }
         Actions.selection-changed();
         if id == "print" { self.print = true; }
     }
@@ -310,6 +323,10 @@ export global Dialogs {
         if id == "variants" { self.variants = false; }
         if id == "labels" { self.labels = false; }
         if id == "units" { self.units = false; }
+        if id == "states" { self.states = false; }
+        if id == "cultures" { self.cultures = false; }
+        if id == "religions" { self.religions = false; }
+        if id == "provinces" { self.provinces = false; }
         Actions.selection-changed();
         if id == "print" { self.print = false; }
     }
@@ -324,6 +341,10 @@ export global Dialogs {
         self.variants = false;
         self.labels = false;
         self.units = false;
+        self.states = false;
+        self.cultures = false;
+        self.religions = false;
+        self.provinces = false;
         Actions.selection-changed();
         self.print = false;
     }
