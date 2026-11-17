@@ -2,6 +2,10 @@
 //!
 //! Usage: `inkland-app [CONFIG.json]`.
 //!
+//! With the environment variable `INKLAND_APP_SNAPSHOT=FILE.png`, the app
+//! writes an image of its window to the file when the first map shows, and
+//! stops. This is a check that the app starts and draws a map.
+//!
 //! The app edits a config with the commands of `inkland::History`, makes the
 //! world again on a worker thread, and shows the SVG of the selected
 //! variant. A second worker thread renders the SVG for the map view.
@@ -122,6 +126,8 @@ struct Controller {
     rasterizer: Worker<RasterJob>,
     results: Receiver<Msg>,
     idle: slint::Timer,
+    /// The file for the window image of `INKLAND_APP_SNAPSHOT`.
+    snapshot: RefCell<Option<PathBuf>>,
 }
 
 fn s(text: impl AsRef<str>) -> SharedString {
@@ -397,6 +403,9 @@ impl Controller {
                     g.set_map_image(slint::Image::from_rgba8(pixels));
                     g.set_has_map(true);
                     self.update_view();
+                    if !g.get_generating() {
+                        self.snapshot_soon();
+                    }
                 }
             }
         }
@@ -481,6 +490,32 @@ impl Controller {
                 self.rerender();
             }
         }
+    }
+
+    /// Write the window image of `INKLAND_APP_SNAPSHOT` a short time after
+    /// the first map shows, then stop the app.
+    fn snapshot_soon(self: &Rc<Self>) {
+        let Some(path) = self.snapshot.borrow_mut().take() else {
+            return;
+        };
+        let me = Rc::clone(self);
+        slint::Timer::single_shot(Duration::from_millis(500), move || {
+            let result = me
+                .ui()
+                .window()
+                .take_snapshot()
+                .map_err(|e| e.to_string())
+                .and_then(|shot| {
+                    let (w, h) = (shot.width(), shot.height());
+                    inkland_render::png::rgba_to_png(shot.as_bytes().to_vec(), w, h)
+                })
+                .and_then(|png| std::fs::write(&path, png).map_err(|e| e.to_string()));
+            match result {
+                Ok(()) => eprintln!("inkland-app: wrote {}", path.display()),
+                Err(e) => eprintln!("inkland-app: cannot write the snapshot: {e}"),
+            }
+            let _ = slint::quit_event_loop();
+        });
     }
 
     /// The pin under a screen point.
@@ -761,6 +796,7 @@ fn main() -> Result<(), slint::PlatformError> {
         rasterizer,
         results,
         idle: slint::Timer::default(),
+        snapshot: RefCell::new(std::env::var_os("INKLAND_APP_SNAPSHOT").map(PathBuf::from)),
     });
 
     let a = ui.global::<Actions>();
