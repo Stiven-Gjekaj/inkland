@@ -123,9 +123,10 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
     let nearest_river = world
         .rivers
         .iter()
-        .filter_map(|r| nearest_on_line(&r.points, p).map(|(d, i)| (d, i, r)))
+        .enumerate()
+        .filter_map(|(k, r)| nearest_on_line(&r.points, p).map(|(d, i)| (d, i, r, k)))
         .min_by(|a, b| a.0.total_cmp(&b.0).then(a.2.id.cmp(&b.2.id)))
-        .map(|(d, i, r)| {
+        .map(|(d, i, r, k)| {
             let side = if d == 0.0 {
                 "on"
             } else {
@@ -135,7 +136,8 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
             json!({
                 "id": r.id,
                 "pin": pin.map(|x| x.id.clone()),
-                "name": pin.and_then(|x| x.name.clone()),
+                "name": world.names.rivers.get(k).map(|n| n.name.clone()),
+                "type": world.names.rivers.get(k).map(|n| n.kind),
                 "distance": round(d, 3),
                 "side": side,
                 "length": round(r.length, 3),
@@ -183,7 +185,15 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
         "height": world.heights[c],
         "sea_level": world.sea_level,
         "height_above_sea": world.heights[c] - world.sea_level,
-        "feature": feature.map(|f| json!({ "id": f.id, "kind": f.kind.name() })),
+        "feature": feature.map(|f| {
+            let n = world.names.features.iter().find(|n| n.id == f.id);
+            json!({
+                "id": f.id,
+                "kind": f.kind.name(),
+                "group": n.map(|n| n.group),
+                "name": n.and_then(|n| n.name.clone()),
+            })
+        }),
         "biome": inkland_core::biomes::NAMES[world.biomes[c] as usize],
         "temperature_c": round(world.temperature[c], 3),
         "precipitation": round(world.precipitation[c], 3),
@@ -226,6 +236,8 @@ mod tests {
         assert!(q["culture"]["id"].as_u64().unwrap() > 0);
         assert!(q["nearest_river"]["side"].is_string());
         assert!(q["biome"].is_string());
+        assert!(q["nearest_river"]["name"].is_string());
+        assert!(q["feature"]["group"].is_string());
     }
 
     #[test]

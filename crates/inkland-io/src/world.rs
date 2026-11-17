@@ -44,13 +44,15 @@ pub fn world_value(world: &World, config: &Config) -> Value {
         "precipitation": world.precipitation.iter().map(|&p| p as u32).collect::<Vec<_>>(),
         "flux": world.drainage.flux.iter().map(|&f| round(f, 3)).collect::<Vec<_>>(),
         "biomes": world.biomes.iter().map(|&b| inkland_core::biomes::NAMES[b as usize]).collect::<Vec<_>>(),
-        "features": world.features.list.iter().map(|f| json!({
+        "features": world.features.list.iter().zip(&world.names.features).map(|(f, n)| json!({
             "id": f.id,
             "kind": f.kind.name(),
+            "group": n.group,
+            "name": n.name,
             "cells": f.cells,
             "border": f.border,
         })).collect::<Vec<_>>(),
-        "rivers": world.rivers.iter().map(|r| river_value(r, config)).collect::<Vec<_>>(),
+        "rivers": world.rivers.iter().zip(&world.names.rivers).map(|(r, n)| river_value(r, n, config)).collect::<Vec<_>>(),
         "roads": world.roads.iter().map(|r| json!({
             "id": r.id,
             "pin": r.pin.map(|k| config.pins.roads[k].id.clone()),
@@ -104,7 +106,11 @@ pub fn world_value(world: &World, config: &Config) -> Value {
 }
 
 /// The JSON value of one river.
-fn river_value(r: &inkland_core::rivers::River, config: &Config) -> Value {
+fn river_value(
+    r: &inkland_core::rivers::River,
+    name: &inkland_core::geonames::RiverName,
+    config: &Config,
+) -> Value {
     use inkland_core::rivers::Mouth;
     let pin = r.course.map(|k| &config.pins.rivers[k]);
     let mouth = match r.mouth {
@@ -115,7 +121,8 @@ fn river_value(r: &inkland_core::rivers::River, config: &Config) -> Value {
     json!({
         "id": r.id,
         "pin": pin.map(|p| p.id.clone()),
-        "name": pin.and_then(|p| p.name.clone()),
+        "name": name.name,
+        "type": name.kind,
         "parent": r.parent,
         "mouth": mouth,
         "flux": round(r.flux, 3),

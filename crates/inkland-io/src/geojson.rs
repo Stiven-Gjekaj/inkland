@@ -86,7 +86,7 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
         }
     }
     if has("rivers") {
-        for r in &world.rivers {
+        for (r, n) in world.rivers.iter().zip(&world.names.rivers) {
             let pin = r.course.map(|k| &config.pins.rivers[k]);
             features.push(feature(
                 json!({ "type": "LineString", "coordinates": line(&r.points) }),
@@ -94,7 +94,8 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
                     "layer": "rivers",
                     "id": r.id,
                     "pin": pin.map(|p| p.id.clone()),
-                    "name": pin.and_then(|p| p.name.clone()),
+                    "name": n.name,
+                    "type": n.kind,
                     "length": round(r.length, 3),
                     "flux": round(r.flux, 3),
                     "parent": r.parent,
