@@ -102,6 +102,24 @@ pub fn config_hash(config: &Config) -> String {
     format!("sha256:{hex}")
 }
 
+/// The part of a config that makes the world: the config without its
+/// overlays, variants, render options, and font directories.
+pub fn world_config(config: &Config) -> Config {
+    Config {
+        overlays: Default::default(),
+        variants: Vec::new(),
+        render: Default::default(),
+        font_dirs: Vec::new(),
+        ..config.clone()
+    }
+}
+
+/// The hash of the part of a config that makes the world. A change to an
+/// overlay, a variant, or a render option does not change it.
+pub fn world_hash(config: &Config) -> String {
+    config_hash(&world_config(config))
+}
+
 fn pointer_of(path: &serde_path_to_error::Path) -> String {
     use serde_path_to_error::Segment;
     let mut out = String::new();

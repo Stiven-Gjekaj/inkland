@@ -16,14 +16,16 @@ fn point(p: [f64; 2]) -> Value {
     json!([round(p[0], 3), round(p[1], 3)])
 }
 
-/// The JSON value of a world.
-pub fn world_value(world: &World, config: &Config, config_hash: &str) -> Value {
+/// The JSON value of a world. `world_hash` is the hash of the part of the
+/// config that makes the world, so the value does not change when only an
+/// overlay, a variant, or a render option changes.
+pub fn world_value(world: &World, config: &Config) -> Value {
     let g = &world.grid;
     json!({
         "format": FORMAT,
         "format_version": FORMAT_VERSION,
         "tool": { "name": "inkland", "version": env!("CARGO_PKG_VERSION") },
-        "config_hash": config_hash,
+        "world_hash": crate::config::world_hash(config),
         "seed": world.seed,
         "units": config.units.name,
         "frame": config.frame,
@@ -121,8 +123,8 @@ fn river_value(r: &inkland_core::rivers::River, config: &Config) -> Value {
 }
 
 /// The text of `world.json`: compact JSON and one newline at the end.
-pub fn world_json(world: &World, config: &Config, config_hash: &str) -> String {
-    let mut s = serde_json::to_string(&world_value(world, config, config_hash))
+pub fn world_json(world: &World, config: &Config) -> String {
+    let mut s = serde_json::to_string(&world_value(world, config))
         .expect("a world always converts to JSON");
     s.push('\n');
     s
@@ -144,7 +146,7 @@ mod tests {
     fn world_json_has_each_cell_and_rounded_points() {
         let c = config();
         let w = World::build(&c).unwrap();
-        let v = world_value(&w, &c, "sha256:x");
+        let v = world_value(&w, &c);
         assert_eq!(v["format"], FORMAT);
         assert_eq!(v["heights"].as_array().unwrap().len(), w.grid.len());
         assert_eq!(v["grid"]["points"].as_array().unwrap().len(), w.grid.len());
@@ -155,9 +157,24 @@ mod tests {
     #[test]
     fn world_json_is_the_same_text_for_the_same_config() {
         let c = config();
-        let a = world_json(&World::build(&c).unwrap(), &c, "h");
-        let b = world_json(&World::build(&c).unwrap(), &c, "h");
+        let a = world_json(&World::build(&c).unwrap(), &c);
+        let b = world_json(&World::build(&c).unwrap(), &c);
         assert_eq!(a, b);
         assert!(a.ends_with("}\n"));
+    }
+
+    #[test]
+    fn world_json_does_not_change_with_overlays_variants_or_render() {
+        let c = config();
+        let a = world_json(&World::build(&c).unwrap(), &c);
+        let mut d = c.clone();
+        d.overlays.insert("then".into(), Default::default());
+        d.render.min_line_width_pt = 1.0;
+        d.variants[0].crop = Some([0.0, 0.0, 50.0, 40.0]);
+        d.font_dirs.push("fonts".into());
+        assert_eq!(world_json(&World::build(&d).unwrap(), &d), a);
+        let mut e = c.clone();
+        e.seed += 1;
+        assert_ne!(crate::config::world_hash(&e), crate::config::world_hash(&c));
     }
 }

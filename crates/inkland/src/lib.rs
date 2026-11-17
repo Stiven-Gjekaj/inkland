@@ -113,7 +113,7 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
     let world = inkland_core::world::World::build(config).map_err(|e| vec![e])?;
     let hash = config_hash(config);
     Ok(Output {
-        world_json: inkland_io::world::world_json(&world, config, &hash),
+        world_json: inkland_io::world::world_json(&world, config),
         variants: selected
             .into_iter()
             .map(|v| {
