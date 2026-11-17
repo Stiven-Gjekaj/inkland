@@ -650,6 +650,37 @@ and the test that closes each milestone. We stop for a review after each one.
   view. The scale bar uses the scale of the crop. All map layers are
   clipped to the map area.
 
+## 6.10 Notes from Milestone 10
+
+- `world.json` keeps the part of the config that makes the world, in
+  `config`. `read_world` reads it, checks it against `world_hash`, and makes
+  the same world again. A file that is not a world, or whose config does
+  not agree with its hash, gives `WORLD_PARSE`.
+- `inkland query --world FILE --at x,y` prints: the cell and its site,
+  `land`, `height`, `sea_level`, `height_above_sea`, the feature, the biome,
+  the temperature and the precipitation, the pinned regions that contain
+  the point, the culture, state, and province, and the nearest place, river
+  (with `side`: `left` or `right` as one looks downstream), and road. A
+  point outside the frame gives `VALUE_OUT_OF_RANGE`.
+- `inkland export --world FILE --format geojson [--layers ...]` prints a
+  FeatureCollection with the layers coast, rivers, regions, roads, places,
+  and borders. Coordinates are config units with 3 decimals. `crs` is
+  `inkland:local`, and `inkland` gives the units, the frame, and the world
+  hash. A circle region is a polygon of 64 points.
+- `world.brushes`: heightmap brush strokes `{at, radius, delta}`, applied
+  in order after the template and before the pins. A stroke adds `delta`
+  at its centre and less with distance, to 0 at the radius.
+- `inkland-edit`: commands `set`, `unset`, `add_pin`, `remove_pin`,
+  `move_pin`, `rename`, `brush`, and `remove_brush`. Each command works on
+  the config and gives its inverse. `History` keeps undo and redo. A script
+  is `{"version": 1, "commands": [...]}`.
+- `inkland edit --world FILE --script S -o OUT` applies the script to the
+  config in the world file, checks the config, makes the world again, and
+  writes the new `world.json`. `--config FILE` edits a config file instead.
+  The output gives `undo`: a script that gives back the first file.
+- Proptest: undo of any command sequence gives back the exact config. Test:
+  the undo script of an edit gives back the same `world.json` bytes.
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
