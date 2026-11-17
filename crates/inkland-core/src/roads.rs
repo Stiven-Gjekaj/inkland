@@ -106,6 +106,9 @@ struct Router<'a> {
     river_of: Vec<u32>,
     /// Cells that a road uses, with the cost factor of a reuse.
     used: Vec<bool>,
+    /// `true`: a step costs only its distance. A pinned road that is too
+    /// long with the terrain costs uses this to become as short as it can.
+    distance_only: bool,
 }
 
 impl Router<'_> {
@@ -115,6 +118,9 @@ impl Router<'_> {
             return None;
         }
         let d = dist(i.grid.points[a], i.grid.points[b]);
+        if self.distance_only {
+            return Some(d);
+        }
         let slope = (i.heights[b] - i.heights[a]).abs() / 3.0;
         let wet = if i.biomes[b] == crate::biomes::WETLAND {
             2.0
@@ -208,6 +214,7 @@ pub fn build(input: &Input) -> Result<Vec<Road>, Error> {
         input,
         river_of,
         used: vec![false; n],
+        distance_only: false,
     };
     let mut roads: Vec<Road> = Vec::new();
 
@@ -370,8 +377,32 @@ fn route_pinned(
     let lo = target * (1.0 - pin.tolerance);
     let hi = target * (1.0 + pin.tolerance);
     let len0 = path_length(grid, &base);
+    if (lo..=hi).contains(&len0) {
+        return Ok(base);
+    }
+    // Too long with the terrain costs: use the shortest path by distance,
+    // and make it longer from there if it is now too short.
+    let short_router;
+    let router = if len0 > hi {
+        short_router = Router {
+            input: router.input,
+            river_of: router.river_of.clone(),
+            used: router.used.clone(),
+            distance_only: true,
+        };
+        &short_router
+    } else {
+        router
+    };
+    let base = if len0 > hi {
+        router.route_through(&stops).ok_or_else(no_path)?
+    } else {
+        base
+    };
+    let len0 = path_length(grid, &base);
     if len0 >= lo {
-        // In the tolerance, or too long: a road cannot become shorter.
+        // In the tolerance, or still too long: a road cannot be shorter
+        // than its shortest path.
         return Ok(base);
     }
 
