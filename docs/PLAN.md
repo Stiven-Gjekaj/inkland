@@ -619,6 +619,37 @@ and the test that closes each milestone. We stop for a review after each one.
 - Proptest: no two placed label boxes overlap, and no label box leaves the
   map or covers a symbol or an extra.
 
+## 6.9 Notes from Milestone 9
+
+- A variant with an overlay renders a copy of the world with the overlay
+  applied. The copy has the same terrain, rivers, and coasts. Only places,
+  roads, and names change.
+- `world.json` has `world_hash`: the hash of the config without
+  `overlays`, `variants`, `render`, and `font_dirs`. So `world.json` is
+  byte-identical when only these change. The report keeps `config_hash`,
+  the hash of the full config.
+- `add.places`: each place is at its exact position, in the cell under it.
+  The terrain does not change, so the place can be on any terrain. The
+  report gives `on_land`. A place without a name gets a name from the
+  culture of its cell.
+- `add.roads`: routed on the shared terrain, after the roads of the world.
+  They reuse the cells of those roads at a lower cost. The report section
+  `overlay.roads` gives each road as for pinned roads. The check
+  `overlay_road_length` fails when a road with a target is not in its
+  tolerance.
+- `add.features`: a new layer `features`, after `roads`. A point feature is
+  a symbol (ruin: cross; battle site: crossed blades; other: triangle). A
+  line or an outline is a border (dash-dot), a wall (thick), or a dotted
+  line. A named feature gets a label.
+- `remove`: `place:<id>` and `road:<id>` leave the copy. `river:<id>` hides
+  the river line and its label; the river stays in the world.
+  `region:<id>` and `feature:<id>` hide the label or the feature.
+- `rename`: changes the label text of a place, region, river, or feature.
+- `labels`: `hide` and `size_pt` for one label.
+- Crops: labels are placed again for each variant, only for items in the
+  view. The scale bar uses the scale of the crop. All map layers are
+  clipped to the map area.
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
