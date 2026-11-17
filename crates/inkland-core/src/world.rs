@@ -233,6 +233,7 @@ impl World {
             keep[c] = true;
         }
         let pack = crate::pack::regraph(&base_grid, &base_heights, sea_level, &keep);
+        let base_grid_len = base_grid.len();
         let grid = pack.grid;
         let base_cell = pack.base_cell;
         let mut heights = pack.heights;
@@ -344,8 +345,9 @@ impl World {
             grid: &grid,
             features: &features,
             rivers: &rivers,
-            temperature: &temperature,
-            river_threshold: river_threshold(grid.len()),
+            lakes: &lakes,
+            base_cells: base_grid_len,
+            sea_level,
             society: &society,
         });
         let religions = crate::religions::build(&crate::religions::Input {
