@@ -219,6 +219,11 @@ export global Lists {
     in-out property <string> variant-margin;
     in property <int> variant-overlay;
     in-out property <string> selected-overlay;
+    // The labels of the shown variant.
+    in property <[TableRow]> labels;
+    in-out property <string> selected-label;
+    in property <bool> label-hide;
+    in-out property <string> label-size;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their
@@ -236,6 +241,7 @@ export global Opts {
     in-out property <string> lat-south;
     in-out property <string> lat-north;
     in-out property <string> units;
+    in-out property <string> cell-hint;
     in-out property <string> size-title;
     in-out property <string> size-state;
     in-out property <string> size-region;
@@ -276,6 +282,8 @@ export global Dialogs {
     in-out property <bool> routes;
     in-out property <bool> submap;
     in-out property <bool> variants;
+    in-out property <bool> labels;
+    in-out property <bool> units;
     in-out property <bool> print;
 
     public function open(id: string) {
@@ -286,6 +294,8 @@ export global Dialogs {
         if id == "routes" { self.routes = true; }
         if id == "submap" { self.submap = true; }
         if id == "variants" { self.variants = true; }
+        if id == "labels" { self.labels = true; }
+        if id == "units" { self.units = true; }
         Actions.selection-changed();
         if id == "print" { self.print = true; }
     }
@@ -298,6 +308,8 @@ export global Dialogs {
         if id == "routes" { self.routes = false; }
         if id == "submap" { self.submap = false; }
         if id == "variants" { self.variants = false; }
+        if id == "labels" { self.labels = false; }
+        if id == "units" { self.units = false; }
         Actions.selection-changed();
         if id == "print" { self.print = false; }
     }
@@ -310,6 +322,8 @@ export global Dialogs {
         self.routes = false;
         self.submap = false;
         self.variants = false;
+        self.labels = false;
+        self.units = false;
         Actions.selection-changed();
         self.print = false;
     }

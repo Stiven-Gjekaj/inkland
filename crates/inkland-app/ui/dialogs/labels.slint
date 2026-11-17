@@ -1,0 +1,96 @@
+// The Labels Overview: the font size of each kind of label, and the label
+// options of each pinned item in the shown variant. The options of an item
+// go in the overlay of the variant.
+
+import { Theme, Label, DialogButton, Field, Check, FormRow, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists, Opts } from "../globals.slint";
+
+component Size inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> key;
+    in property <string> value;
+    spacing: 4px;
+    Label { dialog: true; text: root.label; width: 60px; }
+    Field {
+        dialog: true;
+        width: 40px;
+        number: true;
+        align: right;
+        value: root.value;
+        accepted(t) => { Actions.set-option(root.key, t); }
+    }
+}
+
+export component LabelsDialog inherits Dialog {
+    id: "labels";
+    title: "Labels Overview";
+    content-width: 440px;
+    pos-x: 440px;
+    pos-y: 70px;
+    Label { dialog: true; text: "Font sizes of the label kinds (pt):"; font-weight: 700; }
+    HorizontalLayout {
+        spacing: 12px;
+        Size { label: "Title"; key: "size-title"; value: Opts.size-title; }
+        Size { label: "States"; key: "size-state"; value: Opts.size-state; }
+        Size { label: "Regions"; key: "size-region"; value: Opts.size-region; }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    HorizontalLayout {
+        spacing: 12px;
+        Size { label: "Cities"; key: "size-city"; value: Opts.size-city; }
+        Size { label: "Towns"; key: "size-town"; value: Opts.size-town; }
+        Size { label: "Villages"; key: "size-village"; value: Opts.size-village; }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    HorizontalLayout {
+        spacing: 12px;
+        Size { label: "Rivers"; key: "size-river"; value: Opts.size-river; }
+        Size { label: "Other"; key: "size-other"; value: Opts.size-other; }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Rectangle { height: 1px; background: #dddddd; }
+    Label {
+        dialog: true;
+        font-weight: 700;
+        text: "Labels in the variant " + (AppState.variant-index >= 0 && AppState.variant-index < AppState.variants.length ? AppState.variants[AppState.variant-index] : "") + ":";
+    }
+    Table {
+        header: ["Label", "Kind", "Shown", "Size"];
+        widths: [170px, 60px, 60px, 60px];
+        rows: Lists.labels;
+        selected: Lists.selected-label;
+        list-height: 150px;
+        select(id) => {
+            Lists.selected-label = id;
+            Actions.selection-changed();
+        }
+    }
+    FormRow {
+        label: Lists.selected-label == "" ? "No label selected" : Lists.selected-label;
+        label-width: 130px;
+        Check {
+            dialog: true;
+            text: "Hide";
+            enabled: Lists.selected-label != "";
+            checked: Lists.label-hide;
+            toggled(on) => { Actions.edit-item("labels", Lists.selected-label, "hide", on ? "true" : "false"); }
+        }
+        Label { dialog: true; text: "Size (pt)"; }
+        Field {
+            dialog: true;
+            width: 46px;
+            number: true;
+            align: right;
+            enabled: Lists.selected-label != "";
+            placeholder: "kind";
+            text <=> Lists.label-size;
+            accepted(t) => { Actions.edit-item("labels", Lists.selected-label, "size", t); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Tip {
+        dialog: true;
+        text: "An empty size uses the size of the kind. The first label option adds an overlay to the variant if it has none.";
+    }
+}

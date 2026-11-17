@@ -1,0 +1,85 @@
+// The Units Editor: the distance unit of the config, the cell size, and
+// the scale bar, the wind rose, and the grid.
+
+import { Theme, Label, Field, Check, FormRow, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { Actions, Opts } from "../globals.slint";
+
+export component UnitsDialog inherits Dialog {
+    id: "units";
+    title: "Units Editor";
+    content-width: 360px;
+    pos-x: 440px;
+    pos-y: 90px;
+    FormRow {
+        label: "Distance unit";
+        label-width: 140px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            text <=> Opts.units;
+            accepted(t) => { Actions.set-option("units", t); }
+        }
+    }
+    FormRow {
+        label: "Map size";
+        label-width: 140px;
+        Label { dialog: true; text: Opts.width + " x " + Opts.height + " " + Opts.units; }
+    }
+    FormRow {
+        label: "Cell width hint";
+        label-width: 140px;
+        Field {
+            dialog: true;
+            width: 60px;
+            number: true;
+            align: right;
+            placeholder: "none";
+            value: Opts.cell-hint;
+            accepted(t) => { Actions.set-option("cell-hint", t); }
+        }
+        Label { dialog: true; text: Opts.units; }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    FormRow {
+        label: "Scale bar";
+        label-width: 140px;
+        Check {
+            dialog: true;
+            text: "Show";
+            checked: Opts.scale-bar;
+            toggled(on) => { Actions.set-option("scale-bar", on ? "true" : "false"); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    FormRow {
+        label: "Wind rose";
+        label-width: 140px;
+        Check {
+            dialog: true;
+            text: "Show";
+            checked: Opts.compass;
+            toggled(on) => { Actions.set-option("compass", on ? "true" : "false"); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    FormRow {
+        label: "Grid step";
+        label-width: 140px;
+        Field {
+            dialog: true;
+            width: 60px;
+            number: true;
+            align: right;
+            placeholder: "none";
+            value: Opts.grid-step;
+            accepted(t) => { Actions.set-option("grid-step", t); }
+        }
+        Label { dialog: true; text: Opts.units; }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Tip {
+        dialog: true;
+        text: "All positions and lengths are in this unit. The cell width hint sets the number of cells. The scale bar shows the unit.";
+    }
+}

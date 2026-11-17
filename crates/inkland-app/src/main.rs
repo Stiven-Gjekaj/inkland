@@ -80,6 +80,8 @@ const IMPLEMENTED: &[&str] = &[
     "add-route",
     "submap",
     "variants",
+    "labels",
+    "units",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -1133,6 +1135,26 @@ impl Controller {
         if !c.overlays.contains_key(l.get_selected_overlay().as_str()) {
             l.set_selected_overlay(s(""));
         }
+        l.set_labels(table(inkland_app::variants::label_rows(
+            c,
+            st.editor.variant,
+        )));
+        let sel = l.get_selected_label();
+        if inkland_app::variants::label_items(c)
+            .iter()
+            .any(|(k, _)| k == sel.as_str())
+        {
+            let setting = inkland_app::variants::label_setting(c, st.editor.variant, &sel);
+            l.set_label_hide(setting.hide);
+            l.set_label_size(s(setting
+                .size_pt
+                .map(inkland_app::options::number_text)
+                .unwrap_or_default()));
+        } else {
+            l.set_selected_label(s(""));
+            l.set_label_hide(false);
+            l.set_label_size(s(""));
+        }
         l.set_rivers(table(rows::river_rows(c, world)));
         let sel = l.get_selected_river();
         match c.pins.rivers.iter().find(|r| r.id == sel.as_str()) {
@@ -1215,6 +1237,7 @@ impl Controller {
         o.set_lat_south(t("lat-south"));
         o.set_lat_north(t("lat-north"));
         o.set_units(t("units"));
+        o.set_cell_hint(t("cell-hint"));
         o.set_size_title(t("size-title"));
         o.set_size_state(t("size-state"));
         o.set_size_region(t("size-region"));
@@ -1344,6 +1367,20 @@ impl Controller {
             ("variants", "copy") => index.and_then(|v| e.add_variant(v, None).map(|_| ())),
             ("variants", _) => index.and_then(|v| e.set_variant_field(v, field, text)),
             ("overlays", "add") => e.add_overlay(text),
+            ("labels", "hide" | "size") => {
+                let v = e.variant;
+                let mut setting = inkland_app::variants::label_setting(e.config(), v, id);
+                if field == "hide" {
+                    setting.hide = text == "true";
+                    Ok(())
+                } else if text.trim().is_empty() {
+                    setting.size_pt = None;
+                    Ok(())
+                } else {
+                    num(text).map(|n| setting.size_pt = Some(n))
+                }
+                .and_then(|()| e.set_label(v, id, setting))
+            }
             (_, "name") => match pin_list(list) {
                 Some(l) => e.rename_in(l, id, text),
                 None => Err(format!("{list:?} has no names")),
