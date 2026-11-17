@@ -119,6 +119,17 @@ impl Scene {
     }
 }
 
+/// Encode RGBA pixels (4 bytes for each pixel, row by row) as PNG bytes.
+/// The pixels must be opaque or premultiplied by their alpha.
+pub fn rgba_to_png(rgba: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>, String> {
+    let size = resvg::tiny_skia::IntSize::from_wh(width, height)
+        .ok_or_else(|| "the image has no pixels".to_owned())?;
+    resvg::tiny_skia::Pixmap::from_vec(rgba, size)
+        .ok_or_else(|| "the pixels do not agree with the size".to_owned())?
+        .encode_png()
+        .map_err(|e| format!("cannot write the PNG: {e}"))
+}
+
 /// Render SVG text to PNG bytes. The longer side of the image is
 /// `longest_px` pixels. `families` are the font families to look for.
 pub fn svg_to_png(
@@ -188,5 +199,9 @@ mod tests {
         assert_eq!(at(7, 7), [255, 255, 255, 255], "the white page");
         assert_eq!(at(11, 11), [0, 0, 0, 255], "the black square");
         assert_eq!(at(27, 27), [100, 100, 100, 255], "the background");
+        let png = rgba_to_png(px, 30, 30).unwrap();
+        assert_eq!(&png[1..4], b"PNG");
+        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 30);
+        assert!(rgba_to_png(vec![0; 8], 30, 30).is_err());
     }
 }
