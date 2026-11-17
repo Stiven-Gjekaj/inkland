@@ -76,14 +76,18 @@ pub fn metres(h: f64, sea_level: f64) -> f64 {
 }
 
 /// The temperature of each cell, in whole degrees C, for a latitude range
-/// `[south, north]`.
+/// `[south, north]`. As in FMG `Temperature.compute`, each lattice row has
+/// the latitude of its first cell, the drop with height is rounded, and the
+/// result is cut to a whole number toward 0 (an `Int8Array`).
 pub fn temperatures(grid: &Grid, heights: &[f64], config: &Config, range: [f64; 2]) -> Vec<f64> {
     let sea = f64::from(config.world.sea_level);
+    let cx = grid.cells_x as usize;
     (0..grid.len())
         .map(|c| {
-            let base = sea_level_temperature(latitude_in(range, config, grid.points[c][1]));
-            let drop = metres(heights[c], sea) / 1000.0 * 6.5;
-            (base - drop).round()
+            let row_first = c - c % cx;
+            let base = sea_level_temperature(latitude_in(range, config, grid.points[row_first][1]));
+            let drop = (metres(heights[c], sea) / 1000.0 * 6.5).round();
+            (base - drop).clamp(-128.0, 127.0).trunc()
         })
         .collect()
 }
@@ -301,6 +305,21 @@ mod tests {
         let near_ridge = p[wettest];
         let behind_ridge = p[g.slot(300.0, 150.0)];
         assert!(near_ridge > behind_ridge, "{near_ridge} {behind_ridge}");
+    }
+
+    #[test]
+    fn each_row_has_one_sea_level_temperature_cut_toward_zero() {
+        let c = config([-30.0, 60.0], "top-left");
+        let g = grid();
+        let flat = vec![10.0; g.len()];
+        let t = temperatures(&g, &flat, &c, c.world.climate.latitude_range);
+        let cx = g.cells_x as usize;
+        for row in 0..g.cells_y as usize {
+            let first = row * cx;
+            let lat = latitude(&c, g.points[first][1]);
+            let want = sea_level_temperature(lat).trunc();
+            assert!(t[first..first + cx].iter().all(|&v| v == want), "row {row}");
+        }
     }
 
     #[test]
