@@ -13,6 +13,7 @@ pub mod fit;
 pub mod geom;
 pub mod grid;
 pub mod heightmap;
+pub mod names;
 pub mod num;
 pub mod rand;
 pub mod rivers;
