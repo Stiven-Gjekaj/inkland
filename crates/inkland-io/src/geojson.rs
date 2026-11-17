@@ -13,8 +13,15 @@ use inkland_core::world::World;
 use serde_json::{Value, json};
 
 /// The layers of the export, in output order.
-pub const LAYERS: [&str; 7] = [
-    "coast", "rivers", "regions", "roads", "places", "markers", "borders",
+pub const LAYERS: [&str; 8] = [
+    "coast",
+    "rivers",
+    "regions",
+    "sea_routes",
+    "roads",
+    "places",
+    "markers",
+    "borders",
 ];
 
 /// The number of points of a circle region.
@@ -119,6 +126,20 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
             ));
         }
     }
+    if has("sea_routes") {
+        for r in &world.sea_routes {
+            features.push(feature(
+                json!({ "type": "LineString", "coordinates": line(&r.points) }),
+                json!({
+                    "layer": "sea_routes",
+                    "id": r.id,
+                    "group": r.group,
+                    "name": r.name,
+                    "length": round(r.length, 3),
+                }),
+            ));
+        }
+    }
     if has("roads") {
         for r in &world.roads {
             features.push(feature(
@@ -128,6 +149,8 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
                     "id": r.id,
                     "pin": r.pin.map(|k| config.pins.roads[k].id.clone()),
                     "kind": r.kind,
+                    "group": r.group,
+                    "name": r.name,
                     "length": round(r.length, 3),
                     "stops": r.stops.iter().map(|s| json!({
                         "place": s.place,
@@ -159,8 +182,15 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
                     "pin": p.pin,
                     "name": p.name,
                     "kind": p.kind,
+                    "group": p.group,
                     "capital": p.capital,
                     "port": p.port,
+                    "population": round(p.population, 3),
+                    "citadel": p.citadel,
+                    "plaza": p.plaza,
+                    "walls": p.walls,
+                    "shanty": p.shanty,
+                    "temple": p.temple,
                     "state": state(p.state),
                 }),
             ));

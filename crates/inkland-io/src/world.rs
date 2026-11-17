@@ -104,48 +104,18 @@ pub fn world_value(world: &World, config: &Config) -> Value {
         })).collect::<Vec<_>>(),
         "cell_religion": world.religions.cell_religion,
         "rivers": world.rivers.iter().zip(&world.names.rivers).map(|(r, n)| river_value(r, n, config)).collect::<Vec<_>>(),
-        "roads": world.roads.iter().map(|r| json!({
-            "id": r.id,
-            "pin": r.pin.map(|k| config.pins.roads[k].id.clone()),
-            "kind": serde_json::to_value(r.kind).expect("a kind converts to JSON"),
-            "length": round(r.length, 3),
-            "cells": r.cells,
-            "points": r.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
-        })).collect::<Vec<_>>(),
+        "roads": world.roads.iter().map(|r| road_value(r, config)).collect::<Vec<_>>(),
+        "sea_routes": world.sea_routes.iter().map(|r| road_value(r, config)).collect::<Vec<_>>(),
         "cell_culture": world.society.cell_culture,
         "cell_state": world.society.cell_state,
         "cell_province": world.society.cell_province,
-        "cultures": world.society.cultures.iter().map(|c| json!({
-            "id": c.id,
-            "name": c.name,
-            "name_base": inkland_core::names::data::NAME_BASES[c.base].name,
-            "center": c.center,
-        })).collect::<Vec<_>>(),
-        "places": world.society.places.iter().map(|p| json!({
-            "id": p.id,
-            "pin": p.pin,
-            "name": p.name,
-            "kind": serde_json::to_value(p.kind).expect("a kind converts to JSON"),
-            "at": point(p.at),
-            "cell": p.cell,
-            "port": p.port,
-            "capital": p.capital,
-            "culture": p.culture,
-            "state": p.state,
-            "province": p.province,
-        })).collect::<Vec<_>>(),
-        "states": world.society.states.iter().map(|st| json!({
-            "id": st.id,
-            "name": st.name,
-            "capital": st.capital,
-            "culture": st.culture,
-        })).collect::<Vec<_>>(),
-        "provinces": world.society.provinces.iter().map(|pr| json!({
-            "id": pr.id,
-            "name": pr.name,
-            "state": pr.state,
-            "seat": pr.seat,
-        })).collect::<Vec<_>>(),
+        "cell_suitability": world.society.cells.s,
+        "cell_population": world.society.cells.pop.iter().map(|&p| round(p, 3)).collect::<Vec<_>>(),
+        "cell_development": world.society.development,
+        "cultures": world.society.cultures.iter().map(culture_value).collect::<Vec<_>>(),
+        "places": world.society.places.iter().map(place_value).collect::<Vec<_>>(),
+        "states": world.society.states.iter().map(state_value).collect::<Vec<_>>(),
+        "provinces": world.society.provinces.iter().map(province_value).collect::<Vec<_>>(),
         "coastlines": world.coastlines.iter().map(|c| json!({
             "id": c.id,
             "land": c.land,
@@ -185,6 +155,95 @@ pub fn world_value(world: &World, config: &Config) -> Value {
             .collect::<Vec<_>>()
     );
     v
+}
+
+/// The JSON value of a road or a sea route.
+fn road_value(r: &inkland_core::roads::Road, config: &Config) -> Value {
+    json!({
+        "id": r.id,
+        "pin": r.pin.map(|k| config.pins.roads[k].id.clone()),
+        "kind": serde_json::to_value(r.kind).expect("a kind converts to JSON"),
+        "group": r.group,
+        "name": r.name,
+        "feature": r.feature,
+        "length": round(r.length, 3),
+        "cells": r.cells,
+        "points": r.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
+    })
+}
+
+fn culture_value(c: &inkland_core::cultures::Culture) -> Value {
+    json!({
+        "id": c.id,
+        "name": c.name,
+        "name_base": inkland_core::names::data::NAME_BASES[c.base].name,
+        "center": c.center,
+        "type": c.kind.name(),
+        "expansionism": c.expansionism,
+        "development": c.development,
+        "code": c.code,
+    })
+}
+
+fn place_value(p: &inkland_core::society::Place) -> Value {
+    json!({
+        "id": p.id,
+        "pin": p.pin,
+        "name": p.name,
+        "kind": serde_json::to_value(p.kind).expect("a kind converts to JSON"),
+        "group": p.group,
+        "type": p.ptype.name(),
+        "at": point(p.at),
+        "cell": p.cell,
+        "port": p.port,
+        "water": p.water,
+        "landmass": p.landmass,
+        "capital": p.capital,
+        "culture": p.culture,
+        "state": p.state,
+        "province": p.province,
+        "population": round(p.population, 3),
+        "citadel": p.citadel,
+        "plaza": p.plaza,
+        "walls": p.walls,
+        "shanty": p.shanty,
+        "temple": p.temple,
+    })
+}
+
+fn state_value(st: &inkland_core::society::State) -> Value {
+    json!({
+        "id": st.id,
+        "name": st.name,
+        "full_name": st.full_name,
+        "form": st.form,
+        "form_name": st.form_name,
+        "capital": st.capital,
+        "culture": st.culture,
+        "center": st.center,
+        "type": st.kind.name(),
+        "expansionism": st.expansionism,
+        "color": st.color,
+        "neighbors": st.neighbors,
+        "cells": st.cells,
+        "area": round(st.area, 3),
+        "burgs": st.burgs,
+        "rural": round(st.rural, 3),
+        "urban": round(st.urban, 3),
+    })
+}
+
+fn province_value(pr: &inkland_core::society::Province) -> Value {
+    json!({
+        "id": pr.id,
+        "name": pr.name,
+        "full_name": pr.full_name,
+        "form_name": pr.form_name,
+        "state": pr.state,
+        "seat": pr.seat,
+        "center": pr.center,
+        "color": pr.color,
+    })
 }
 
 /// The JSON value of one river.
@@ -267,6 +326,29 @@ mod tests {
             "world": { "cells": 1000, "template": "high-island" }
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn world_json_has_the_society_data_of_fmg() {
+        let c = config();
+        let w = World::build(&c).unwrap();
+        let v = world_value(&w, &c);
+        let n = w.grid.len();
+        for key in ["cell_population", "cell_suitability", "cell_development"] {
+            assert_eq!(v[key].as_array().unwrap().len(), n, "{key}");
+        }
+        assert!(v["sea_routes"].is_array());
+        for p in v["places"].as_array().unwrap() {
+            assert!(p["population"].as_f64().unwrap() > 0.0);
+            assert!(p["group"].is_string());
+        }
+        for st in v["states"].as_array().unwrap() {
+            assert!(st["form"].is_string() && st["full_name"].is_string());
+            assert!(st["color"].as_str().unwrap().starts_with('#'));
+        }
+        for c in v["cultures"].as_array().unwrap() {
+            assert!(c["type"].is_string());
+        }
     }
 
     #[test]

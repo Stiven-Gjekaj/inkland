@@ -113,7 +113,10 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
                 "id": pl.pin.clone().map_or_else(|| Value::from(pl.id), Value::from),
                 "name": pl.name,
                 "kind": pl.kind,
+                "group": pl.group,
                 "capital": pl.capital,
+                "port": pl.port,
+                "population": round(pl.population, 3),
                 "distance": round(d, 3),
             })
         });
@@ -215,6 +218,14 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
         "regions": regions,
         "culture": owner(soc.cell_culture[c], &culture_name),
         "state": owner(soc.cell_state[c], &state_name),
+        "state_full_name": soc
+            .states
+            .iter()
+            .find(|st| st.id == soc.cell_state[c])
+            .map(|st| st.full_name.clone()),
+        "suitability": soc.cells.s[c],
+        "population": round(soc.cells.pop[c], 3),
+        "development": soc.development[c],
         "province": owner(soc.cell_province[c], &province_name),
         "religion": world
             .religions
