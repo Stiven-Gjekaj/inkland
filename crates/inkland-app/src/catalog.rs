@@ -297,9 +297,9 @@ pub const TEMPLATES: &[(&str, &str)] = &[
 
 /// The culture sets, with the FMG names.
 pub fn culture_sets() -> Vec<(&'static str, String)> {
-    inkland_core::names::data::CULTURE_SETS
-        .iter()
-        .map(|id| (*id, title_case(id)))
+    inkland_core::culture_sets::set_names()
+        .into_iter()
+        .map(|id| (id, title_case(id)))
         .collect()
 }
 
@@ -678,6 +678,9 @@ mod tests {
         }
         let _ = style_available(&c, "default");
         assert_eq!(title_case("high-fantasy"), "High Fantasy");
-        assert_eq!(culture_sets().len(), 5);
+        // Each culture set of the catalog is a culture set of the config.
+        for (id, _) in culture_sets() {
+            assert!(accepts(&c, "/world/culture_set", json!(id)), "{id}");
+        }
     }
 }

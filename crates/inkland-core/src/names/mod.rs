@@ -584,13 +584,4 @@ mod tests {
     fn capitalize_each_word() {
         assert_eq!(capitalize("port o'neil-by-sea"), "Port O'Neil-By-Sea");
     }
-
-    #[test]
-    fn each_culture_set_names_a_known_base() {
-        for set in data::CULTURE_SETS {
-            for &(_, base) in data::culture_set(set).unwrap() {
-                assert!(base < NAME_BASES.len());
-            }
-        }
-    }
 }

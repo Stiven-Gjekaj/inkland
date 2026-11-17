@@ -17,7 +17,6 @@ use crate::config::{Config, PlaceKind};
 use crate::features::{FeatureKind, Features};
 use crate::grid::Grid;
 use crate::names::Chain;
-use crate::names::data::{CultureDef, culture_set};
 use crate::rand::Rand;
 use crate::seed::{Layer, SeedTree};
 use std::cmp::Reverse;
@@ -26,15 +25,7 @@ use std::collections::{BTreeSet, BinaryHeap};
 /// No owner.
 pub const NONE: u32 = 0;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Culture {
-    /// 1, 2, 3, ...
-    pub id: u32,
-    pub name: String,
-    /// The index of its name base.
-    pub base: usize,
-    pub center: usize,
-}
+pub use crate::cultures::Culture;
 
 /// A place: a pinned place, a capital, or a town.
 #[derive(Debug, Clone, PartialEq)]
@@ -210,42 +201,24 @@ pub fn build(input: &Input) -> Society {
         d * (1.0 + water + climb + if land(b) { harsh } else { 0.0 })
     };
 
-    // Cultures.
-    let set: &[CultureDef] = culture_set(&config.world.culture_set)
-        .unwrap_or_else(|| culture_set("european").expect("the default culture set exists"));
-    let count = (config.world.cultures as usize).clamp(1, set.len());
-    let mut crng = Rand::new(tree.part_rng(Layer::Cultures, "centers"));
-    let centers = spread(
-        &ranked,
-        count,
-        (w + h) / 2.0 / count as f64,
-        &[],
-        0.0,
+    // Cultures (FMG generate and expand).
+    let culture_input = crate::cultures::Input {
+        config,
         grid,
-        &mut crng,
-    );
-    let cultures: Vec<Culture> = centers
-        .iter()
-        .enumerate()
-        .map(|(i, &c)| Culture {
-            id: i as u32 + 1,
-            name: set[i].0.to_owned(),
-            base: set[i].1,
-            center: c,
-        })
-        .collect();
-    let speeds: Vec<f64> = cultures.iter().map(|_| crng.uniform(1.0, 2.0)).collect();
-    let seeds: Vec<(usize, u32, f64)> = cultures
-        .iter()
-        .zip(&speeds)
-        .map(|(c, &s)| (c.center, c.id, s))
-        .collect();
-    let cell_culture = grow(grid, &seeds, &|a, b, _| Some(step_cost(a, b)));
-    let chains: Vec<Chain> = cultures.iter().map(|c| Chain::new(c.base)).collect();
-    let chain_of = |cell: usize| {
-        let k = cell_culture[cell].max(1) as usize - 1;
-        &chains[k.min(chains.len() - 1)]
+        cells: &cells,
+        features,
+        biomes,
+        temperature,
     };
+    let mut crng = Rand::new(tree.part_rng(Layer::Cultures, "generate"));
+    let cultures = crate::cultures::generate(&culture_input, &mut crng);
+    let mut cell_culture = crate::cultures::expand(&culture_input, &cultures);
+    crate::cultures::adopt(grid, &cells, &mut cell_culture, pin_cells);
+    // Chain 0 is the wildlands.
+    let chains: Vec<Chain> = std::iter::once(Chain::new(crate::cultures::WILDLANDS_BASE))
+        .chain(cultures.iter().map(|c| Chain::new(c.base)))
+        .collect();
+    let chain_of = |cell: usize| &chains[cell_culture[cell] as usize];
 
     // Places: pinned first.
     let mut nrng = Rand::new(tree.part_rng(Layer::Names, "places"));

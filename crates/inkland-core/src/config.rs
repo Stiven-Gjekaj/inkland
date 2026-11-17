@@ -161,9 +161,20 @@ pub struct World {
     /// Number of cultures.
     #[serde(default = "default_cultures")]
     pub cultures: u32,
-    /// Name of the culture set, for example `european`.
+    /// Name of the culture set: `world`, `european`, `oriental`, `english`,
+    /// `antique`, `high-fantasy`, `dark-fantasy`, or `random`.
     #[serde(default = "default_culture_set")]
     pub culture_set: String,
+    /// How much the sizes of cultures and states differ. 0 to 10. A bigger
+    /// value gives a bigger random part of the expansionism.
+    #[serde(default = "default_size_variety")]
+    #[schemars(range(min = 0.0, max = 10.0))]
+    pub size_variety: f64,
+    /// How far cultures and states grow. 0.1 to 2. Cultures and states stop
+    /// at a total cost that this value multiplies.
+    #[serde(default = "default_growth_rate")]
+    #[schemars(range(min = 0.1, max = 2.0))]
+    pub growth_rate: f64,
     /// Number of states.
     #[serde(default = "default_states")]
     pub states: u32,
@@ -207,6 +218,8 @@ impl Default for World {
             climate: Climate::default(),
             cultures: default_cultures(),
             culture_set: default_culture_set(),
+            size_variety: default_size_variety(),
+            growth_rate: default_growth_rate(),
             states: default_states(),
             towns: Towns::default(),
             religions: default_religions(),
@@ -1222,6 +1235,12 @@ fn default_cultures() -> u32 {
 }
 fn default_culture_set() -> String {
     "european".to_owned()
+}
+fn default_size_variety() -> f64 {
+    4.0
+}
+fn default_growth_rate() -> f64 {
+    1.0
 }
 fn default_states() -> u32 {
     5

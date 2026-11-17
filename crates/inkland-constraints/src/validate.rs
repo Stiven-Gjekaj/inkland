@@ -282,7 +282,7 @@ impl<'a> Validator<'a> {
         if let inkland_core::config::Template::Raster { raster } = &w.template {
             self.raster(raster);
         }
-        match inkland_core::names::data::culture_set(&w.culture_set) {
+        match inkland_core::culture_sets::culture_set(&w.culture_set) {
             None => {
                 self.err(
                     ErrorCode::ValueOutOfRange,
@@ -290,23 +290,35 @@ impl<'a> Validator<'a> {
                     format!(
                         "there is no culture set {:?}; use one of {:?}",
                         w.culture_set,
-                        inkland_core::names::data::CULTURE_SETS
+                        inkland_core::culture_sets::set_names()
                     ),
                 );
             }
-            Some(set) if w.cultures == 0 || w.cultures as usize > set.len() => {
+            Some(set) if w.cultures == 0 || w.cultures as usize > set.max => {
                 self.err(
                     ErrorCode::ValueOutOfRange,
                     "/world/cultures",
                     format!(
                         "the culture set {:?} has {} cultures; cultures must be 1 to {}",
-                        w.culture_set,
-                        set.len(),
-                        set.len()
+                        w.culture_set, set.max, set.max
                     ),
                 );
             }
             Some(_) => {}
+        }
+        if !(0.0..=10.0).contains(&w.size_variety) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/size_variety",
+                "size_variety must be 0 to 10",
+            );
+        }
+        if !(0.1..=2.0).contains(&w.growth_rate) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/growth_rate",
+                "growth_rate must be 0.1 to 2",
+            );
         }
         if w.states == 0 {
             self.err(

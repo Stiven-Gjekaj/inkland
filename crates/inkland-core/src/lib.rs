@@ -10,6 +10,7 @@ pub mod config;
 pub mod coordinates;
 pub mod courses;
 pub mod culture_sets;
+pub mod cultures;
 pub mod error;
 pub mod features;
 pub mod fit;

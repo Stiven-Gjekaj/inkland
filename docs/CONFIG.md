@@ -485,14 +485,16 @@ Generation options.
 | `brushes` | array of [`Brush`](#brush) |  |  | Heightmap brush strokes, applied in order after the template and before the pins. |
 | `cells` | integer |  | `10000` | Number of cells in the first grid. 1000 to 100000. |
 | `climate` | [`Climate`](#climate) |  |  | Climate options. |
-| `culture_set` | string |  | `"european"` | Name of the culture set, for example `european`. |
+| `culture_set` | string |  | `"european"` | Name of the culture set: `world`, `european`, `oriental`, `english`, `antique`, `high-fantasy`, `dark-fantasy`, or `random`. |
 | `cultures` | integer |  | `6` | Number of cultures. |
+| `growth_rate` | number |  | `1.0` | How far cultures and states grow. 0.1 to 2. Cultures and states stop at a total cost that this value multiplies. |
 | `jitter` | number |  |  | How far each point of the first grid can move from its lattice position, as a fraction of half the distance between neighbor points. 0 to 0.9. 0 gives a regular lattice. |
 | `lake_elevation_limit` | integer |  |  | A land low point becomes a lake when its water cannot reach other water through cells lower than its height plus this limit, on the height scale 0 to 100. 0 to 80. 80 makes no such lakes. |
 | `lattice` | [`Lattice`](#lattice) |  |  | The lattice of the points of the first grid: `square`, `hex-pointy`, `hex-flat`, `diamond`, or `triangle`. |
 | `places` | [`PlaceOptions`](#placeoptions) |  |  | Options for places that generation adds. |
 | `religions` | integer |  | `4` | Number of religions. |
 | `sea_level` | integer |  | `20` | Sea level on the height scale 0 to 100. Cells below it are water. |
+| `size_variety` | number |  | `4.0` | How much the sizes of cultures and states differ. 0 to 10. A bigger value gives a bigger random part of the expansionism. |
 | `states` | integer |  | `5` | Number of states. |
 | `template` | [`Template`](#template) |  | `"continents"` | Heightmap template: a template name, or a list of steps. |
 | `towns` | [`Towns`](#towns) |  | `"auto"` | Number of towns that generation adds, or `auto`. |

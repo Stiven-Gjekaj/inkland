@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn each_land_cell_has_a_religion_and_water_has_none() {
+    fn each_land_cell_with_a_culture_has_a_religion_and_water_has_none() {
         let w = world(3);
         let r = &w.religions;
         let folk = r.list.iter().filter(|x| x.kind == "folk").count();
@@ -212,12 +212,13 @@ mod tests {
         assert_eq!(folk, w.society.cultures.len());
         assert_eq!(organized, 3);
         for c in 0..w.grid.len() {
-            if w.features.is_land(c) {
+            // Wildland (culture 0) has no folk religion.
+            if w.features.is_land(c) && w.society.cell_culture[c] != 0 {
                 assert!(
                     r.list.iter().any(|x| x.id == r.cell_religion[c]),
                     "cell {c}"
                 );
-            } else {
+            } else if !w.features.is_land(c) {
                 assert_eq!(r.cell_religion[c], 0);
             }
         }

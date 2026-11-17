@@ -53,6 +53,9 @@ pub struct Cells {
     pub harbor: Vec<u8>,
     /// The area of each cell, in square units.
     pub area: Vec<f64>,
+    /// FMG pixels for each unit. FMG costs and limits use pixels of a map of
+    /// about 1280 x 800; the frame maps to that area.
+    pub px: f64,
     pub fl: Vec<f64>,
     pub conf: Vec<f64>,
     /// The river of each cell, or 0.
@@ -221,6 +224,7 @@ impl Cells {
             haven,
             harbor,
             area,
+            px: libm::sqrt(1280.0 * 800.0 / (grid.width * grid.height).max(1e-9)),
             fl,
             conf,
             r,
@@ -236,6 +240,11 @@ impl Cells {
     /// `true` for a land cell.
     pub fn land(&self, c: usize) -> bool {
         self.h[c] >= 20.0
+    }
+
+    /// The area of a cell in FMG square pixels.
+    pub fn area_px(&self, c: usize) -> f64 {
+        self.area[c] * self.px * self.px
     }
 
     /// `true` for a cell of a navigable river (`Rivers.isNavigable`).
