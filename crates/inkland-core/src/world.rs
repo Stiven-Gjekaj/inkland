@@ -14,6 +14,21 @@ use crate::rivers::{Course, Drainage, River, drain, river_threshold, trace};
 use crate::seed::{Layer, SeedTree};
 use std::collections::BTreeMap;
 
+/// The first grid (FMG `grid`): a lattice. The heightmap, the lakes of
+/// the first grid, and the climate run on it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Base {
+    pub grid: Grid,
+    /// The height of each cell: a whole number from 0 to 100.
+    pub heights: Vec<f64>,
+    pub features: Features,
+    /// The temperature of each cell, in degrees C, from its first-grid
+    /// cell.
+    pub temperature: Vec<f64>,
+    /// The precipitation of each cell, from its first-grid cell.
+    pub precipitation: Vec<f64>,
+}
+
 /// The terrain of one config.
 #[derive(Debug, Clone, PartialEq)]
 pub struct World {
@@ -21,7 +36,14 @@ pub struct World {
     pub width: f64,
     pub height: f64,
     pub sea_level: f64,
+    /// The first grid.
+    pub base: Base,
+    /// The second grid (FMG `pack`), finer at the coasts. All stages after
+    /// the climate run on it, and all cell indices of the world are its
+    /// cells.
     pub grid: Grid,
+    /// The first-grid cell of each cell (FMG `pack.cells.g`).
+    pub base_cell: Vec<usize>,
     /// The height of each cell: a whole number from 0 to 100.
     pub heights: Vec<f64>,
     pub features: Features,
@@ -32,9 +54,10 @@ pub struct World {
     /// The size of the map as a part of the world, and its latitude and
     /// longitude box.
     pub coordinates: crate::coordinates::Coordinates,
-    /// The temperature of each cell, in degrees C.
+    /// The temperature of each cell, in degrees C, from its first-grid
+    /// cell.
     pub temperature: Vec<f64>,
-    /// The precipitation of each cell.
+    /// The precipitation of each cell, from its first-grid cell.
     pub precipitation: Vec<f64>,
     /// Where the water of each cell goes.
     pub drainage: Drainage,
@@ -100,7 +123,7 @@ impl World {
             add_site(p);
         }
         let mut grid_rng = Rand::new(tree.part_rng(Layer::Terrain, "grid"));
-        let (grid, site_cells) = Grid::generate(
+        let (base_grid, base_site_cells) = Grid::generate(
             w,
             h,
             cell_count(config) as u32,
@@ -109,16 +132,12 @@ impl World {
             &sites,
             &mut grid_rng,
         );
-        let pin_cells: Vec<usize> = place_sites.iter().map(|&i| site_cells[i]).collect();
-        let site_cells: BTreeMap<(u64, u64), usize> = site_index
-            .into_iter()
-            .map(|(k, i)| (k, site_cells[i]))
-            .collect();
+        let base_pin_cells: Vec<usize> = place_sites.iter().map(|&i| base_site_cells[i]).collect();
 
         let steps = template_steps(config)
             .map_err(|e| Error::new(ErrorCode::TemplateInvalid, "/world/template", e))?;
         let mut height_rng = Rand::new(tree.part_rng(Layer::Terrain, "heightmap"));
-        let mut hm = Heightmap::new(&grid, sea_level);
+        let mut hm = Heightmap::new(&base_grid, sea_level);
         if let Template::Raster { raster } = &config.world.template {
             let size = u64::from(raster.cols) * u64::from(raster.rows);
             if raster.cols < 2 || raster.rows < 2 || raster.values.len() as u64 != size {
@@ -131,11 +150,11 @@ impl World {
             hm.apply_raster(raster);
         }
         hm.run(&steps, &mut height_rng);
-        let mut heights = hm.heights;
-        crate::heightmap::apply_brushes(&grid, &mut heights, &config.world.brushes);
+        let mut base_heights = hm.heights;
+        crate::heightmap::apply_brushes(&base_grid, &mut base_heights, &config.world.brushes);
 
         let regions = FitRegion::all(&pins.regions, sea_level);
-        apply_regions(&grid, &mut heights, &regions, sea_level);
+        apply_regions(&base_grid, &mut base_heights, &regions, sea_level);
         let points: Vec<FitPoint> = pins
             .points
             .iter()
@@ -143,21 +162,21 @@ impl World {
             .map(|(index, pin)| FitPoint {
                 index,
                 pin,
-                cell: pin_cells[index],
+                cell: base_pin_cells[index],
             })
             .collect();
-        apply_points(&grid, &mut heights, &points, &regions, sea_level)?;
+        apply_points(&base_grid, &mut base_heights, &points, &regions, sea_level)?;
 
         // Lakes in deep depressions, then lakes that break into the ocean
         // (FMG `addDeepDepressionLakes` and `openNearSeaLakes`).
         // Pins win: the exact sites and the land regions stay as they are.
-        let mut protected = vec![false; grid.len()];
-        for &c in site_cells.values() {
+        let mut protected = vec![false; base_grid.len()];
+        for &c in &base_site_cells {
             protected[c] = true;
         }
-        let mut keep_lake = vec![false; grid.len()];
-        for c in 0..grid.len() {
-            for r in regions.iter().filter(|r| r.contains(grid.points[c])) {
+        let mut keep_lake = vec![false; base_grid.len()];
+        for c in 0..base_grid.len() {
+            for r in regions.iter().filter(|r| r.contains(base_grid.points[c])) {
                 if r.pin.kind.is_water() {
                     keep_lake[c] |= r.pin.kind == RegionKind::Lake;
                 } else {
@@ -169,15 +188,15 @@ impl World {
         // lakes already.
         if !matches!(config.world.template, Template::Raster { .. }) {
             crate::lakes::add_depression_lakes(
-                &grid,
-                &mut heights,
+                &base_grid,
+                &mut base_heights,
                 sea_level,
                 config.world.lake_elevation_limit,
                 &protected,
             );
             crate::lakes::open_near_sea_lakes(
-                &grid,
-                &mut heights,
+                &base_grid,
+                &mut base_heights,
                 sea_level,
                 &protected,
                 &keep_lake,
@@ -185,13 +204,60 @@ impl World {
         }
 
         // The place of the map on the globe (FMG `Coordinates.generate`).
-        let partial = Features::mark(&grid, &heights, sea_level)
+        let base_features = Features::mark(&base_grid, &base_heights, sea_level);
+        let partial = base_features
             .list
             .iter()
             .any(|f| f.kind.is_land() && f.border);
         let mut coord_rng = Rand::new(tree.part_rng(Layer::Climate, "coordinates"));
         let coordinates = crate::coordinates::coordinates(config, partial, &mut coord_rng);
         let latitudes = coordinates.latitude_range();
+
+        let base_temperature =
+            crate::climate::temperatures(&base_grid, &base_heights, config, latitudes);
+        let mut rain_rng = Rand::new(tree.part_rng(Layer::Climate, "rain"));
+        let base_precipitation = crate::climate::precipitation(
+            &base_grid,
+            &base_heights,
+            &base_temperature,
+            config,
+            latitudes,
+            &mut rain_rng,
+        );
+
+        // The second grid (FMG `regraph`). Each exact site stays a site.
+        let mut keep = vec![false; base_grid.len()];
+        for &c in &base_site_cells {
+            keep[c] = true;
+        }
+        let pack = crate::pack::regraph(&base_grid, &base_heights, sea_level, &keep);
+        let grid = pack.grid;
+        let base_cell = pack.base_cell;
+        let mut heights = pack.heights;
+        let to_pack =
+            |c: usize| pack.cell_of_base[c].expect("an exact site stays in the second grid");
+        let pin_cells: Vec<usize> = base_pin_cells.iter().map(|&c| to_pack(c)).collect();
+        let site_cells: BTreeMap<(u64, u64), usize> = site_index
+            .into_iter()
+            .map(|(k, i)| (k, to_pack(base_site_cells[i])))
+            .collect();
+        let temperature: Vec<f64> = base_cell.iter().map(|&g| base_temperature[g]).collect();
+        let precipitation: Vec<f64> = base_cell.iter().map(|&g| base_precipitation[g]).collect();
+
+        // The pins hold on the second grid too: a new cell in a region gets
+        // a height in its range, and each port keeps water next to it.
+        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level);
+        let points: Vec<FitPoint> = pins
+            .points
+            .iter()
+            .enumerate()
+            .map(|(index, pin)| FitPoint {
+                index,
+                pin,
+                cell: pin_cells[index],
+            })
+            .collect();
+        apply_points(&grid, &mut heights, &points, &regions, sea_level)?;
 
         let plan = crate::courses::Plan {
             grid: &grid,
@@ -224,16 +290,6 @@ impl World {
         }
         let coastlines = coastlines(&grid, &features);
 
-        let temperature = crate::climate::temperatures(&grid, &heights, config, latitudes);
-        let mut rain_rng = Rand::new(tree.part_rng(Layer::Climate, "rain"));
-        let precipitation = crate::climate::precipitation(
-            &grid,
-            &heights,
-            &temperature,
-            config,
-            latitudes,
-            &mut rain_rng,
-        );
         let drainage = drain(&grid, &heights, &features, &precipitation, &courses);
         let rivers = trace(
             &grid,
@@ -302,7 +358,15 @@ impl World {
             width: w,
             height: h,
             sea_level,
+            base: Base {
+                grid: base_grid,
+                heights: base_heights,
+                features: base_features,
+                temperature: base_temperature,
+                precipitation: base_precipitation,
+            },
             grid,
+            base_cell,
             heights,
             features,
             coastlines,

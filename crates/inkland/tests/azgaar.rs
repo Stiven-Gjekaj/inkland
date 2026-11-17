@@ -94,18 +94,21 @@ fn land_and_sea_agree_with_the_map() {
         let w = inkland_core::world::World::build(&c).unwrap();
         let sea_level = f64::from(c.world.sea_level);
         let (mut differ, mut forced) = (0usize, 0usize);
-        let n = w.grid.len();
+        // The raster gives the heights of the first grid.
+        let g = &w.base.grid;
+        let n = g.len();
         let mut near_place = vec![false; n];
         for &cell in &w.pin_cells {
+            let cell = w.base_cell[cell];
             near_place[cell] = true;
-            for m in w.grid.neighbors(cell) {
+            for m in g.neighbors(cell) {
                 near_place[m] = true;
             }
         }
         for cell in 0..n {
-            let [x, y] = w.grid.points[cell];
+            let [x, y] = g.points[cell];
             let map_land = f64::from(raster.sample(x, y, w.width, w.height)) >= sea_level;
-            if map_land != w.features.is_land(cell) {
+            if map_land != w.base.features.is_land(cell) {
                 if near_place[cell] {
                     forced += 1;
                 } else {

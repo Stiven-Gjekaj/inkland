@@ -48,14 +48,15 @@ pub fn chaikin(points: &[[f64; 2]], closed: bool, rounds: usize) -> Vec<[f64; 2]
 }
 
 /// The water lines: lines between water cells at distance `k` and `k + 1`
-/// from land, for `k` in 1 and 2. Each line is a list of vertex indices.
+/// from land, for `k` in 1 and 2. Each line is a list of vertex indices of
+/// the first grid, which keeps the deep water (as the ocean bands of FMG).
 pub fn water_lines(world: &World) -> Vec<Vec<u32>> {
-    let g = &world.grid;
+    let g = &world.base.grid;
     let n = g.len();
     let mut d = vec![u32::MAX; n];
     let mut queue = VecDeque::new();
     for (c, dc) in d.iter_mut().enumerate() {
-        if world.features.is_land(c) {
+        if world.base.features.is_land(c) {
             *dc = 0;
             queue.push_back(c);
         }

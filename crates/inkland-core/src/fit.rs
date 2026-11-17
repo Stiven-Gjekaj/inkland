@@ -138,6 +138,29 @@ pub fn apply_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], se
     }
 }
 
+/// Put the height of each cell inside a region into the range of its
+/// regions. A height that is in the range already does not change. This
+/// holds the regions on the second grid, whose new cells take the height of
+/// a cell of the first grid.
+pub fn clamp_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], sea_level: f64) {
+    for c in 0..grid.len() {
+        let p = grid.points[c];
+        let inside: Vec<&FitRegion> = regions.iter().filter(|r| r.contains(p)).collect();
+        let Some(first) = inside.first() else {
+            continue;
+        };
+        let range = inside.iter().skip(1).fold(first.range, |[lo, hi], r| {
+            [lo.max(r.range[0]), hi.min(r.range[1])]
+        });
+        let h = if inside.iter().all(|r| r.land_only) {
+            heights[c].max(sea_level)
+        } else {
+            heights[c]
+        };
+        heights[c] = put(h, range);
+    }
+}
+
 /// A point pin and its cell.
 pub struct FitPoint<'a> {
     pub index: usize,

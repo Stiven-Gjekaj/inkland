@@ -1,9 +1,11 @@
 //! `world.json`: the base world, in config units.
 //!
-//! The file holds the cell sites, the heights, the features, and the
-//! coastlines. All coordinates have 3 decimals. It also holds the part of
-//! the config that makes the world, so other commands can make the same
-//! world again from the file.
+//! The file holds the first grid (`base`: its lattice, sites, and
+//! heights) and the second grid (`grid`), with the first-grid cell of each
+//! cell. All other cell data and cell indices are for the second grid: the
+//! heights, the features, the rivers, and the society. All coordinates have
+//! 3 decimals. It also holds the part of the config that makes the world,
+//! so other commands can make the same world again from the file.
 
 use inkland_core::config::Config;
 use inkland_core::num::round;
@@ -12,7 +14,7 @@ use serde_json::{Value, json};
 
 /// The format name and version of `world.json`.
 pub const FORMAT: &str = "inkland-world";
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 fn point(p: [f64; 2]) -> Value {
     json!([round(p[0], 3), round(p[1], 3)])
@@ -42,10 +44,16 @@ pub fn world_value(world: &World, config: &Config) -> Value {
             "lon_w": round(world.coordinates.lon_w, 3),
             "lon_e": round(world.coordinates.lon_e, 3),
         },
+        "base": {
+            "lattice": serde_json::to_value(world.base.grid.lattice.kind).expect("a lattice converts to JSON"),
+            "cells_x": world.base.grid.cells_x,
+            "cells_y": world.base.grid.cells_y,
+            "points": world.base.grid.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
+            "heights": world.base.heights.iter().map(|&h| h as u8).collect::<Vec<_>>(),
+        },
         "grid": {
-            "cells_x": g.cells_x,
-            "cells_y": g.cells_y,
             "points": g.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
+            "base_cell": world.base_cell,
         },
         "heights": world.heights.iter().map(|&h| h as u8).collect::<Vec<_>>(),
         "elevation": world.drainage.elevation.iter().map(|&e| round(e, 3)).collect::<Vec<_>>(),

@@ -189,7 +189,7 @@ fn write_coast(s: &mut String, world: &World, page: &Page, coast_w: f64, min: f6
     for (i, line) in crate::decor::water_lines(world).iter().enumerate() {
         let pts: Vec<[f64; 2]> = line
             .iter()
-            .map(|&v| world.grid.vertices[v as usize])
+            .map(|&v| world.base.grid.vertices[v as usize])
             .collect();
         let closed = line.len() > 2 && line.first() == line.last();
         let smooth = crate::decor::chaikin(&pts, closed, 2);
