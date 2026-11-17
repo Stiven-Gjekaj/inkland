@@ -79,6 +79,31 @@ pub struct State {
     /// The place id of the capital.
     pub capital: u32,
     pub culture: u32,
+    /// The cell of the capital.
+    pub center: usize,
+    /// The type of the culture of the state.
+    pub kind: crate::cultures::CultureType,
+    pub expansionism: f64,
+    /// The neighbor states.
+    pub neighbors: Vec<u32>,
+    /// A color as `#rrggbb`. Data only; the print-safe SVG does not use it.
+    pub color: String,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State {
+            id: NONE,
+            name: String::new(),
+            capital: NONE,
+            culture: NONE,
+            center: 0,
+            kind: crate::cultures::CultureType::Generic,
+            expansionism: 1.0,
+            neighbors: Vec::new(),
+            color: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -237,7 +262,6 @@ pub fn build(input: &Input) -> Society {
     let chains: Vec<Chain> = std::iter::once(Chain::new(crate::cultures::WILDLANDS_BASE))
         .chain(cultures.iter().map(|c| Chain::new(c.base)))
         .collect();
-    let chain_of = |cell: usize| &chains[cell_culture[cell] as usize];
 
     // Places (FMG burgs generate and assignPorts).
     let mut nrng = Rand::new(tree.part_rng(Layer::Names, "places"));
@@ -262,64 +286,42 @@ pub fn build(input: &Input) -> Society {
     let mut places = crate::burgs::generate(&burg_input, &mut used_names, &mut prng, &mut nrng);
     crate::burgs::assign_ports(&burg_input, &mut places);
 
-    // States: one for each capital.
-    let mut srng = Rand::new(tree.part_rng(Layer::States, "states"));
-    let capitals: Vec<&Place> = places.iter().filter(|p| p.capital).collect();
-    let mut states: Vec<State> = Vec::new();
+    // States (FMG createStates, expandStates, normalize).
+    let state_input = crate::states::Input {
+        config,
+        grid,
+        cells: &cells,
+        features,
+        biomes,
+        cultures: &cultures,
+        cell_culture: &cell_culture,
+        chains: &chains,
+    };
+    let mut srng = Rand::new(tree.part_rng(Layer::States, "generate"));
     let mut name_rng = Rand::new(tree.part_rng(Layer::Names, "states"));
-    for p in &capitals {
-        let pinned_state = p
-            .pin
-            .as_ref()
-            .and_then(|id| config.pins.points.iter().find(|q| &q.id == id))
-            .and_then(|q| q.capital_of.clone());
-        let name = match pinned_state {
-            Some(s) if !states.iter().any(|x| x.name == s) => s,
-            Some(_) => continue,
-            None => chain_of(p.cell).name(&mut name_rng, &mut used_names),
-        };
-        states.push(State {
-            id: states.len() as u32 + 1,
-            name,
-            capital: p.id,
-            culture: p.culture,
-        });
-    }
+    let mut states = crate::states::create(
+        &state_input,
+        &mut places,
+        &mut used_names,
+        &mut srng,
+        &mut name_rng,
+    );
     if states.is_empty() && !places.is_empty() {
-        // No capital: the first place leads one state.
-        let p = &places[0];
-        states.push(State {
-            id: 1,
-            name: chain_of(p.cell).name(&mut name_rng, &mut used_names),
-            capital: p.id,
-            culture: p.culture,
-        });
+        // inkland: no capital, so the first place leads one state.
+        places[0].capital = true;
+        states = crate::states::create(
+            &state_input,
+            &mut places[..1],
+            &mut used_names,
+            &mut srng,
+            &mut name_rng,
+        );
     }
-    let state_seeds: Vec<(usize, u32, f64)> = states
-        .iter()
-        .map(|s| {
-            (
-                places[s.capital as usize - 1].cell,
-                s.id,
-                srng.uniform(1.0, 1.5),
-            )
-        })
-        .collect();
-    let state_culture: Vec<u32> = states.iter().map(|s| s.culture).collect();
-    let mut cell_state = grow(grid, &state_seeds, &|a, b, o| {
-        let other_culture = land(b) && cell_culture[b] != state_culture[o as usize - 1];
-        Some(step_cost(a, b) + if other_culture { 3.0 } else { 0.0 })
-    });
-    for (c, st) in cell_state.iter_mut().enumerate() {
-        if !land(c) {
-            *st = NONE;
-        }
-    }
+    let cell_state = crate::states::expand(&state_input, &states, &places);
+    crate::states::neighbors(grid, &cells, &cell_state, &mut states);
+    crate::states::colors(&mut states, &mut srng);
     for p in &mut places {
         p.state = cell_state[p.cell];
-        if p.capital && !states.iter().any(|s| s.capital == p.id) {
-            p.capital = false;
-        }
     }
 
     // Provinces: the capital and the best towns of each state.
