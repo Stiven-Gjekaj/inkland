@@ -12,6 +12,7 @@ pub mod error;
 pub mod features;
 pub mod fit;
 pub mod geom;
+pub mod geonames;
 pub mod grid;
 pub mod heightmap;
 pub mod names;

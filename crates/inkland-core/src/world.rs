@@ -45,6 +45,8 @@ pub struct World {
     pub society: crate::society::Society,
     /// Pinned roads first, in config order, then the generated network.
     pub roads: Vec<crate::roads::Road>,
+    /// Names and groups of rivers, islands, and lakes.
+    pub names: crate::geonames::Names,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -204,6 +206,15 @@ impl World {
             river_threshold: river_threshold(grid.len()),
             pin_cells: &pin_cells,
         });
+        let names = crate::geonames::build(&crate::geonames::Input {
+            config,
+            grid: &grid,
+            features: &features,
+            rivers: &rivers,
+            temperature: &temperature,
+            river_threshold: river_threshold(grid.len()),
+            society: &society,
+        });
         let roads = crate::roads::build(&crate::roads::Input {
             config,
             grid: &grid,
@@ -233,6 +244,7 @@ impl World {
             biomes,
             society,
             roads,
+            names,
         })
     }
 
