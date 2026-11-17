@@ -1,12 +1,20 @@
 // The main window of the inkland desktop app.
 
-import { AboutSlint, Button, VerticalBox } from "std-widgets.slint";
-import { AppState, Actions } from "globals.slint";
+import { AboutSlint, Button, TabWidget, VerticalBox } from "std-widgets.slint";
+import { AppState, Actions, Tool } from "globals.slint";
 import { MapView } from "map-view.slint";
 import { LayersPanel } from "layers-panel.slint";
+import { PinEditor } from "pin-editor.slint";
 import { StatusBar } from "status-bar.slint";
 
-export { AppState, Actions }
+export { AppState, Actions, Tool }
+
+component ToolButton inherits Button {
+    in property <Tool> tool;
+    checkable: true;
+    checked: AppState.tool == root.tool;
+    clicked => { AppState.tool = root.tool; }
+}
 
 export component AppWindow inherits Window {
     in property <string> window-title: "inkland";
@@ -43,10 +51,21 @@ export component AppWindow inherits Window {
                 VerticalBox {
                     width: 230px;
                     alignment: start;
+                    Text { text: "Tools"; font-weight: 600; }
+                    ToolButton { text: "Select and move pins"; tool: Tool.select; }
+                    ToolButton { text: "Add point pin"; tool: Tool.add-pin; }
                     LayersPanel {}
                 }
                 MapView {
                     horizontal-stretch: 1;
+                }
+                // The context editors.
+                TabWidget {
+                    width: 290px;
+                    Tab {
+                        title: "Pins";
+                        VerticalBox { PinEditor {} }
+                    }
                 }
             }
             StatusBar {}

@@ -1,0 +1,61 @@
+// The pin editor: the list of point pins, and rename and remove for the
+// selected pin.
+
+import { Button, ComboBox, LineEdit, ListView, GroupBox } from "std-widgets.slint";
+import { AppState, Actions } from "globals.slint";
+
+export component PinEditor inherits VerticalLayout {
+    spacing: 6px;
+    GroupBox {
+        vertical-stretch: 0;
+        title: "New pin kind";
+        ComboBox {
+            model: ["village", "town", "city", "fortress", "ruin"];
+            current-index <=> AppState.new-pin-kind;
+        }
+    }
+    Text {
+        text: "Point pins";
+        font-weight: 600;
+    }
+    ListView {
+        min-height: 120px;
+        vertical-stretch: 1;
+        for pin in AppState.pins: Rectangle {
+            height: 24px;
+            background: pin.id == AppState.selected-id ? #3070d040 : transparent;
+            Text {
+                x: 6px;
+                text: pin.label;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { Actions.select-pin(pin.id); }
+            }
+        }
+    }
+    GroupBox {
+        vertical-stretch: 0;
+        title: AppState.selected-id == "" ? "No pin selected" : "Pin " + AppState.selected-id;
+        enabled: AppState.selected-id != "";
+        VerticalLayout {
+            spacing: 4px;
+            name := LineEdit {
+                placeholder-text: "Name (empty: generated)";
+                text: AppState.selected-name;
+                accepted(t) => { Actions.rename-pin(AppState.selected-id, t); }
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                Button {
+                    text: "Rename";
+                    clicked => { Actions.rename-pin(AppState.selected-id, name.text); }
+                }
+                Button {
+                    text: "Remove";
+                    clicked => { Actions.remove-pin(AppState.selected-id); }
+                }
+            }
+        }
+    }
+}

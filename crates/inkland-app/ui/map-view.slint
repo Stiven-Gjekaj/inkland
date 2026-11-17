@@ -1,7 +1,7 @@
 // The map view: the rendered page and the marks of the tools.
 // Rust does the pan, the zoom, and the hit test.
 
-import { AppState, Actions } from "globals.slint";
+import { AppState, Actions, Tool } from "globals.slint";
 
 export component MapView inherits Rectangle {
     background: #8a8f94;
@@ -20,6 +20,27 @@ export component MapView inherits Rectangle {
         image-fit: fill;
     }
 
+    for pin in AppState.pins: Rectangle {
+        x: pin.x - 7px;
+        y: pin.y - 7px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        border-width: pin.id == AppState.selected-id ? 3px : 2px;
+        border-color: pin.id == AppState.selected-id ? #d03020 : #2060c0;
+    }
+
+    if AppState.dragging-pin: Rectangle {
+        x: AppState.drag-x - 7px;
+        y: AppState.drag-y - 7px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        border-width: 2px;
+        border-color: #d03020;
+        background: #d0302060;
+    }
+
     if AppState.generating: Rectangle {
         x: 8px;
         y: 8px;
@@ -34,6 +55,7 @@ export component MapView inherits Rectangle {
     }
 
     TouchArea {
+        mouse-cursor: AppState.tool == Tool.select ? MouseCursor.default : MouseCursor.crosshair;
         pointer-event(ev) => {
             if ev.kind == PointerEventKind.down {
                 Actions.pointer-down(self.mouse-x, self.mouse-y,

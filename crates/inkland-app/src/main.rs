@@ -13,7 +13,7 @@ mod ui {
 
 use inkland::{Config, World};
 use inkland_app::model::{Editor, error_text};
-use inkland_app::view::View;
+use inkland_app::view::{View, distance};
 use inkland_app::worker::Worker;
 use inkland_core::config::LayerName;
 use inkland_render::page::Page;
@@ -26,9 +26,14 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 use ui::{Actions, AppState, AppWindow, LayerRow};
+use ui::{PinRow, Tool};
 
 /// The color around the page in the map view.
 const DESK: [u8; 3] = [0x8a, 0x8f, 0x94];
+/// A click this near to a pin (in screen pixels) selects the pin.
+const PIN_HIT_PX: f64 = 9.0;
+/// The kinds of the "New pin kind" list, in its order.
+const PIN_KINDS: [&str; 5] = ["village", "town", "city", "fortress", "ruin"];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
   "world": { "cells": 8000, "template": "continents" } }"#;
@@ -86,6 +91,7 @@ struct Shown {
 enum Drag {
     None,
     Pan { last: [f64; 2] },
+    Pin { id: String, start: [f64; 2] },
 }
 
 struct State {
@@ -268,6 +274,25 @@ impl Controller {
             g.set_img_w(w as f32);
             g.set_img_h(h as f32);
         }
+        let Some(page) = Self::page(&st) else { return };
+        let pins: Vec<PinRow> = st
+            .editor
+            .points()
+            .into_iter()
+            .map(|p| {
+                let [x, y] = st.view.world_to_screen(&page, p.at);
+                PinRow {
+                    label: s(match &p.name {
+                        Some(n) => format!("{n}  ({}, {})", p.id, p.kind),
+                        None => format!("{}  ({})", p.id, p.kind),
+                    }),
+                    id: s(&p.id),
+                    x: x as f32,
+                    y: y as f32,
+                }
+            })
+            .collect();
+        g.set_pins(model(pins));
     }
 
     /// Show the state of the editor: pins, selection, layers, variants,
@@ -278,6 +303,15 @@ impl Controller {
         let st = self.state.borrow();
         let e = &st.editor;
         let c = e.config();
+        let selected = e.selected.clone().unwrap_or_default();
+        let name = e
+            .points()
+            .into_iter()
+            .find(|p| p.id == selected)
+            .and_then(|p| p.name)
+            .unwrap_or_default();
+        g.set_selected_id(s(&selected));
+        g.set_selected_name(s(name));
         g.set_layers(model(
             layer_names()
                 .into_iter()
@@ -401,10 +435,62 @@ impl Controller {
         }
     }
 
+    /// The pin under a screen point.
+    fn pin_at(st: &State, p: [f64; 2]) -> Option<String> {
+        let page = Self::page(st)?;
+        st.editor
+            .points()
+            .into_iter()
+            .map(|pin| (distance(st.view.world_to_screen(&page, pin.at), p), pin.id))
+            .filter(|(d, _)| *d <= PIN_HIT_PX)
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, id)| id)
+    }
+
+    /// The world point under a screen point, if it is in the frame.
+    fn world_at(st: &State, p: [f64; 2]) -> Option<[f64; 2]> {
+        let page = Self::page(st)?;
+        let w = st.view.screen_to_world(&page, p);
+        let f = &st.editor.config().frame;
+        (w[0] >= 0.0 && w[1] >= 0.0 && w[0] <= f.width && w[1] <= f.height).then_some(w)
+    }
+
     fn pointer_down(self: &Rc<Self>, p: [f64; 2], pan: bool) {
         let mut st = self.state.borrow_mut();
-        let _ = pan;
-        st.drag = Drag::Pan { last: p };
+        if pan {
+            st.drag = Drag::Pan { last: p };
+            return;
+        }
+        let tool = self.ui().global::<AppState>().get_tool();
+        match tool {
+            Tool::Select => match Self::pin_at(&st, p) {
+                Some(id) => {
+                    st.editor.selected = Some(id.clone());
+                    st.drag = Drag::Pin { id, start: p };
+                    drop(st);
+                    self.update_editor();
+                }
+                None => st.drag = Drag::Pan { last: p },
+            },
+            Tool::AddPin => {
+                let Some(at) = Self::world_at(&st, p) else {
+                    drop(st);
+                    self.message("a pin must be inside the frame", true);
+                    return;
+                };
+                let kind = PIN_KINDS
+                    .get(self.ui().global::<AppState>().get_new_pin_kind() as usize)
+                    .copied()
+                    .unwrap_or("village");
+                let r = st.editor.add_pin(at, kind);
+                drop(st);
+                let what = match &r {
+                    Ok(id) => format!("add the {kind} pin {id}"),
+                    Err(_) => format!("add a {kind} pin"),
+                };
+                self.edited(r.map(|_| ()), &what);
+            }
+        }
     }
 
     fn pointer_move(self: &Rc<Self>, p: [f64; 2]) {
@@ -440,12 +526,28 @@ impl Controller {
                 self.update_view();
                 self.rerender_soon();
             }
+            Drag::Pin { start, .. } => {
+                let moved = distance(*start, p) > 3.0;
+                g.set_dragging_pin(moved);
+                g.set_drag_x(p[0] as f32);
+                g.set_drag_y(p[1] as f32);
+            }
         }
     }
 
     fn pointer_up(self: &Rc<Self>, p: [f64; 2]) {
         let drag = std::mem::replace(&mut self.state.borrow_mut().drag, Drag::None);
-        let _ = (drag, p);
+        self.ui().global::<AppState>().set_dragging_pin(false);
+        if let Drag::Pin { id, start } = drag
+            && distance(start, p) > 3.0
+        {
+            let at = Self::world_at(&self.state.borrow(), p);
+            let r = match at {
+                Some(at) => self.state.borrow_mut().editor.move_pin(&id, at),
+                None => Err("a pin must be inside the frame".to_owned()),
+            };
+            self.edited(r, &format!("move the pin {id}"));
+        }
     }
 
     fn scroll(self: &Rc<Self>, p: [f64; 2], dy: f64) {
@@ -619,6 +721,21 @@ fn main() -> Result<(), slint::PlatformError> {
             let what = if on { "show" } else { "hide" };
             c.edited(r, &format!("{what} the layer {name}"));
         }
+    });
+    let c = Rc::clone(&app);
+    a.on_select_pin(move |id| {
+        c.state.borrow_mut().editor.selected = Some(id.to_string());
+        c.update_editor();
+    });
+    let c = Rc::clone(&app);
+    a.on_rename_pin(move |id, name| {
+        let r = c.state.borrow_mut().editor.rename_pin(&id, &name);
+        c.edited(r, &format!("rename the pin {id}"));
+    });
+    let c = Rc::clone(&app);
+    a.on_remove_pin(move |id| {
+        let r = c.state.borrow_mut().editor.remove_pin(&id);
+        c.edited(r, &format!("remove the pin {id}"));
     });
     let c = Rc::clone(&app);
     a.on_open(move || {

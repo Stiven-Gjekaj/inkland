@@ -1,6 +1,15 @@
 // The state that the Rust code gives to the user interface, and the
 // actions that the user interface sends to the Rust code.
 
+export enum Tool { select, add-pin }
+
+// A point pin. `x` and `y` are its position in the map view.
+export struct PinRow {
+    id: string,
+    label: string,
+    x: length,
+    y: length,
+}
 
 export struct LayerRow {
     name: string,
@@ -21,6 +30,16 @@ export global AppState {
     in-out property <int> variant-index;
     in property <[LayerRow]> layers;
 
+    in-out property <Tool> tool: Tool.select;
+    in property <[PinRow]> pins;
+    in-out property <string> selected-id;
+    in property <string> selected-name;
+    // A pin that the user drags: its position in the map view.
+    in property <bool> dragging-pin;
+    in property <length> drag-x;
+    in property <length> drag-y;
+    in-out property <int> new-pin-kind;
+
     in property <string> status-position;
     in property <string> status-cell;
     in property <string> message;
@@ -39,6 +58,9 @@ export global Actions {
 
     callback select-variant(int);
     callback set-layer(string, bool);
+    callback select-pin(string);
+    callback rename-pin(string, string);
+    callback remove-pin(string);
 
     callback open();
     callback save();
