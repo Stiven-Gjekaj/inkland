@@ -345,7 +345,7 @@ impl World {
             &drainage.flux,
             &regions,
         );
-        let society = crate::society::build(&crate::society::Input {
+        let mut society = crate::society::build(&crate::society::Input {
             config,
             grid: &grid,
             heights: &heights,
@@ -358,17 +358,6 @@ impl World {
             river_threshold: river_threshold(grid.len()),
             pin_cells: &pin_cells,
         });
-        let names = crate::geonames::build(&crate::geonames::Input {
-            config,
-            grid: &grid,
-            features: &features,
-            rivers: &rivers,
-            lakes: &lakes,
-            base_cells: base_grid_len,
-            sea_level,
-            society: &society,
-        });
-
         let routes = crate::roads::build(&crate::roads::Input {
             config,
             grid: &grid,
@@ -389,6 +378,28 @@ impl World {
             society: &society,
             roads: &roads,
             sea_routes: &sea_routes,
+        });
+        crate::society::specify(
+            &mut society,
+            &crate::society::Later {
+                config,
+                grid: &grid,
+                features: &features,
+                biomes: &biomes,
+                roads: &roads,
+                sea_routes: &sea_routes,
+                religions: &religions,
+            },
+        );
+        let names = crate::geonames::build(&crate::geonames::Input {
+            config,
+            grid: &grid,
+            features: &features,
+            rivers: &rivers,
+            lakes: &lakes,
+            base_cells: base_grid_len,
+            sea_level,
+            society: &society,
         });
         Ok(World {
             seed: config.seed,

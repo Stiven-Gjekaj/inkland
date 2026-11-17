@@ -28,6 +28,7 @@ pub mod num;
 pub mod overlay;
 pub mod pack;
 pub mod population;
+pub mod provinces;
 pub mod rand;
 pub mod religions;
 pub mod rivers;

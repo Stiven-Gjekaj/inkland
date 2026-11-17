@@ -291,6 +291,287 @@ pub fn colors(states: &mut [State], rng: &mut Rand) {
     }
 }
 
+/// Area, population, and places of each state (`collectStatistics`).
+pub fn statistics(cells: &Cells, cell_state: &[u32], places: &[Place], states: &mut [State]) {
+    for st in states.iter_mut() {
+        st.cells = 0;
+        st.area = 0.0;
+        st.burgs = 0;
+        st.rural = 0.0;
+        st.urban = 0.0;
+    }
+    let mut burg_at = vec![NONE; cells.h.len()];
+    for p in places {
+        burg_at[p.cell] = p.id;
+    }
+    for i in 0..cells.h.len() {
+        if !cells.land(i) || cell_state[i] == NONE {
+            continue;
+        }
+        let st = &mut states[cell_state[i] as usize - 1];
+        st.cells += 1;
+        st.area += cells.area[i];
+        st.rural += cells.pop[i];
+        if burg_at[i] != NONE {
+            st.urban += places[burg_at[i] as usize - 1].population;
+            st.burgs += 1;
+        }
+    }
+}
+
+const MONARCHY: [&str; 5] = ["Duchy", "Grand Duchy", "Principality", "Kingdom", "Empire"];
+const GENERIC: [(&str, u32); 3] = [("Monarchy", 25), ("Republic", 2), ("Union", 1)];
+const NAVAL: [(&str, u32); 3] = [("Monarchy", 25), ("Republic", 8), ("Union", 3)];
+const REPUBLIC: [(&str, u32); 9] = [
+    ("Republic", 75),
+    ("Federation", 4),
+    ("Trade Company", 4),
+    ("Most Serene Republic", 2),
+    ("Oligarchy", 2),
+    ("Tetrarchy", 1),
+    ("Triumvirate", 1),
+    ("Diarchy", 1),
+    ("Junta", 1),
+];
+const UNION: [(&str, u32); 8] = [
+    ("Union", 3),
+    ("League", 4),
+    ("Confederation", 1),
+    ("United Kingdom", 1),
+    ("United Republic", 1),
+    ("United Provinces", 2),
+    ("Commonwealth", 1),
+    ("Heptarchy", 1),
+];
+const THEOCRACY: [(&str, u32); 5] = [
+    ("Theocracy", 15),
+    ("Brotherhood", 1),
+    ("Thearchy", 2),
+    ("See", 1),
+    ("Holy State", 1),
+];
+const ANARCHY: [(&str, u32); 4] = [
+    ("Free Territory", 2),
+    ("Council", 3),
+    ("Commune", 1),
+    ("Community", 1),
+];
+/// The forms that put the adjective before the form name.
+const ADJECTIVE_FORMS: [&str; 17] = [
+    "Empire",
+    "Sultanate",
+    "Khaganate",
+    "Shogunate",
+    "Caliphate",
+    "Despotate",
+    "Theocracy",
+    "Oligarchy",
+    "Union",
+    "Confederation",
+    "Trade Company",
+    "League",
+    "Tetrarchy",
+    "Triumvirate",
+    "Diarchy",
+    "Horde",
+    "Marches",
+];
+
+/// What `forms` reads.
+pub struct FormInput<'a> {
+    pub config: &'a crate::config::Config,
+    pub cultures: &'a [Culture],
+    pub places: &'a [Place],
+    pub religions: &'a crate::religions::Religions,
+    pub development: &'a [u8],
+}
+
+fn median(mut v: Vec<f64>) -> f64 {
+    v.sort_by(f64::total_cmp);
+    let n = v.len();
+    if n == 0 {
+        0.0
+    } else if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
+}
+
+/// The form, form name, and full name of each state (`defineStateForms`).
+/// FMG has a "Neutrals" state 0 with the area of the land without a state;
+/// in inkland that area is 0. inkland has no diplomacy, so the vassal forms
+/// (Marches, Dominion, Protectorate of a vassal) do not come.
+pub fn forms(input: &FormInput, states: &mut [State], rng: &mut Rand) {
+    if states.is_empty() {
+        return;
+    }
+    let areas: Vec<f64> = std::iter::once(0.0)
+        .chain(states.iter().map(|s| s.area))
+        .collect();
+    let median_area = median(areas);
+    let mut sorted: Vec<f64> = states.iter().map(|s| s.area).collect();
+    sorted.sort_by(|a, b| b.total_cmp(a));
+    let k = (libm::pow(states.len() as f64, 0.4).ceil() as i64 - 2).max(0) as usize;
+    let empire_min = sorted[k.min(sorted.len() - 1)];
+    for s in states.iter_mut() {
+        let mut tier = ((s.area / median_area * 2.6).floor() as i64).clamp(0, 4) as usize;
+        if median_area == 0.0 {
+            tier = 4;
+        }
+        if tier == 4 && s.area < empire_min {
+            tier = 3;
+        }
+        let religion = input.religions.cell_religion[s.center];
+        let rel = input
+            .religions
+            .list
+            .iter()
+            .find(|r| r.id == religion && religion != NONE);
+        let theocracy = rel.is_some_and(|r| r.expansion == "state")
+            || (rng.p(0.1) && rel.is_some_and(|r| r.kind == "Organized" || r.kind == "Cult"));
+        let anarchy = rng.p(0.01 - tier as f64 / 500.0);
+        s.form = if theocracy {
+            "Theocracy".to_owned()
+        } else if anarchy {
+            "Anarchy".to_owned()
+        } else if s.kind == CultureType::Naval {
+            rng.weighted(&NAVAL).to_owned()
+        } else {
+            rng.weighted(&GENERIC).to_owned()
+        };
+        let base = input
+            .cultures
+            .get((s.culture as usize).wrapping_sub(1))
+            .map_or(crate::cultures::WILDLANDS_BASE, |c| c.base);
+        let form_name = select_form(input, s, tier, base, rng);
+        s.form_name = tribal_form(input, s, tier, form_name);
+        s.full_name = full_name(s, rng);
+    }
+}
+
+fn select_form(
+    input: &FormInput,
+    s: &mut State,
+    tier: usize,
+    base: usize,
+    rng: &mut Rand,
+) -> String {
+    let name = |x: &str| x.to_owned();
+    match s.form.as_str() {
+        "Monarchy" => {
+            let form = MONARCHY[tier];
+            let empire_or_kingdom = form == "Empire" || form == "Kingdom";
+            let duchy = form == "Grand Duchy" || form == "Duchy";
+            let special = match base {
+                31 if empire_or_kingdom => Some("Khanate"),
+                16 if form == "Principality" => Some("Beylik"),
+                5 if empire_or_kingdom => Some("Tsardom"),
+                16 if empire_or_kingdom => Some("Khaganate"),
+                12 if form == "Kingdom" || form == "Grand Duchy" => Some("Shogunate"),
+                17 | 18 if form == "Empire" => Some("Caliphate"),
+                18 if duchy => Some("Emirate"),
+                7 if duchy => Some("Despotate"),
+                31 if duchy => Some("Ulus"),
+                16 if duchy => Some("Horde"),
+                24 if duchy => Some("Satrapy"),
+                _ => None,
+            };
+            name(special.unwrap_or(form))
+        }
+        "Republic" => {
+            if tier < 2 && s.burgs == 1 {
+                let capital = input.places.iter().find(|p| p.id == s.capital);
+                let pinned = capital.is_some_and(|p| p.pin.is_some());
+                if let Some(c) = capital
+                    && crate::names::trim_vowels(&s.name, 3)
+                        == crate::names::trim_vowels(&c.name, 3)
+                {
+                    // inkland: a pinned state keeps its name.
+                    if !pinned {
+                        s.name = c.name.clone();
+                    }
+                    return name("Free City");
+                }
+                if rng.p(0.3) {
+                    return name("City-state");
+                }
+            }
+            name(rng.weighted(&REPUBLIC))
+        }
+        "Union" => name(rng.weighted(&UNION)),
+        "Anarchy" => name(rng.weighted(&ANARCHY)),
+        _ => {
+            if [0, 1, 2, 3, 4, 6, 8, 9, 13, 15, 20].contains(&base) {
+                if rng.p(0.1) {
+                    return format!("Divine {}", MONARCHY[tier]);
+                }
+                if tier < 2 && rng.p(0.5) {
+                    return name("Diocese");
+                }
+                if tier < 2 && rng.p(0.5) {
+                    return name("Bishopric");
+                }
+            }
+            if rng.p(0.9) && [7, 5].contains(&base) {
+                if tier < 2 {
+                    return name("Eparchy");
+                }
+                if tier == 2 {
+                    return name("Exarchate");
+                }
+                return name("Patriarchate");
+            }
+            if rng.p(0.9) && [21, 16].contains(&base) {
+                return name("Imamah");
+            }
+            if tier > 2 && rng.p(0.8) && [18, 17, 28].contains(&base) {
+                return name("Caliphate");
+            }
+            name(rng.weighted(&THEOCRACY))
+        }
+    }
+}
+
+/// A title for a people before the Bronze Age (`getTribalForm`).
+fn tribal_form(input: &FormInput, s: &State, tier: usize, form_name: String) -> String {
+    let development = input
+        .places
+        .iter()
+        .find(|p| p.id == s.capital)
+        .map_or(0, |p| input.development[p.cell]);
+    if development == 0 || development >= crate::development::TRIBAL_DEVELOPMENT {
+        return form_name;
+    }
+    let tribal = match s.form.as_str() {
+        "Monarchy" if s.kind == CultureType::Nomadic => "Horde",
+        "Monarchy" if tier < 2 => "Tribe",
+        "Monarchy" if tier < 4 => "Chiefdom",
+        "Monarchy" => "Paramount Chiefdom",
+        "Republic" => "Tribal Council",
+        "Union" => "Clans Union",
+        "Theocracy" => "Shamanate",
+        _ => return form_name,
+    };
+    tribal.to_owned()
+}
+
+/// `getFullName`.
+fn full_name(s: &State, rng: &mut Rand) -> String {
+    if s.form_name.is_empty() {
+        return s.name.clone();
+    }
+    if s.name.is_empty() {
+        return format!("The {}", s.form_name);
+    }
+    let adj = ADJECTIVE_FORMS.contains(&s.form_name.as_str()) && !s.name.contains([' ', '-']);
+    if adj {
+        format!("{} {}", crate::names::adjective(&s.name, rng), s.form_name)
+    } else {
+        format!("{} of {}", s.form_name, s.name)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::config::Config;

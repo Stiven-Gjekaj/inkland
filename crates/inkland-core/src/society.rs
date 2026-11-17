@@ -1,26 +1,22 @@
-//! Cultures, places, states, and provinces.
+//! Cultures, places, states, and provinces: the society stages of FMG in
+//! its order.
 //!
-//! - Suitability: how good a land cell is for people, from its biome, its
-//!   rivers, its coast, and its height.
-//! - Cultures start at good cells far from each other and grow over the land
-//!   by least cost.
-//! - Places: first the pinned places, exactly where they are. Then the
-//!   capitals and the towns at good cells, at a distance from each other and
-//!   at least `places.min_distance_from_pins` from each pinned place.
-//! - States grow from their capitals by least cost. Each land cell gets
-//!   exactly one state.
-//! - Provinces grow from the capital and the best towns of a state, inside
-//!   the state.
+//! - `build`: rankCells (`population.rs`), cultures and their expansion
+//!   (`cultures.rs`), burgs and ports (`burgs.rs`), states (`states.rs`),
+//!   and development (`development.rs`).
+//! - `specify`, after the routes and the religions: burgsSpecify, state
+//!   statistics and forms, and provinces (`provinces.rs`).
+//! - Pins win: pinned places stay exact and keep their kind, and a pinned
+//!   capital leads the state of its `capital_of`. Each land cell gets
+//!   exactly one state and one province.
 
-use crate::biomes::HABITABILITY;
 use crate::config::{Config, PlaceKind};
 use crate::features::Features;
 use crate::grid::Grid;
 use crate::names::Chain;
 use crate::rand::Rand;
 use crate::seed::{Layer, SeedTree};
-use std::cmp::Reverse;
-use std::collections::{BTreeSet, BinaryHeap};
+use std::collections::BTreeSet;
 
 /// No owner.
 pub const NONE: u32 = 0;
@@ -49,6 +45,18 @@ pub struct Place {
     pub culture: u32,
     pub state: u32,
     pub province: u32,
+    /// Population in thousands (FMG population points).
+    pub population: f64,
+    /// The type of the place (`getType`).
+    pub ptype: crate::cultures::CultureType,
+    /// The FMG burg group: `capital`, `city`, `fort`, `monastery`,
+    /// `caravanserai`, `trading_post`, `village`, `hamlet`, or `town`.
+    pub group: String,
+    pub citadel: bool,
+    pub plaza: bool,
+    pub walls: bool,
+    pub shanty: bool,
+    pub temple: bool,
 }
 
 impl Place {
@@ -68,6 +76,14 @@ impl Place {
             culture: NONE,
             state: NONE,
             province: NONE,
+            population: 0.0,
+            ptype: crate::cultures::CultureType::Generic,
+            group: String::new(),
+            citadel: false,
+            plaza: false,
+            walls: false,
+            shanty: false,
+            temple: false,
         }
     }
 }
@@ -88,6 +104,20 @@ pub struct State {
     pub neighbors: Vec<u32>,
     /// A color as `#rrggbb`. Data only; the print-safe SVG does not use it.
     pub color: String,
+    /// The form of government: `Monarchy`, `Republic`, `Union`,
+    /// `Theocracy`, or `Anarchy`.
+    pub form: String,
+    /// The form name, for example `Kingdom` or `Free City`.
+    pub form_name: String,
+    /// The full name, for example `Kingdom of Ostrey`.
+    pub full_name: String,
+    /// Statistics: land cells, area in square units, places, and the rural
+    /// and urban population in population points.
+    pub cells: u32,
+    pub area: f64,
+    pub burgs: u32,
+    pub rural: f64,
+    pub urban: f64,
 }
 
 impl Default for State {
@@ -102,6 +132,14 @@ impl Default for State {
             expansionism: 1.0,
             neighbors: Vec::new(),
             color: String::new(),
+            form: String::new(),
+            form_name: String::new(),
+            full_name: String::new(),
+            cells: 0,
+            area: 0.0,
+            burgs: 0,
+            rural: 0.0,
+            urban: 0.0,
         }
     }
 }
@@ -111,8 +149,16 @@ pub struct Province {
     pub id: u32,
     pub name: String,
     pub state: u32,
-    /// The place id of the seat.
+    /// The place id of the seat, or 0 for a wild province without a place.
     pub seat: u32,
+    /// The center cell.
+    pub center: usize,
+    /// The form name, for example `County` or `Territory`.
+    pub form_name: String,
+    /// The full name, for example `Ostrey County`.
+    pub full_name: String,
+    /// A color as `#rrggbb`. Data only.
+    pub color: String,
 }
 
 /// The society of a world.
@@ -146,64 +192,6 @@ pub struct Input<'a> {
     pub pin_cells: &'a [usize],
 }
 
-struct Key(f64);
-impl PartialEq for Key {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other).is_eq()
-    }
-}
-impl Eq for Key {}
-impl PartialOrd for Key {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for Key {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.total_cmp(&other.0)
-    }
-}
-
-/// Grow owners from their seed cells by least cost. `cost(from, to)` is the
-/// cost of one step, or `None` if the step is not allowed. Each owner has a
-/// speed: a faster owner pays less for each step.
-fn grow(
-    grid: &Grid,
-    seeds: &[(usize, u32, f64)],
-    cost: &dyn Fn(usize, usize, u32) -> Option<f64>,
-) -> Vec<u32> {
-    let n = grid.len();
-    let mut owner = vec![NONE; n];
-    let mut best = vec![f64::INFINITY; n];
-    let mut heap = BinaryHeap::new();
-    let mut speed = std::collections::BTreeMap::new();
-    for &(c, o, s) in seeds {
-        best[c] = 0.0;
-        owner[c] = o;
-        speed.insert(o, s);
-        heap.push(Reverse((Key(0.0), c, o)));
-    }
-    while let Some(Reverse((Key(d), c, o))) = heap.pop() {
-        if d > best[c] || owner[c] != o {
-            continue;
-        }
-        for m in grid.neighbors(c) {
-            let Some(step) = cost(c, m, o) else { continue };
-            let next = d + step / speed[&o];
-            if next < best[m] {
-                best[m] = next;
-                owner[m] = o;
-                heap.push(Reverse((Key(next), m, o)));
-            }
-        }
-    }
-    owner
-}
-
-fn dist(a: [f64; 2], b: [f64; 2]) -> f64 {
-    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt()
-}
-
 /// Build the society.
 pub fn build(input: &Input) -> Society {
     let Input {
@@ -221,8 +209,6 @@ pub fn build(input: &Input) -> Society {
     } = *input;
     let n = grid.len();
     let tree = SeedTree::new(config.seed);
-    let land = |c: usize| features.is_land(c);
-    let mean_width = (grid.step_x + grid.step_y) / 2.0;
 
     // Suitability and population (rankCells).
     let cells = crate::population::Cells::new(&crate::population::Input {
@@ -236,17 +222,6 @@ pub fn build(input: &Input) -> Society {
         rivers,
         river_threshold,
     });
-    let suitability = &cells.s;
-
-    // Step cost over the map: land is cheap, water is dear, steep is dear.
-    let step_cost = |a: usize, b: usize| -> f64 {
-        let d = dist(grid.points[a], grid.points[b]) / mean_width;
-        let water = if land(b) { 0.0 } else { 20.0 };
-        let climb = (heights[b] - heights[a]).abs() / 5.0;
-        let harsh = (100.0 - HABITABILITY[biomes[b] as usize]) / 50.0;
-        d * (1.0 + water + climb + if land(b) { harsh } else { 0.0 })
-    };
-
     // Cultures (FMG generate and expand).
     let culture_input = crate::cultures::Input {
         config,
@@ -326,56 +301,9 @@ pub fn build(input: &Input) -> Society {
         p.state = cell_state[p.cell];
     }
 
-    // Provinces: the capital and the best towns of each state.
-    let mut provinces: Vec<Province> = Vec::new();
-    let mut seats: Vec<(usize, u32, f64)> = Vec::new();
-    for s in &states {
-        let mut in_state: Vec<&Place> = places.iter().filter(|p| p.state == s.id).collect();
-        in_state.sort_by(|a, b| {
-            b.capital
-                .cmp(&a.capital)
-                .then(suitability[b.cell].total_cmp(&suitability[a.cell]))
-                .then(a.id.cmp(&b.id))
-        });
-        let k = ((in_state.len() as f64) * 0.3).ceil().max(1.0) as usize;
-        for p in in_state.into_iter().take(k) {
-            let id = provinces.len() as u32 + 1;
-            provinces.push(Province {
-                id,
-                name: p.name.clone(),
-                state: s.id,
-                seat: p.id,
-            });
-            seats.push((p.cell, id, 1.0));
-        }
-    }
-    let province_state: Vec<u32> = provinces.iter().map(|p| p.state).collect();
-    let mut cell_province = grow(grid, &seats, &|a, b, o| {
-        (land(b) && cell_state[b] == province_state[o as usize - 1]).then(|| step_cost(a, b))
-    });
-    // A part of a state that no seat reaches (another island) joins the
-    // nearest province of the same state.
-    for c in 0..n {
-        if !land(c) {
-            cell_province[c] = NONE;
-        } else if cell_province[c] == NONE {
-            let st = cell_state[c];
-            cell_province[c] = provinces
-                .iter()
-                .filter(|p| p.state == st)
-                .min_by(|a, b| {
-                    let pa = places[a.seat as usize - 1].at;
-                    let pb = places[b.seat as usize - 1].at;
-                    dist(pa, grid.points[c])
-                        .total_cmp(&dist(pb, grid.points[c]))
-                        .then(a.id.cmp(&b.id))
-                })
-                .map_or(NONE, |p| p.id);
-        }
-    }
-    for p in &mut places {
-        p.province = cell_province[p.cell];
-    }
+    // Provinces come later, in `specify`.
+    let provinces: Vec<Province> = Vec::new();
+    let cell_province = vec![NONE; n];
 
     let mut burg_cell = vec![false; n];
     for p in &places {
@@ -401,6 +329,79 @@ pub fn build(input: &Input) -> Society {
         cell_state,
         provinces,
         cell_province,
+    }
+}
+
+/// What `specify` reads: the stages after the society stages.
+pub struct Later<'a> {
+    pub config: &'a Config,
+    pub grid: &'a Grid,
+    pub features: &'a Features,
+    pub biomes: &'a [u8],
+    pub roads: &'a [crate::roads::Road],
+    pub sea_routes: &'a [crate::roads::Road],
+    pub religions: &'a crate::religions::Religions,
+}
+
+/// The FMG stages after routes and religions: burgsSpecify,
+/// collectStatistics, defineStateForms, and provinces.
+pub fn specify(soc: &mut Society, later: &Later) {
+    let Later {
+        config,
+        grid,
+        features,
+        biomes,
+        roads,
+        sea_routes,
+        religions,
+    } = *later;
+    let tree = SeedTree::new(config.seed);
+    let n = grid.len();
+    let connectivity = crate::routes::connectivity(roads, sea_routes, n);
+    let mut brng = Rand::new(tree.part_rng(Layer::Places, "specify"));
+    crate::burgs::specify(
+        &mut soc.places,
+        &soc.cells,
+        features,
+        biomes,
+        &connectivity,
+        &mut brng,
+    );
+    crate::states::statistics(&soc.cells, &soc.cell_state, &soc.places, &mut soc.states);
+    let mut frng = Rand::new(tree.part_rng(Layer::States, "forms"));
+    crate::states::forms(
+        &crate::states::FormInput {
+            config,
+            cultures: &soc.cultures,
+            places: &soc.places,
+            religions,
+            development: &soc.development,
+        },
+        &mut soc.states,
+        &mut frng,
+    );
+    let chains: Vec<Chain> = std::iter::once(Chain::new(crate::cultures::WILDLANDS_BASE))
+        .chain(soc.cultures.iter().map(|c| Chain::new(c.base)))
+        .collect();
+    let mut prng = Rand::new(tree.part_rng(Layer::States, "provinces"));
+    let (provinces, cell_province) = crate::provinces::generate(
+        &crate::provinces::Input {
+            config,
+            grid,
+            cells: &soc.cells,
+            features,
+            cell_state: &soc.cell_state,
+            cell_culture: &soc.cell_culture,
+            chains: &chains,
+        },
+        &soc.states,
+        &soc.places,
+        &mut prng,
+    );
+    soc.provinces = provinces;
+    soc.cell_province = cell_province;
+    for p in &mut soc.places {
+        p.province = soc.cell_province[p.cell];
     }
 }
 

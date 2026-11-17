@@ -313,6 +313,13 @@ impl<'a> Validator<'a> {
                 "size_variety must be 0 to 10",
             );
         }
+        if w.provinces_ratio > 100 {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/provinces_ratio",
+                "provinces_ratio must be 0 to 100",
+            );
+        }
         if !(0.1..=2.0).contains(&w.growth_rate) {
             self.err(
                 ErrorCode::ValueOutOfRange,

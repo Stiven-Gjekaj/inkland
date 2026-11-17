@@ -181,6 +181,12 @@ pub struct World {
     /// Number of towns that generation adds, or `auto`.
     #[serde(default)]
     pub towns: Towns,
+    /// Provinces for each 100 places of a state. 0 to 100. A state gets at
+    /// least 2 provinces when it has 2 places or more. 100: each place is
+    /// the seat of a province.
+    #[serde(default = "default_provinces_ratio")]
+    #[schemars(range(min = 0, max = 100))]
+    pub provinces_ratio: u8,
     /// Number of religions.
     #[serde(default = "default_religions")]
     pub religions: u32,
@@ -222,6 +228,7 @@ impl Default for World {
             growth_rate: default_growth_rate(),
             states: default_states(),
             towns: Towns::default(),
+            provinces_ratio: default_provinces_ratio(),
             religions: default_religions(),
             places: PlaceOptions::default(),
             brushes: Vec::new(),
@@ -1244,6 +1251,9 @@ fn default_growth_rate() -> f64 {
 }
 fn default_states() -> u32 {
     5
+}
+fn default_provinces_ratio() -> u8 {
+    20
 }
 fn default_religions() -> u32 {
     4

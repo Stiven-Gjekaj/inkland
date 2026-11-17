@@ -231,6 +231,255 @@ pub fn generate(
     places
 }
 
+/// The type of a place (`getType`).
+pub fn place_type(
+    cells: &Cells,
+    features: &Features,
+    biomes: &[u8],
+    cell: usize,
+    port: bool,
+) -> crate::cultures::CultureType {
+    use crate::cultures::CultureType;
+    if port {
+        return CultureType::Naval;
+    }
+    if let Some(h) = cells.haven[cell]
+        && features.get(features.of_cell[h]).kind == FeatureKind::Lake
+    {
+        return CultureType::Lake;
+    }
+    if cells.h[cell] > 60.0 {
+        return CultureType::Highland;
+    }
+    if cells.r[cell] != 0 && cells.fl[cell] >= 100.0 {
+        return CultureType::River;
+    }
+    let biome = biomes[cell];
+    // The cell has a place, so only a small rural population counts.
+    if cells.pop[cell] <= 5.0 {
+        if cells.pop[cell] < 5.0 && (1..=4).contains(&biome) {
+            return CultureType::Nomadic;
+        }
+        if biome > 4 && biome < 10 {
+            return CultureType::Hunting;
+        }
+    }
+    CultureType::Generic
+}
+
+/// One burg group of FMG (`getDefaultGroups`), in the order of the list.
+struct Group {
+    name: &'static str,
+    min: f64,
+    max: f64,
+    percentile: f64,
+    /// capital, citadel, walls, plaza, port, temple: `Some(value)` to match.
+    features: [Option<bool>; 6],
+    biomes: &'static [u8],
+}
+
+const GROUPS: [Group; 9] = [
+    Group {
+        name: "capital",
+        min: 0.0,
+        max: 0.0,
+        percentile: 0.0,
+        features: [Some(true), None, None, None, None, None],
+        biomes: &[],
+    },
+    Group {
+        name: "city",
+        min: 5.0,
+        max: 0.0,
+        percentile: 90.0,
+        features: [None; 6],
+        biomes: &[],
+    },
+    Group {
+        name: "fort",
+        min: 0.0,
+        max: 1.0,
+        percentile: 0.0,
+        features: [
+            None,
+            Some(true),
+            Some(false),
+            Some(false),
+            Some(false),
+            None,
+        ],
+        biomes: &[],
+    },
+    Group {
+        name: "monastery",
+        min: 0.0,
+        max: 0.8,
+        percentile: 0.0,
+        features: [
+            None,
+            None,
+            Some(false),
+            Some(false),
+            Some(false),
+            Some(true),
+        ],
+        biomes: &[],
+    },
+    Group {
+        name: "caravanserai",
+        min: 0.0,
+        max: 0.8,
+        percentile: 0.0,
+        features: [None, None, None, Some(true), Some(false), None],
+        biomes: &[1, 2, 3],
+    },
+    Group {
+        name: "trading_post",
+        min: 0.0,
+        max: 0.8,
+        percentile: 0.0,
+        features: [None, None, None, Some(true), None, None],
+        biomes: &[5, 6, 7, 8, 9, 10, 11, 12],
+    },
+    Group {
+        name: "village",
+        min: 0.1,
+        max: 2.0,
+        percentile: 0.0,
+        features: [None; 6],
+        biomes: &[],
+    },
+    Group {
+        name: "hamlet",
+        min: 0.0,
+        max: 0.1,
+        percentile: 0.0,
+        features: [None, None, None, Some(false), None, None],
+        biomes: &[],
+    },
+    Group {
+        name: "town",
+        min: 0.0,
+        max: 0.0,
+        percentile: 0.0,
+        features: [None; 6],
+        biomes: &[],
+    },
+];
+
+/// The group of a place (`defineGroup`). `populations` is sorted up.
+fn group(p: &Place, biome: u8, populations: &[f64]) -> &'static str {
+    let have = [p.capital, p.citadel, p.walls, p.plaza, p.port, p.temple];
+    for g in &GROUPS {
+        if g.min != 0.0 && p.population < g.min {
+            continue;
+        }
+        if g.max != 0.0 && p.population > g.max {
+            continue;
+        }
+        if g.features
+            .iter()
+            .zip(have)
+            .any(|(want, has)| want.is_some_and(|w| w != has))
+        {
+            continue;
+        }
+        if !g.biomes.is_empty() && !g.biomes.contains(&biome) {
+            continue;
+        }
+        if g.percentile != 0.0 {
+            let index = populations
+                .iter()
+                .position(|&x| x == p.population)
+                .unwrap_or(0);
+            if (index as f64) < (populations.len() as f64 * g.percentile / 100.0).floor() {
+                continue;
+            }
+        }
+        return g.name;
+    }
+    "town"
+}
+
+/// The kind of a generated place from its group.
+fn kind_of(group: &str) -> PlaceKind {
+    match group {
+        "capital" | "city" => PlaceKind::City,
+        "fort" => PlaceKind::Fortress,
+        "village" | "hamlet" => PlaceKind::Village,
+        _ => PlaceKind::Town,
+    }
+}
+
+/// The group of a pinned place, from its kind.
+fn pinned_group(p: &Place) -> &'static str {
+    if p.capital {
+        return "capital";
+    }
+    match p.kind {
+        PlaceKind::City => "city",
+        PlaceKind::Town => "town",
+        PlaceKind::Village => "village",
+        PlaceKind::Fortress => "fort",
+        PlaceKind::Ruin => "ruin",
+        PlaceKind::Custom => "custom",
+    }
+}
+
+/// Population, type, buildings, and group of each place (`specify`).
+/// `connectivity` is the route connectivity of each cell. A pinned place keeps its kind; its group comes
+/// from its kind.
+pub fn specify(
+    places: &mut [Place],
+    cells: &Cells,
+    features: &Features,
+    biomes: &[u8],
+    connectivity: &[f64],
+    rng: &mut Rand,
+) {
+    for p in places.iter_mut() {
+        // definePopulation.
+        let mut pop = cells.s[p.cell] / 5.0;
+        if p.capital {
+            pop *= 1.5;
+        }
+        if connectivity[p.cell] != 0.0 {
+            pop *= connectivity[p.cell];
+        }
+        pop *= rng.gauss(1.0, 1.0, 0.25, 4.0, 5);
+        pop += (f64::from(p.id % 100) - (p.cell % 100) as f64) / 1000.0;
+        p.population = crate::rand::rn(pop.max(0.01), 3);
+        p.ptype = place_type(cells, features, biomes, p.cell, p.port);
+        // defineFeatures. FMG defines state forms after this step, so no
+        // state is a theocracy yet.
+        let pop = p.population;
+        p.citadel =
+            p.capital || (pop > 50.0 && rng.p(0.75)) || (pop > 15.0 && rng.p(0.5)) || rng.p(0.1);
+        // The plaza rule of FMG before its market stage.
+        p.plaza =
+            pop > 20.0 || (pop > 10.0 && rng.p(0.8)) || (pop > 4.0 && rng.p(0.7)) || rng.p(0.6);
+        p.walls = p.capital
+            || pop > 30.0
+            || (pop > 20.0 && rng.p(0.75))
+            || (pop > 10.0 && rng.p(0.5))
+            || rng.p(0.1);
+        p.shanty =
+            pop > 60.0 || (pop > 40.0 && rng.p(0.75)) || (pop > 20.0 && p.walls && rng.p(0.4));
+        p.temple = pop > 50.0 || (pop > 35.0 && rng.p(0.75)) || (pop > 20.0 && rng.p(0.5));
+    }
+    let mut populations: Vec<f64> = places.iter().map(|p| p.population).collect();
+    populations.sort_by(f64::total_cmp);
+    for p in places.iter_mut() {
+        if p.pin.is_some() {
+            p.group = pinned_group(p).to_owned();
+            continue;
+        }
+        let g = group(p, biomes[p.cell], &populations);
+        p.group = g.to_owned();
+        p.kind = kind_of(g);
+    }
+}
+
 /// The water feature where a river ends (`resolveDrainFeature`).
 fn drain_feature(input: &Input, cell: usize) -> u32 {
     let by_id: BTreeMap<u32, &River> = input.rivers.iter().map(|r| (r.id, r)).collect();
