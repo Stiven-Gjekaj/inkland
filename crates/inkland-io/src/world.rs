@@ -1,7 +1,9 @@
 //! `world.json`: the base world, in config units.
 //!
 //! The file holds the cell sites, the heights, the features, and the
-//! coastlines. All coordinates have 3 decimals.
+//! coastlines. All coordinates have 3 decimals. It also holds the part of
+//! the config that makes the world, so other commands can make the same
+//! world again from the file.
 
 use inkland_core::config::Config;
 use inkland_core::num::round;
@@ -26,6 +28,7 @@ pub fn world_value(world: &World, config: &Config) -> Value {
         "format_version": FORMAT_VERSION,
         "tool": { "name": "inkland", "version": env!("CARGO_PKG_VERSION") },
         "world_hash": crate::config::world_hash(config),
+        "config": crate::config::world_config_value(config),
         "seed": world.seed,
         "units": config.units.name,
         "frame": config.frame,
@@ -122,6 +125,36 @@ fn river_value(r: &inkland_core::rivers::River, config: &Config) -> Value {
     })
 }
 
+/// Read the text of a `world.json`: the config in it, and the world that the
+/// config makes. The config must agree with the `world_hash` of the file.
+pub fn read_world(text: &str) -> Result<(Config, World), inkland_core::error::Error> {
+    use inkland_core::error::{Error, ErrorCode};
+    let bad = |msg: String| Error::new(ErrorCode::WorldParse, "", msg);
+    let v: Value =
+        serde_json::from_str(text).map_err(|e| bad(format!("the world is not valid JSON: {e}")))?;
+    if v["format"] != FORMAT {
+        return Err(bad(format!("the file is not a {FORMAT} file")));
+    }
+    if v["format_version"] != FORMAT_VERSION {
+        return Err(bad(format!(
+            "the format version {} is not {FORMAT_VERSION}",
+            v["format_version"]
+        ))
+        .with("found", v["format_version"].clone()));
+    }
+    let config = crate::config::from_value(v["config"].clone()).map_err(|e| {
+        let path = format!("/config{}", e.path);
+        Error { path, ..e }
+    })?;
+    if v["world_hash"] != crate::config::world_hash(&config).as_str() {
+        return Err(bad(
+            "the config in the file does not agree with its world_hash".into(),
+        ));
+    }
+    let world = World::build(&config)?;
+    Ok((config, world))
+}
+
 /// The text of `world.json`: compact JSON and one newline at the end.
 pub fn world_json(world: &World, config: &Config) -> String {
     let mut s = serde_json::to_string(&world_value(world, config))
@@ -161,6 +194,32 @@ mod tests {
         let b = world_json(&World::build(&c).unwrap(), &c);
         assert_eq!(a, b);
         assert!(a.ends_with("}\n"));
+    }
+
+    #[test]
+    fn read_world_gives_back_the_same_world() {
+        let c = config();
+        let text = world_json(&World::build(&c).unwrap(), &c);
+        let (c2, w2) = read_world(&text).unwrap();
+        assert_eq!(world_json(&w2, &c2), text);
+    }
+
+    #[test]
+    fn read_world_refuses_a_changed_or_foreign_file() {
+        use inkland_core::error::ErrorCode;
+        let c = config();
+        let text = world_json(&World::build(&c).unwrap(), &c);
+        let changed = text.replacen("\"seed\":9", "\"seed\":10", 1);
+        assert_ne!(changed, text);
+        assert_eq!(
+            read_world(&changed).unwrap_err().code,
+            ErrorCode::WorldParse
+        );
+        assert_eq!(read_world("{}").unwrap_err().code, ErrorCode::WorldParse);
+        assert_eq!(
+            read_world("not json").unwrap_err().code,
+            ErrorCode::WorldParse
+        );
     }
 
     #[test]

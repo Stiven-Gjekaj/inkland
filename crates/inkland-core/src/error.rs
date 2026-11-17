@@ -96,6 +96,9 @@ codes! {
         MapParse = "MAP_PARSE" => InvalidConfig,
         /// The version of a map file is not one that the import can read.
         MapVersion = "MAP_VERSION" => InvalidConfig,
+        /// A world file is not a `world.json` of inkland, or its config does
+        /// not agree with its hash.
+        WorldParse = "WORLD_PARSE" => InvalidConfig,
         /// A pin or a crop is outside the frame.
         PinOutsideFrame = "PIN_OUTSIDE_FRAME" => Infeasible,
         /// A point pin is in a `sea` or `lake` region.

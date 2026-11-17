@@ -102,17 +102,24 @@ pub fn config_hash(config: &Config) -> String {
     format!("sha256:{hex}")
 }
 
-/// The hash of the part of a config that makes the world: the config
-/// without its overlays, variants, render options, and font directories. A
-/// change to one of these, or to their defaults, does not change it.
-pub fn world_hash(config: &Config) -> String {
+/// The part of a config that makes the world, as JSON: the config without
+/// its overlays, variants, render options, and font directories.
+pub fn world_config_value(config: &Config) -> Value {
     let mut v = serde_json::to_value(config).expect("a config always converts to JSON");
     if let Some(map) = v.as_object_mut() {
         for key in ["overlays", "variants", "render", "font_dirs"] {
             map.remove(key);
         }
     }
-    let bytes = serde_json::to_vec(&v).expect("a value always converts to JSON");
+    v
+}
+
+/// The hash of the part of a config that makes the world. A change to the
+/// overlays, the variants, the render options, the font directories, or to
+/// their defaults, does not change it.
+pub fn world_hash(config: &Config) -> String {
+    let bytes =
+        serde_json::to_vec(&world_config_value(config)).expect("a value always converts to JSON");
     let digest = Sha256::digest(&bytes);
     let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
     format!("sha256:{hex}")
