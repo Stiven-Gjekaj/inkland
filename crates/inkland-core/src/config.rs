@@ -783,9 +783,29 @@ pub struct Page {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Render {
-    /// Render mode. `print-safe` is black on white only.
+    /// Render mode. `print-safe` is black on white only. `colour` draws the
+    /// map as Azgaar's Fantasy Map Generator does, with the style in `style`.
     #[serde(default)]
     pub mode: RenderMode,
+    /// The style preset of `colour` mode. A preset gives the colours, the
+    /// line widths, the fonts, and the effects of each layer. The presets
+    /// come from Azgaar's Fantasy Map Generator. `print-safe` mode does not
+    /// use it.
+    #[serde(default, skip_serializing_if = "StyleName::is_default")]
+    pub style: StyleName,
+    /// Changes to the style preset, for `colour` mode. Each key is the path
+    /// of one value in the style tree of Azgaar's Fantasy Map Generator, for
+    /// example `ocean.groups.base.attrs.fill` or
+    /// `relief.options.density`. Each value is a string, a number, a
+    /// boolean, or `null`. `null` removes the attribute. `docs/STYLES.md`
+    /// gives the tree.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub style_overrides: BTreeMap<String, serde_json::Value>,
+    /// Coastline detail. `smooth` cuts the corners of the cell edges.
+    /// `fractal` adds the fractal detail of Azgaar's Fantasy Map Generator.
+    /// Default: `smooth` in `print-safe` mode, `fractal` in `colour` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coastline: Option<CoastlineDetail>,
     /// Font families. The SVG names each family exactly as given here. The
     /// SVG never embeds a font.
     #[serde(default)]
@@ -804,7 +824,10 @@ pub struct Render {
     /// Extras such as the scale bar and the compass.
     #[serde(default)]
     pub extras: Extras,
-    /// Layers to draw, from bottom to top.
+    /// Layers to draw. In `print-safe` mode the layers are drawn in this
+    /// order, from bottom to top. In `colour` mode the renderer draws them in
+    /// the layer order of Azgaar's Fantasy Map Generator. Some layers are
+    /// only for `colour` mode.
     #[serde(default = "default_layers")]
     pub layers: Vec<LayerName>,
 }
@@ -813,6 +836,9 @@ impl Default for Render {
     fn default() -> Self {
         Self {
             mode: RenderMode::default(),
+            style: StyleName::default(),
+            style_overrides: BTreeMap::new(),
+            coastline: None,
             fonts: Fonts::default(),
             fonts_allowed: default_fonts_allowed(),
             font_sizes_pt: FontSizes::default(),
@@ -875,6 +901,67 @@ pub enum RenderMode {
     #[default]
     PrintSafe,
     Colour,
+}
+
+/// The style presets of `colour` mode. Each preset is a style of Azgaar's
+/// Fantasy Map Generator.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum StyleName {
+    #[default]
+    Default,
+    Ancient,
+    Atlas,
+    Cinderwood,
+    Clean,
+    Cyberpunk,
+    DarkSeas,
+    Frostbite,
+    Gloom,
+    Ink,
+    Light,
+    Monochrome,
+    Night,
+    Pale,
+    Watercolor,
+}
+
+impl StyleName {
+    /// All presets, in a fixed order.
+    pub const ALL: [StyleName; 15] = [
+        StyleName::Default,
+        StyleName::Ancient,
+        StyleName::Atlas,
+        StyleName::Cinderwood,
+        StyleName::Clean,
+        StyleName::Cyberpunk,
+        StyleName::DarkSeas,
+        StyleName::Frostbite,
+        StyleName::Gloom,
+        StyleName::Ink,
+        StyleName::Light,
+        StyleName::Monochrome,
+        StyleName::Night,
+        StyleName::Pale,
+        StyleName::Watercolor,
+    ];
+
+    /// `true` for the default preset.
+    pub fn is_default(&self) -> bool {
+        *self == StyleName::Default
+    }
+}
+
+/// Coastline detail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum CoastlineDetail {
+    /// Cut the corners of the cell edges.
+    Smooth,
+    /// Add the fractal detail of Azgaar's Fantasy Map Generator.
+    Fractal,
 }
 
 /// Font families.
@@ -968,6 +1055,144 @@ pub enum LayerName {
     Features,
     Places,
     Labels,
+    /// The ocean: the water colour and the depth bands. In `print-safe`
+    /// mode, the water lines along the coast.
+    Ocean,
+    /// The land colour. Only `colour` mode.
+    Landmass,
+    /// A bitmap texture. The renderer has no bitmaps, so it draws nothing.
+    Texture,
+    /// Height shading. Only `colour` mode.
+    Heightmap,
+    /// Lakes. Only `colour` mode.
+    Lakes,
+    /// Biomes. Only `colour` mode.
+    Biomes,
+    /// The outlines of the cells.
+    Cells,
+    /// A grid of hexagons or squares over the map.
+    Grid,
+    /// Lines of latitude and longitude, with labels.
+    Coordinates,
+    /// A compass rose.
+    Compass,
+    /// Religions. Only `colour` mode.
+    Religions,
+    /// Cultures. Only `colour` mode.
+    Cultures,
+    /// The areas of the states. Only `colour` mode.
+    States,
+    /// The areas of the provinces. Only `colour` mode.
+    Provinces,
+    /// Zones. Only `colour` mode. Draws nothing when the world has no zones.
+    Zones,
+    /// The borders of states and provinces.
+    Borders,
+    /// Roads and trails.
+    Routes,
+    /// Temperature. Only `colour` mode.
+    Temperature,
+    /// The coastline.
+    Coastline,
+    /// Glaciers and icebergs. Only `colour` mode. Draws nothing when the
+    /// world has no ice.
+    Ice,
+    /// Precipitation. Only `colour` mode.
+    Precipitation,
+    /// Population. Only `colour` mode. Draws nothing when the world has no
+    /// population.
+    Population,
+    /// Coats of arms. Only `colour` mode. Draws nothing when the world has
+    /// no emblems.
+    Emblems,
+    /// The symbols of the places.
+    BurgIcons,
+    /// Markers. Only `colour` mode. Draws nothing when the world has no
+    /// markers.
+    Markers,
+    /// A scale bar.
+    ScaleBar,
+    /// A dark edge around the map. Only `colour` mode.
+    Vignette,
+    /// A legend box. Only `colour` mode.
+    Legend,
+}
+
+impl LayerName {
+    /// All layer names, in the order of their declaration.
+    pub const ALL: [LayerName; 36] = [
+        LayerName::Coast,
+        LayerName::Relief,
+        LayerName::Rivers,
+        LayerName::Regions,
+        LayerName::Roads,
+        LayerName::Features,
+        LayerName::Places,
+        LayerName::Labels,
+        LayerName::Ocean,
+        LayerName::Landmass,
+        LayerName::Texture,
+        LayerName::Heightmap,
+        LayerName::Lakes,
+        LayerName::Biomes,
+        LayerName::Cells,
+        LayerName::Grid,
+        LayerName::Coordinates,
+        LayerName::Compass,
+        LayerName::Religions,
+        LayerName::Cultures,
+        LayerName::States,
+        LayerName::Provinces,
+        LayerName::Zones,
+        LayerName::Borders,
+        LayerName::Routes,
+        LayerName::Temperature,
+        LayerName::Coastline,
+        LayerName::Ice,
+        LayerName::Precipitation,
+        LayerName::Population,
+        LayerName::Emblems,
+        LayerName::BurgIcons,
+        LayerName::Markers,
+        LayerName::ScaleBar,
+        LayerName::Vignette,
+        LayerName::Legend,
+    ];
+
+    /// The name of the layer in the config, for example `burg-icons`.
+    pub fn name(self) -> String {
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_default()
+    }
+
+    /// `true` if the layer has a `print-safe` drawing.
+    pub fn is_print_safe(self) -> bool {
+        use LayerName::*;
+        matches!(
+            self,
+            Coast
+                | Relief
+                | Rivers
+                | Regions
+                | Roads
+                | Features
+                | Places
+                | Labels
+                | Ocean
+                | Texture
+                | Cells
+                | Grid
+                | Coordinates
+                | Compass
+                | Borders
+                | Routes
+                | Coastline
+                | BurgIcons
+                | ScaleBar
+        )
+    }
 }
 
 fn default_unit_name() -> String {
@@ -1188,6 +1413,32 @@ mod tests {
         // Outside the frame: the nearest edge rectangle.
         assert_eq!(r.sample(-5.0, -5.0, 300.0, 100.0), 1);
         assert_eq!(r.sample(900.0, 900.0, 300.0, 100.0), 6);
+    }
+
+    #[test]
+    fn style_fields_are_left_out_of_json_when_they_have_the_default() {
+        let c: Config = serde_json::from_value(minimal()).unwrap();
+        let v = serde_json::to_value(&c).unwrap();
+        for key in ["style", "style_overrides", "coastline"] {
+            assert!(v["render"].get(key).is_none(), "{key}");
+        }
+        let mut v = minimal();
+        v["render"] = json!({ "mode": "colour", "style": "dark-seas", "coastline": "fractal",
+                              "style_overrides": { "ocean.groups.base.attrs.fill": "#123456" } });
+        let c: Config = serde_json::from_value(v).unwrap();
+        assert_eq!(c.render.style, StyleName::DarkSeas);
+        assert_eq!(c.render.coastline, Some(CoastlineDetail::Fractal));
+        let again: Config = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
+        assert_eq!(c, again);
+    }
+
+    #[test]
+    fn each_layer_name_is_in_the_list_once() {
+        let names: std::collections::BTreeSet<LayerName> = LayerName::ALL.into_iter().collect();
+        assert_eq!(names.len(), LayerName::ALL.len());
+        let json = serde_json::to_value(LayerName::BurgIcons).unwrap();
+        assert_eq!(json, json!("burg-icons"));
+        assert!(default_layers().iter().all(|l| l.is_print_safe()));
     }
 
     #[test]

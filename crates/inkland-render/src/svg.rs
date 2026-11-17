@@ -80,6 +80,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
             LayerName::Features => write_features(&mut s, config, variant, &page),
             LayerName::Places => write_places(&mut s, world, config, &page),
             LayerName::Labels => write_labels(&mut s, &labels),
+            _ => {}
         }
     }
     crate::extras::write(

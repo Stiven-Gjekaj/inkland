@@ -6,8 +6,8 @@
 
 use crate::geom::{Shape, dist, polygon_self_intersects};
 use inkland_core::config::{
-    Anchor, Config, Feature, Origin, Point, PointPin, RegionKind, RegionPin, RoadPin, Waypoint,
-    YAxis,
+    Anchor, Config, Feature, Origin, Point, PointPin, RegionKind, RegionPin, RenderMode, RoadPin,
+    Waypoint, YAxis,
 };
 use inkland_core::error::{Error, ErrorCode};
 use std::collections::{BTreeMap, BTreeSet};
@@ -52,6 +52,79 @@ pub const CHECKS: [&str; 13] = [
     "rivers_downhill",
     "road_targets",
 ];
+
+/// The style elements of Azgaar's Fantasy Map Generator: the first word of
+/// each style path.
+pub const STYLE_ELEMENTS: [&str; 39] = [
+    "biomes",
+    "borders",
+    "burgIcons",
+    "cells",
+    "coastline",
+    "compass",
+    "coordinates",
+    "cultures",
+    "emblems",
+    "fogging",
+    "goods",
+    "grid",
+    "heightmap",
+    "ice",
+    "journeys",
+    "labels",
+    "lakes",
+    "landmass",
+    "legend",
+    "map",
+    "markers",
+    "markets",
+    "military",
+    "ocean",
+    "population",
+    "precipitation",
+    "provinces",
+    "relief",
+    "religions",
+    "rivers",
+    "routes",
+    "rulers",
+    "scaleBar",
+    "states",
+    "temperature",
+    "texture",
+    "trade",
+    "vignette",
+    "zones",
+];
+
+/// Check the form of a style path: an element, then `groups.<name>` zero
+/// or more times, then `attrs` or `options`, then one or more keys.
+fn style_path_is_valid(path: &str) -> Result<(), &'static str> {
+    let words: Vec<&str> = path.split('.').collect();
+    if words.iter().any(|w| w.is_empty()) {
+        return Err("a word of the path is empty");
+    }
+    if !STYLE_ELEMENTS.contains(&words[0]) {
+        return Err("the first word is not a style element");
+    }
+    let mut i = 1;
+    while i < words.len() && words[i] == "groups" {
+        if i + 1 >= words.len() {
+            return Err("a group name is missing after \"groups\"");
+        }
+        i += 2;
+    }
+    if i >= words.len() || !matches!(words[i], "attrs" | "options") {
+        return Err("the path does not name \"attrs\" or \"options\"");
+    }
+    if i + 1 >= words.len() {
+        return Err("the path does not name a key after \"attrs\" or \"options\"");
+    }
+    if words[i] == "attrs" && i + 2 != words.len() {
+        return Err("an attribute has no sub-keys");
+    }
+    Ok(())
+}
 
 const ID_PATTERN: &str = "^[a-z0-9]+(-[a-z0-9]+)*$";
 
@@ -145,6 +218,7 @@ impl<'a> Validator<'a> {
     }
 
     fn ranges(&mut self) {
+        self.render_style();
         let c = self.c;
         let w = &c.world;
         for (i, b) in w.brushes.iter().enumerate() {
@@ -604,6 +678,43 @@ impl<'a> Validator<'a> {
                     format!("{path}/polygon"),
                     "the polygon crosses itself",
                 );
+            }
+        }
+    }
+
+    /// The style overrides and the layers of the render mode.
+    fn render_style(&mut self) {
+        let r = &self.c.render;
+        for (key, value) in &r.style_overrides {
+            let pointer = format!(
+                "/render/style_overrides/{}",
+                key.replace('~', "~0").replace('/', "~1")
+            );
+            if let Err(why) = style_path_is_valid(key) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    pointer.clone(),
+                    format!("{key:?} is not a style path: {why}"),
+                );
+            }
+            if value.is_array() || value.is_object() {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    pointer,
+                    "a style value must be a string, a number, a boolean, or null",
+                );
+            }
+        }
+        if r.mode == RenderMode::PrintSafe {
+            for (i, layer) in r.layers.iter().enumerate() {
+                if !layer.is_print_safe() {
+                    let name = layer.name();
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("/render/layers/{i}"),
+                        format!("the layer {name:?} needs render.mode \"colour\""),
+                    );
+                }
             }
         }
     }

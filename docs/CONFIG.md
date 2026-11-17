@@ -83,6 +83,15 @@ Climate options.
 | `latitude_range` | array of 2 number |  | `[30.0,55.0]` | Latitude of the south edge and of the north edge, in degrees. |
 | `wind` | array of 6 number |  |  | Winds, one for each 30 degree latitude band from 90 north to 90 south: the direction to which the wind blows, in degrees clockwise from north. Default: `[225, 45, 225, 315, 135, 315]`. |
 
+### CoastlineDetail
+
+Coastline detail.
+
+One of:
+
+- `"smooth"`: Cut the corners of the cell edges.
+- `"fractal"`: Add the fractal detail of Azgaar's Fantasy Map Generator.
+
 ### Extras
 
 Extras. A missing value means "not set".
@@ -198,6 +207,34 @@ One of:
 
 - `"coast"`, `"relief"`, `"rivers"`, `"regions"`, `"roads"`, `"places"`, `"labels"`
 - `"features"`: The features that an overlay adds.
+- `"ocean"`: The ocean: the water colour and the depth bands. In `print-safe` mode, the water lines along the coast.
+- `"landmass"`: The land colour. Only `colour` mode.
+- `"texture"`: A bitmap texture. The renderer has no bitmaps, so it draws nothing.
+- `"heightmap"`: Height shading. Only `colour` mode.
+- `"lakes"`: Lakes. Only `colour` mode.
+- `"biomes"`: Biomes. Only `colour` mode.
+- `"cells"`: The outlines of the cells.
+- `"grid"`: A grid of hexagons or squares over the map.
+- `"coordinates"`: Lines of latitude and longitude, with labels.
+- `"compass"`: A compass rose.
+- `"religions"`: Religions. Only `colour` mode.
+- `"cultures"`: Cultures. Only `colour` mode.
+- `"states"`: The areas of the states. Only `colour` mode.
+- `"provinces"`: The areas of the provinces. Only `colour` mode.
+- `"zones"`: Zones. Only `colour` mode. Draws nothing when the world has no zones.
+- `"borders"`: The borders of states and provinces.
+- `"routes"`: Roads and trails.
+- `"temperature"`: Temperature. Only `colour` mode.
+- `"coastline"`: The coastline.
+- `"ice"`: Glaciers and icebergs. Only `colour` mode. Draws nothing when the world has no ice.
+- `"precipitation"`: Precipitation. Only `colour` mode.
+- `"population"`: Population. Only `colour` mode. Draws nothing when the world has no population.
+- `"emblems"`: Coats of arms. Only `colour` mode. Draws nothing when the world has no emblems.
+- `"burg-icons"`: The symbols of the places.
+- `"markers"`: Markers. Only `colour` mode. Draws nothing when the world has no markers.
+- `"scale-bar"`: A scale bar.
+- `"vignette"`: A dark edge around the map. Only `colour` mode.
+- `"legend"`: A legend box. Only `colour` mode.
 
 ### Origin
 
@@ -329,13 +366,16 @@ Render options for all variants.
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
+| `coastline` | [`CoastlineDetail`](#coastlinedetail) |  |  | Coastline detail. `smooth` cuts the corners of the cell edges. `fractal` adds the fractal detail of Azgaar's Fantasy Map Generator. Default: `smooth` in `print-safe` mode, `fractal` in `colour` mode. |
 | `extras` | [`Extras`](#extras) |  |  | Extras such as the scale bar and the compass. |
 | `font_sizes_pt` | [`FontSizes`](#fontsizes) |  |  | Font sizes, in points. |
 | `fonts` | [`Fonts`](#fonts) |  |  | Font families. The SVG names each family exactly as given here. The SVG never embeds a font. |
 | `fonts_allowed` | array of string |  | `["Caladea","Inter","IM Fell English","IM Fell English SC"]` | Font families that the SVG can use. A family in `fonts` that is not in this list is an error. |
-| `layers` | array of [`LayerName`](#layername) |  | see the type | Layers to draw, from bottom to top. |
+| `layers` | array of [`LayerName`](#layername) |  | see the type | Layers to draw. In `print-safe` mode the layers are drawn in this order, from bottom to top. In `colour` mode the renderer draws them in the layer order of Azgaar's Fantasy Map Generator. Some layers are only for `colour` mode. |
 | `min_line_width_pt` | number |  | `0.5` | Smallest permitted line width, in points. |
-| `mode` | [`RenderMode`](#rendermode) |  | `"print-safe"` | Render mode. `print-safe` is black on white only. |
+| `mode` | [`RenderMode`](#rendermode) |  | `"print-safe"` | Render mode. `print-safe` is black on white only. `colour` draws the map as Azgaar's Fantasy Map Generator does, with the style in `style`. |
+| `style` | [`StyleName`](#stylename) |  |  | The style preset of `colour` mode. A preset gives the colours, the line widths, the fonts, and the effects of each layer. The presets come from Azgaar's Fantasy Map Generator. `print-safe` mode does not use it. |
+| `style_overrides` | object |  |  | Changes to the style preset, for `colour` mode. Each key is the path of one value in the style tree of Azgaar's Fantasy Map Generator, for example `ocean.groups.base.attrs.fill` or `relief.options.density`. Each value is a string, a number, a boolean, or `null`. `null` removes the attribute. `docs/STYLES.md` gives the tree. |
 
 ### RenderMode
 
@@ -374,6 +414,12 @@ A road between two pinned places.
 | `to` | string | yes |  | The id of the place where the road ends. |
 | `tolerance` | number |  | `0.05` | Permitted difference from `target_length`, as a fraction (0.05 is 5 percent). |
 | `via` | array of [`Waypoint`](#waypoint) |  | `[]` | Places (ids) or points `[x, y]` in units that the road passes, in order. |
+
+### StyleName
+
+The style presets of `colour` mode. Each preset is a style of Azgaar's Fantasy Map Generator.
+
+Type: `"default"`, `"ancient"`, `"atlas"`, `"cinderwood"`, `"clean"`, `"cyberpunk"`, `"dark-seas"`, `"frostbite"`, `"gloom"`, `"ink"`, `"light"`, `"monochrome"`, `"night"`, `"pale"`, `"watercolor"`
 
 ### Template
 

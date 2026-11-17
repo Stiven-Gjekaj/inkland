@@ -386,3 +386,58 @@ fn raster_template_with_one_column_is_refused() {
         "/world/template/raster/cols",
     );
 }
+
+#[test]
+fn a_style_override_with_a_valid_path_is_accepted() {
+    let c = with(json!({ "render": { "mode": "colour", "style_overrides": {
+        "ocean.groups.base.attrs.fill": "#112233",
+        "relief.options.density": 0.6,
+        "ocean.options.bands.render": true,
+        "labels.groups.state.attrs.filter": null
+    }}}));
+    assert_eq!(codes(&c), vec![]);
+}
+
+#[test]
+fn a_style_override_with_a_bad_path_is_refused() {
+    for key in [
+        "sea.groups.base.attrs.fill",
+        "ocean.groups.base.fill",
+        "ocean.groups",
+        "ocean.attrs",
+        "ocean..attrs.fill",
+        "ocean.attrs.fill.x",
+    ] {
+        let c = with(json!({ "render": { "style_overrides": { key: "#000000" } } }));
+        one(
+            &c,
+            ErrorCode::ValueOutOfRange,
+            &format!("/render/style_overrides/{key}"),
+        );
+    }
+}
+
+#[test]
+fn a_style_override_with_a_list_value_is_refused() {
+    one(
+        &with(json!({ "render": { "style_overrides": { "ocean.attrs.opacity": [1] } } })),
+        ErrorCode::ValueOutOfRange,
+        "/render/style_overrides/ocean.attrs.opacity",
+    );
+}
+
+#[test]
+fn a_colour_layer_in_print_safe_mode_is_refused() {
+    one(
+        &with(json!({ "render": { "layers": ["coast", "biomes"] } })),
+        ErrorCode::ValueOutOfRange,
+        "/render/layers/1",
+    );
+    let c = with(json!({ "render": { "mode": "colour", "layers": ["coast", "biomes"] } }));
+    assert_eq!(codes(&c), vec![]);
+    let c = with(
+        json!({ "render": { "layers": ["coastline", "borders", "routes", "burg-icons",
+        "cells", "grid", "coordinates", "compass", "scale-bar", "ocean", "texture"] } }),
+    );
+    assert_eq!(codes(&c), vec![]);
+}
