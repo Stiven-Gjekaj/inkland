@@ -258,6 +258,31 @@ mod tests {
     }
 
     #[test]
+    fn report_gives_the_state_of_each_pinned_place() {
+        let c = config(json!({
+            "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": "pangea", "states": 3 },
+            "pins": { "points": [
+                { "id": "kingsholm", "kind": "city", "at": [150, 120], "name": "Kingsholm", "capital_of": "Kingdom of Holm" }
+            ]}
+        }));
+        let out = generate(&c, None).unwrap();
+        let r = &out.variants[0].report;
+        let p = &r["pins"]["points"][0];
+        assert_eq!(p["name"], "Kingsholm");
+        assert_eq!(p["state"], "Kingdom of Holm");
+        assert!(p["province"].is_string());
+        assert!(p["culture"].is_string());
+        let states = r["world"]["states"].as_array().unwrap();
+        assert_eq!(states.len(), 3);
+        assert!(
+            states
+                .iter()
+                .any(|s| s["name"] == "Kingdom of Holm" && s["capital"] == "Kingsholm")
+        );
+    }
+
+    #[test]
     fn version_names_the_original_program() {
         let v = version_info();
         assert_eq!(v["third_party"][0]["license"], "MIT");

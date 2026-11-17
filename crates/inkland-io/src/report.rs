@@ -79,6 +79,15 @@ pub fn variant_report(
             },
             "coastlines": world.coastlines.len(),
             "rivers": world.rivers.len(),
+            "cultures": world.society.cultures.len(),
+            "states": world.society.states.iter().map(|st| serde_json::json!({
+                "id": st.id,
+                "name": st.name,
+                "capital": world.society.places[st.capital as usize - 1].name,
+                "cells": world.society.cell_state.iter().filter(|&&x| x == st.id).count(),
+            })).collect::<Vec<_>>(),
+            "provinces": world.society.provinces.len(),
+            "places": world.society.places.len(),
         },
         "pins": {
             "points": point_pins(world, config),
@@ -104,7 +113,28 @@ fn point_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_
         .map(|(pin, &cell)| {
             let placed = world.grid.points[cell];
             let error = ((placed[0] - pin.at[0]).powi(2) + (placed[1] - pin.at[1]).powi(2)).sqrt();
+            let soc = &world.society;
+            let place = soc
+                .places
+                .iter()
+                .find(|p| p.pin.as_deref() == Some(pin.id.as_str()));
+            let name_of = |list: Option<String>| {
+                list.map_or(serde_json::Value::Null, serde_json::Value::from)
+            };
+            let state = place
+                .and_then(|p| soc.states.iter().find(|s| s.id == p.state))
+                .map(|s| s.name.clone());
+            let province = place
+                .and_then(|p| soc.provinces.iter().find(|s| s.id == p.province))
+                .map(|s| s.name.clone());
+            let culture = place
+                .and_then(|p| soc.cultures.iter().find(|s| s.id == p.culture))
+                .map(|s| s.name.clone());
             let mut v = serde_json::json!({
+                "name": place.map(|p| p.name.clone()),
+                "state": name_of(state),
+                "province": name_of(province),
+                "culture": name_of(culture),
                 "id": pin.id,
                 "requested": [round(pin.at[0], 3), round(pin.at[1], 3)],
                 "placed": [round(placed[0], 3), round(placed[1], 3)],
