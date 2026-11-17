@@ -229,6 +229,8 @@ export global Lists {
     in property <[TableRow]> cultures;
     in property <[TableRow]> religions;
     in property <[TableRow]> provinces;
+    // The facts of the cell under the pointer: a label and a value.
+    in property <[TableRow]> cell-lines;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their
@@ -293,6 +295,7 @@ export global Dialogs {
     in-out property <bool> cultures;
     in-out property <bool> religions;
     in-out property <bool> provinces;
+    in-out property <bool> cells;
     in-out property <bool> print;
 
     public function open(id: string) {
@@ -309,6 +312,7 @@ export global Dialogs {
         if id == "cultures" { self.cultures = true; }
         if id == "religions" { self.religions = true; }
         if id == "provinces" { self.provinces = true; }
+        if id == "cells" { self.cells = true; }
         Actions.selection-changed();
         if id == "print" { self.print = true; }
     }
@@ -327,6 +331,7 @@ export global Dialogs {
         if id == "cultures" { self.cultures = false; }
         if id == "religions" { self.religions = false; }
         if id == "provinces" { self.provinces = false; }
+        if id == "cells" { self.cells = false; }
         Actions.selection-changed();
         if id == "print" { self.print = false; }
     }
@@ -345,6 +350,7 @@ export global Dialogs {
         self.cultures = false;
         self.religions = false;
         self.provinces = false;
+        self.cells = false;
         Actions.selection-changed();
         self.print = false;
     }

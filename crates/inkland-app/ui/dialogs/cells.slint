@@ -1,0 +1,23 @@
+// The Cell Details dialog: the facts of the cell under the pointer. It
+// follows the pointer over the map.
+
+import { Theme, Label, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { Lists } from "../globals.slint";
+
+export component CellsDialog inherits Dialog {
+    id: "cells";
+    title: "Cell Details";
+    content-width: 300px;
+    pos-x: 20px;
+    pos-y: 380px;
+    if Lists.cell-lines.length == 0: Tip {
+        dialog: true;
+        text: "Move the pointer over the map.";
+    }
+    for line in Lists.cell-lines: HorizontalLayout {
+        spacing: 6px;
+        Label { dialog: true; width: 100px; text: line.cells[0] + ":"; font-weight: 700; }
+        Label { dialog: true; horizontal-stretch: 1; text: line.cells[1]; overflow: elide; }
+    }
+}

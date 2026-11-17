@@ -3,6 +3,8 @@
 //! `INKLAND_APP_SNAPSHOT_OPEN=TAB[/TOOL,TOOL...]` opens a tab of the menu
 //! and the dialogs or tools of the Tools tab, for example `tools/burgs` or
 //! `layers/heightmap,print`. The tab `closed` closes the menu.
+//! `INKLAND_APP_SNAPSHOT_POINTER=x,y` puts the pointer at a point of the
+//! world (config units).
 
 /// The tabs of the menu, in their order.
 pub const TABS: [&str; 5] = ["layers", "style", "options", "tools", "about"];
@@ -44,6 +46,12 @@ pub fn plan(text: &str) -> Result<Plan, String> {
     Ok(Plan { tab, tools })
 }
 
+/// A point `x,y` in config units.
+pub fn point(text: &str) -> Option<[f64; 2]> {
+    let (x, y) = text.split_once(',')?;
+    Some([x.trim().parse().ok()?, y.trim().parse().ok()?])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,5 +69,7 @@ mod tests {
         assert_eq!(plan("style").unwrap().tools, Vec::<String>::new());
         assert!(plan("menu").is_err());
         assert!(plan("tools/nothing").is_err());
+        assert_eq!(point(" 150, 120.5"), Some([150.0, 120.5]));
+        assert_eq!(point("150"), None);
     }
 }

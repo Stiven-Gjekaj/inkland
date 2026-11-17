@@ -18,6 +18,7 @@ import { VariantsDialog } from "dialogs/variants.slint";
 import { LabelsDialog } from "dialogs/labels.slint";
 import { UnitsDialog } from "dialogs/units.slint";
 import { SocietyDialog } from "dialogs/society.slint";
+import { CellsDialog } from "dialogs/cells.slint";
 
 export { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts, Theme }
 
@@ -111,6 +112,7 @@ export component AppWindow inherits Window {
         if Dialogs.variants: VariantsDialog {}
         if Dialogs.labels: LabelsDialog {}
         if Dialogs.units: UnitsDialog {}
+        if Dialogs.cells: CellsDialog {}
         if Dialogs.states: SocietyDialog {
             id: "states";
             title: "States Editor";

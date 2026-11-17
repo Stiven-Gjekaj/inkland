@@ -86,6 +86,7 @@ const IMPLEMENTED: &[&str] = &[
     "cultures",
     "religions",
     "provinces",
+    "cells",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -667,6 +668,19 @@ impl Controller {
         let Some(path) = self.snapshot.borrow_mut().take() else {
             return;
         };
+        // `INKLAND_APP_SNAPSHOT_POINTER=x,y` (config units) puts the pointer
+        // there, so that the image shows the cell facts.
+        let pointer = std::env::var("INKLAND_APP_SNAPSHOT_POINTER")
+            .ok()
+            .and_then(|t| inkland_app::snapshot::point(&t));
+        if let Some(w) = pointer {
+            let st = self.state.borrow();
+            let screen = Self::page(&st).map(|page| st.view.world_to_screen(&page, w));
+            drop(st);
+            if let Some(p) = screen {
+                self.pointer_move(p);
+            }
+        }
         let me = Rc::clone(self);
         slint::Timer::single_shot(Duration::from_millis(500), move || {
             let result = me
@@ -908,15 +922,23 @@ impl Controller {
                 .shown
                 .as_ref()
                 .and_then(|m| inkland::query_at(&m.world, &m.config, w).ok());
-            g.set_status_cell(s(match info {
-                Some(q) => format!(
-                    "height {} ({}), {}",
-                    q["height"],
-                    if q["land"] == true { "land" } else { "water" },
-                    q["biome"].as_str().unwrap_or("?")
-                ),
+            g.set_status_cell(s(match &info {
+                Some(q) => inkland_app::rows::status_text(q),
                 None => "outside the frame".to_owned(),
             }));
+            if ui.global::<Dialogs>().get_cells()
+                && let Some(q) = &info
+            {
+                let lines = inkland_app::rows::cell_lines(q)
+                    .into_iter()
+                    .map(|(label, value)| inkland_app::rows::Row {
+                        id: label.clone(),
+                        cells: vec![label, value],
+                        pinned: false,
+                    })
+                    .collect();
+                ui.global::<Lists>().set_cell_lines(table(lines));
+            }
         }
         match &mut st.drag {
             Drag::None | Drag::Shape { .. } => {}
