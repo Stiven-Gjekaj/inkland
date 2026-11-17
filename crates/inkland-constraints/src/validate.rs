@@ -109,6 +109,41 @@ impl<'a> Validator<'a> {
         }
     }
 
+    /// A raster has 2 or more columns and rows, `cols` x `rows` values, and
+    /// each value is 100 or less.
+    fn raster(&mut self, r: &inkland_core::config::Raster) {
+        let path = "/world/template/raster";
+        for (name, n) in [("cols", r.cols), ("rows", r.rows)] {
+            if n < 2 {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/{name}"),
+                    format!("the raster {name} must be 2 or more, found {n}"),
+                );
+            }
+        }
+        let size = u64::from(r.cols) * u64::from(r.rows);
+        if r.values.len() as u64 != size {
+            self.err(
+                ErrorCode::TemplateInvalid,
+                format!("{path}/values"),
+                format!(
+                    "the raster has {} x {} = {size} rectangles, but {} values",
+                    r.cols,
+                    r.rows,
+                    r.values.len()
+                ),
+            );
+        }
+        if let Some(i) = r.values.iter().position(|&v| v > 100) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                format!("{path}/values/{i}"),
+                format!("a raster height must be 0 to 100, found {}", r.values[i]),
+            );
+        }
+    }
+
     fn ranges(&mut self) {
         let c = self.c;
         let w = &c.world;
@@ -136,6 +171,9 @@ impl<'a> Validator<'a> {
                     "a custom template needs one or more steps",
                 );
             }
+        }
+        if let inkland_core::config::Template::Raster { raster } = &w.template {
+            self.raster(raster);
         }
         match inkland_core::names::data::culture_set(&w.culture_set) {
             None => {

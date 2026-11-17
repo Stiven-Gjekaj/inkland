@@ -348,3 +348,41 @@ fn more_cultures_than_the_set_has_are_refused() {
         "/world/cultures",
     );
 }
+
+fn raster(cols: u32, rows: u32, values: Vec<u8>) -> Config {
+    with(json!({ "world": { "template": { "raster": {
+        "cols": cols, "rows": rows, "values": values
+    } } } }))
+}
+
+#[test]
+fn raster_template_with_the_right_size_is_valid() {
+    assert_eq!(codes(&raster(3, 2, vec![0, 20, 40, 60, 80, 100])), vec![]);
+}
+
+#[test]
+fn raster_template_with_the_wrong_number_of_values_is_refused() {
+    one(
+        &raster(3, 2, vec![0, 20, 40]),
+        ErrorCode::TemplateInvalid,
+        "/world/template/raster/values",
+    );
+}
+
+#[test]
+fn raster_template_with_a_height_above_100_is_refused() {
+    one(
+        &raster(2, 2, vec![0, 20, 101, 60]),
+        ErrorCode::ValueOutOfRange,
+        "/world/template/raster/values/2",
+    );
+}
+
+#[test]
+fn raster_template_with_one_column_is_refused() {
+    one(
+        &raster(1, 2, vec![0, 20]),
+        ErrorCode::ValueOutOfRange,
+        "/world/template/raster/cols",
+    );
+}
