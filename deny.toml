@@ -6,6 +6,17 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# "Unmaintained" notices for crates that only Slint brings in, for the
+# desktop app. None of them is a vulnerability. The CLI does not use these
+# crates. Remove an entry when a Slint release drops the crate.
+ignore = [
+  { id = "RUSTSEC-2026-0192", reason = "ttf-parser: winit window decorations on Wayland (sctk-adwaita)" },
+  { id = "RUSTSEC-2026-0370", reason = "zvariant: D-Bus for accessibility (accesskit_unix) and the winit backend" },
+  { id = "RUSTSEC-2026-0371", reason = "zbus_names: D-Bus for accessibility (accesskit_unix) and the winit backend" },
+  { id = "RUSTSEC-2026-0372", reason = "zvariant_derive: D-Bus for accessibility (accesskit_unix) and the winit backend" },
+  { id = "RUSTSEC-2026-0441", reason = "pin-utils: spin_on in slint-build and the Slint Skia renderer" },
+  { id = "RUSTSEC-2026-0543", reason = "chrono: date functions of i-slint-core" },
+]
 
 [licenses]
 version = 2
@@ -20,6 +31,28 @@ allow = [
   "ISC",
   "Unicode-3.0",
   "Zlib",
+]
+# Licenses for named crates only. Each entry is for the desktop app
+# (inkland-app). The CLI does not use these crates.
+exceptions = [
+  # Slint gives a choice of GPL-3.0-only, the Slint Royalty-free License
+  # 2.0, and a commercial license. inkland uses the royalty-free license.
+  # That license requires the AboutSlint widget in the app (Help > About).
+  { crate = "slint", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "slint-build", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "slint-macros", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-backend-selector", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-backend-winit", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-common", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-compiler", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-core", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-core-macros", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-renderer-femtovg", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-renderer-skia", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  { crate = "i-slint-renderer-software", allow = ["LicenseRef-Slint-Royalty-free-2.0"] },
+  # The Windows clipboard of the winit backend.
+  { crate = "clipboard-win", allow = ["BSL-1.0"] },
+  { crate = "error-code", allow = ["BSL-1.0"] },
 ]
 
 [bans]
