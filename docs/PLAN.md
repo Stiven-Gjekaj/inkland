@@ -519,6 +519,33 @@ and the test that closes each milestone. We stop for a review after each one.
 - Known limits: a region box or polygon in open water makes a block-shaped
   coast. A pinned river course across a lake fills a thin strip of land.
 
+## 6.6 Notes from Milestone 7
+
+- Print-safe output: black and white only. Shading is lines and dots: two
+  water lines along each coast, and relief symbols (mountain, hill, tree,
+  marsh, dune stipple) placed from the `decoration` seed with a spacing in
+  millimetres. Coasts and water lines are smoothed (two rounds of corner
+  cutting). Rivers and roads are not smoothed, so that they pass their
+  pinned points exactly.
+- Layers are drawn in the order of `render.layers`. A layer that is not in
+  the list is not drawn.
+- Extras: scale bar (a 1, 2, or 5 times a power of ten length, at most a
+  quarter of the map width, in the scale of the variant page), compass,
+  title cartouche, and grid with labels in config units. A variant value of
+  an extra replaces the render value.
+- Line widths round up to 3 decimals of a millimetre, so that no line is
+  thinner than `min_line_width_pt` after rounding. The `min_line_width`
+  check found this fault.
+- SVG checks, run on the written SVG text in each report and by
+  `inkland check`: `no_opacity`, `no_masks_filters_rgba`,
+  `black_and_white`, `min_line_width` (with inherited widths),
+  `all_text_is_text_elements`, `font_families_allowed`,
+  `deterministic_ids`. Each check has a bad SVG in `fixtures/svg-bad` that
+  fails it.
+- The PNG preview loads the system fonts and `font_dirs`. It matches a
+  family name without regard to case, because a font file can name its
+  family "IM FELL English". A missing family gives `FONT_NOT_FOUND`.
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
