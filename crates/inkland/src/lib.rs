@@ -272,13 +272,19 @@ pub fn preview_png(
     config: &Config,
 ) -> Result<(Vec<u8>, Vec<Warning>), String> {
     let dirs: Vec<&std::path::Path> = config.font_dirs.iter().map(std::path::Path::new).collect();
-    let families: Vec<&str> = config
+    // The families of the config and the families that the SVG names: a
+    // style of `colour` mode has its own fonts.
+    let mut names: Vec<String> = config
         .render
         .fonts
         .families()
         .iter()
-        .map(|(_, f)| *f)
+        .map(|(_, f)| (*f).to_owned())
         .collect();
+    names.extend(inkland_render::png::families_in(svg));
+    names.sort();
+    names.dedup();
+    let families: Vec<&str> = names.iter().map(String::as_str).collect();
     let p = inkland_render::png::svg_to_png(svg, longest_px, &dirs, &families)?;
     let warnings = p
         .missing_fonts

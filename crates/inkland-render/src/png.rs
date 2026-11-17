@@ -130,6 +130,27 @@ pub fn rgba_to_png(rgba: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>, St
         .map_err(|e| format!("cannot write the PNG: {e}"))
 }
 
+/// The font families that SVG text names in its `font-family`
+/// attributes, sorted, each once.
+pub fn families_in(svg: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut rest = svg;
+    while let Some(at) = rest.find("font-family=\"") {
+        rest = &rest[at + 13..];
+        let end = rest.find('"').unwrap_or(rest.len());
+        for family in rest[..end].split(',') {
+            let f = family.trim().trim_matches(|c| c == '\'' || c == '"');
+            if !f.is_empty() {
+                out.push(f.to_owned());
+            }
+        }
+        rest = &rest[end..];
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// Render SVG text to PNG bytes. The longer side of the image is
 /// `longest_px` pixels. `families` are the font families to look for.
 pub fn svg_to_png(
@@ -173,6 +194,15 @@ mod tests {
         let h = u32::from_be_bytes(p.png[20..24].try_into().unwrap());
         assert_eq!(h, 1024);
         assert_eq!(w, (167.0f32 * 1024.0 / 250.0).round() as u32);
+    }
+
+    #[test]
+    fn families_come_from_the_font_family_attributes() {
+        let svg = r#"<g font-family="Almendra SC"><text font-family="Cinzel, 'Times New Roman'">a</text><text font-family="Almendra SC">b</text></g>"#;
+        assert_eq!(
+            families_in(svg),
+            vec!["Almendra SC", "Cinzel", "Times New Roman"]
+        );
     }
 
     #[test]
