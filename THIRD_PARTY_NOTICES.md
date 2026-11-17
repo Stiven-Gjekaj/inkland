@@ -32,10 +32,9 @@ Some data tables come from it. This file keeps its license notice.
     of five culture sets, from `src/model/society/cultures-generator.ts`. In
     inkland: `crates/inkland-core/src/names/data.rs`.
 - Test data copied into inkland:
-  - The four test maps `tests/fixtures/1.112.1.map`, `1.139.4.map`,
-    `1.143.1.map`, and `1.154.0.map`, without changes. In inkland:
-    `fixtures/azgaar/`. They come from the original under the MIT license
-    below.
+  - The test maps `tests/fixtures/1.112.1.map` and `1.154.0.map`, with gzip
+    and no other change. In inkland: `fixtures/azgaar/*.map.gz`. They come
+    from the original under the MIT license below.
 
 ```text
 MIT License
