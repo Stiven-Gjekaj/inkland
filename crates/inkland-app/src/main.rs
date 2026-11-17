@@ -1452,6 +1452,101 @@ impl Controller {
         self.edited(r, &format!("set the {field} of {id}"));
     }
 
+    /// A hotkey of FMG (see `inkland_app::hotkeys`). The result is `true`
+    /// if the key does something.
+    fn key(self: &Rc<Self>, text: &str, ctrl: bool, shift: bool, alt: bool) -> bool {
+        use inkland_app::hotkeys::{Hotkey, hotkey};
+        use slint::platform::Key;
+        let special = [
+            (Key::F2, "F2"),
+            (Key::Tab, "Tab"),
+            (Key::Escape, "Escape"),
+            (Key::Return, "Enter"),
+            (Key::Delete, "Delete"),
+            (Key::Backspace, "Backspace"),
+            (Key::LeftArrow, "Left"),
+            (Key::RightArrow, "Right"),
+            (Key::UpArrow, "Up"),
+            (Key::DownArrow, "Down"),
+        ];
+        let name = special
+            .iter()
+            .find(|(k, _)| SharedString::from(*k) == text)
+            .map_or(text, |(_, n)| *n);
+        let Some(action) = hotkey(name, ctrl, shift, alt) else {
+            return false;
+        };
+        let ui = self.ui();
+        let a = ui.global::<Actions>();
+        let g = ui.global::<AppState>();
+        match action {
+            Hotkey::Undo => a.invoke_undo(),
+            Hotkey::Redo => a.invoke_redo(),
+            Hotkey::Save => a.invoke_save(),
+            Hotkey::SaveAs => a.invoke_save_as(),
+            Hotkey::Open => a.invoke_open(),
+            Hotkey::NewMap => a.invoke_new_map(),
+            Hotkey::ToggleMenu => {
+                let u = ui.global::<Ui>();
+                u.set_panel_open(!u.get_panel_open());
+            }
+            Hotkey::Escape => {
+                let drawing = !self.state.borrow().draft.is_empty();
+                if drawing || g.get_tool() != Tool::Select {
+                    g.set_tool(Tool::Select);
+                    self.cancel_draft();
+                    self.update_tools();
+                } else {
+                    ui.global::<Dialogs>().invoke_close_all();
+                    ui.global::<Ui>().set_panel_open(false);
+                }
+            }
+            Hotkey::Finish => {
+                if self.state.borrow().draft.is_empty() {
+                    return false;
+                }
+                self.finish_draft();
+            }
+            Hotkey::Delete => {
+                let selected = self.state.borrow().editor.selected.clone();
+                let Some(id) = selected else { return false };
+                a.invoke_remove_pin(s(id));
+            }
+            Hotkey::Tool(id) => self.open_tool(id),
+            Hotkey::Layer(id) => {
+                let on = {
+                    let st = self.state.borrow();
+                    catalog::layer_def(id).map(|d| catalog::is_on(st.editor.config(), d))
+                };
+                match on {
+                    Some(on) => a.invoke_set_layer(s(id), !on),
+                    None => return false,
+                }
+            }
+            Hotkey::Zoom(f) => {
+                let mut st = self.state.borrow_mut();
+                let centre = [st.viewport[0] / 2.0, st.viewport[1] / 2.0];
+                st.view.zoom_at(centre, f);
+                drop(st);
+                self.update_view();
+                self.rerender_soon();
+            }
+            Hotkey::Fit => self.fit(),
+            Hotkey::Pan(dx, dy) => {
+                self.state.borrow_mut().view.pan_by([dx, dy]);
+                self.update_view();
+                self.rerender_soon();
+            }
+            Hotkey::BrushSize(up) => {
+                let step = g.get_brush_radius_max() / 20.0;
+                let r = g.get_brush_radius() + if up { step } else { -step };
+                g.set_brush_radius(r.clamp(1.0, g.get_brush_radius_max()));
+                self.update_view();
+            }
+        }
+        true
+    }
+
     /// Start a drawing tool, or stop it if it is on.
     fn start_tool(self: &Rc<Self>, tool: Tool) {
         let ui = self.ui();
@@ -1687,6 +1782,8 @@ fn main() -> Result<(), slint::PlatformError> {
         drop(st);
         c.edited(r, if on { "make a port" } else { "make not a port" });
     });
+    let c = Rc::clone(&app);
+    a.on_key(move |text, ctrl, shift, alt| c.key(&text, ctrl, shift, alt));
     let c = Rc::clone(&app);
     a.on_finish_draft(move || c.finish_draft());
     let c = Rc::clone(&app);

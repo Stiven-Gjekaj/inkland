@@ -59,32 +59,9 @@ export component AppWindow inherits Window {
     }
 
     keys := FocusScope {
+        init => { self.focus(); }
         key-pressed(event) => {
-            if (event.modifiers.control || event.modifiers.meta) && (event.text == "z" || event.text == "Z") {
-                if event.modifiers.shift { Actions.redo(); } else { Actions.undo(); }
-                return accept;
-            }
-            if (event.modifiers.control || event.modifiers.meta) && (event.text == "y" || event.text == "Y") {
-                Actions.redo();
-                return accept;
-            }
-            if event.text == Key.Return && AppState.draft-points.length > 0 {
-                Actions.finish-draft();
-                return accept;
-            }
-            if event.text == Key.Escape && (AppState.draft-points.length > 0 || AppState.tool != Tool.select) {
-                Actions.cancel-draft();
-                AppState.tool = Tool.select;
-                return accept;
-            }
-            if event.text == Key.Escape {
-                AppState.tool = Tool.select;
-                Dialogs.close-all();
-                Ui.panel-open = false;
-                return accept;
-            }
-            if event.text == Key.Tab {
-                Ui.panel-open = !Ui.panel-open;
+            if Actions.key(event.text, event.modifiers.control || event.modifiers.meta, event.modifiers.shift, event.modifiers.alt) {
                 return accept;
             }
             reject

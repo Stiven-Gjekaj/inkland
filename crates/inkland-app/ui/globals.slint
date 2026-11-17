@@ -156,6 +156,9 @@ export global Actions {
     // the text.
     callback edit-item(string, string, string, string);
     callback remove-item(string, string);
+    // A key that no field took: the text, Control or Command, Shift, and
+    // Alt. The result is `true` if the key is a hotkey.
+    callback key(string, bool, bool, bool) -> bool;
     callback select-pin(string);
     callback rename-pin(string, string);
     callback remove-pin(string);
