@@ -313,6 +313,7 @@ impl Editor {
 mod tests {
     use super::*;
     use crate::pins::Shape;
+    use crate::variants::LabelSetting;
     use inkland_core::config::{Anchor, RegionRef};
 
     /// A small world with two places, a road between them, and a region.
@@ -411,6 +412,35 @@ mod tests {
                 }),
             ),
             ("remove brush", Box::new(|e| e.remove_brush(0))),
+            (
+                "crop",
+                Box::new(|e| e.set_crop(0, Some([0.0, 0.0, 190.0, 150.0]))),
+            ),
+            (
+                "add variant",
+                Box::new(|e| {
+                    e.add_variant(0, Some([20.0, 20.0, 120.0, 95.0]))
+                        .map(|_| ())
+                }),
+            ),
+            ("add overlay", Box::new(|e| e.add_overlay("lettered"))),
+            (
+                "show overlay",
+                Box::new(|e| e.set_variant_overlay(0, Some("lettered"))),
+            ),
+            (
+                "label",
+                Box::new(|e| {
+                    e.set_label(
+                        0,
+                        "region:hills",
+                        LabelSetting {
+                            hide: false,
+                            size_pt: Some(10.0),
+                        },
+                    )
+                }),
+            ),
         ]
     }
 

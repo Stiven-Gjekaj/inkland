@@ -21,6 +21,8 @@ pub enum Kind {
     Bool,
     /// `auto` or a whole number.
     Towns,
+    /// A number, or an empty text that removes the value.
+    OptionalNumber,
     /// A number, or an empty text that removes the value. The value is an
     /// object with this one field.
     OptionalIn(&'static str),
@@ -45,6 +47,7 @@ pub const OPTIONS: &[(&str, &str, Kind)] = &[
     ("lat-south", "/world/climate/latitude_range/0", Kind::Number),
     ("lat-north", "/world/climate/latitude_range/1", Kind::Number),
     ("units", "/units/name", Kind::Text),
+    ("cell-hint", "/units/per_cell_hint", Kind::OptionalNumber),
     ("mode", "/render/mode", Kind::Text),
     ("style", catalog::STYLE_PRESET_PATH, Kind::Text),
     ("font-title", "/render/fonts/title", Kind::Text),
@@ -177,6 +180,12 @@ impl Editor {
                     json!(parse_count(key, text)?)
                 }
             }
+            Kind::OptionalNumber => {
+                if text.is_empty() {
+                    return self.unset(path);
+                }
+                number(parse_number(key, text)?)
+            }
             Kind::OptionalIn(field) => {
                 if text.is_empty() {
                     return self.unset(path);
@@ -220,7 +229,10 @@ mod tests {
             if *path != catalog::STYLE_PRESET_PATH
                 && !matches!(
                     kind,
-                    Kind::OptionalIn(_) | Kind::OptionalTextIn(_) | Kind::Bool
+                    Kind::OptionalIn(_)
+                        | Kind::OptionalTextIn(_)
+                        | Kind::OptionalNumber
+                        | Kind::Bool
                 )
             {
                 assert!(!text.is_empty(), "{key} has no text");
@@ -246,6 +258,7 @@ mod tests {
             ("sea-level", "25"),
             ("lat-south", "-10"),
             ("units", "league"),
+            ("cell-hint", "3"),
             ("width", "220"),
             ("size-city", "9.5"),
             ("min-line", "0.6"),
@@ -272,6 +285,8 @@ mod tests {
         e.set_option("title", "").unwrap();
         assert!(e.config().render.extras.cartouche.is_none());
         e.set_option("towns", "auto").unwrap();
+        e.set_option("cell-hint", "").unwrap();
+        assert_eq!(e.config().units.per_cell_hint, None);
         while e.undo().unwrap() {}
         assert_eq!(e.config(), e.original());
     }
