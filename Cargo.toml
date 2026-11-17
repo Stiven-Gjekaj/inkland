@@ -28,7 +28,7 @@ clap = { version = "4", features = ["derive"] }
 delaunator = "1.1"
 libm = "0.2"
 proptest = "1"
-resvg = { version = "0.50", default-features = false }
+resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -126,8 +126,33 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
 
 /// A PNG preview of an SVG. The longer side is `longest_px` pixels.
 #[cfg(feature = "png")]
-pub fn preview_png(svg: &str, longest_px: u32) -> Result<Vec<u8>, String> {
-    inkland_render::png::svg_to_png(svg, longest_px)
+pub fn preview_png(
+    svg: &str,
+    longest_px: u32,
+    config: &Config,
+) -> Result<(Vec<u8>, Vec<Warning>), String> {
+    let dirs: Vec<&std::path::Path> = config.font_dirs.iter().map(std::path::Path::new).collect();
+    let families: Vec<&str> = config
+        .render
+        .fonts
+        .families()
+        .iter()
+        .map(|(_, f)| *f)
+        .collect();
+    let p = inkland_render::png::svg_to_png(svg, longest_px, &dirs, &families)?;
+    let warnings = p
+        .missing_fonts
+        .into_iter()
+        .map(|f| {
+            Warning::new(
+                WarningCode::FontNotFound,
+                "/render/fonts",
+                format!("the font family {f:?} is not on this system or in font_dirs; the preview uses a fallback font"),
+            )
+            .with("font", f)
+        })
+        .collect();
+    Ok((p.png, warnings))
 }
 
 /// The version of the tool and the notices of third-party work.

@@ -183,7 +183,7 @@ fn generate(args: GenerateArgs, verbose: bool) -> Result<Value, Vec<Error>> {
         return Ok(serde_json::to_value(report).expect("a report always converts to JSON"));
     }
     let out = inkland::generate(&config, args.variant.as_deref())?;
-    write_output(&out, &args, verbose)
+    write_output(&out, &config, &args, verbose)
 }
 
 /// The longer side of the PNG preview, in pixels.
@@ -192,6 +192,7 @@ const PREVIEW_PX: u32 = 1024;
 /// Write the files of `generate`. Return the summary for stdout.
 fn write_output(
     out: &inkland::Output,
+    config: &inkland::Config,
     args: &GenerateArgs,
     verbose: bool,
 ) -> Result<Value, Vec<Error>> {
@@ -224,10 +225,7 @@ fn write_output(
         let svg_path = args.out_dir.join(format!("{}.svg", v.name));
         let report_path = args.out_dir.join(format!("{}.report.json", v.name));
         write(&svg_path, v.svg.as_bytes())?;
-        let mut report =
-            serde_json::to_string_pretty(&v.report).expect("a report converts to JSON");
-        report.push('\n');
-        write(&report_path, report.as_bytes())?;
+        let mut report_value = v.report.clone();
         let mut entry = json!({
             "checks_failed": v.checks_failed(),
             "name": v.name,
@@ -241,11 +239,21 @@ fn write_output(
                 let stem = preview.file_stem().unwrap_or_default().to_string_lossy();
                 preview.with_file_name(format!("{stem}-{}.png", v.name))
             };
-            let png = inkland::preview_png(&v.svg, PREVIEW_PX)
+            let (png, warnings) = inkland::preview_png(&v.svg, PREVIEW_PX, config)
                 .map_err(|e| vec![Error::new(ErrorCode::Internal, "", e)])?;
             write(&path, &png)?;
             entry["preview"] = Value::from(path.display().to_string());
+            if let Some(list) = report_value["warnings"].as_array_mut() {
+                for w in warnings {
+                    list.push(serde_json::to_value(w).expect("a warning converts to JSON"));
+                }
+            }
+            entry["warnings"] = report_value["warnings"].clone();
         }
+        let mut report =
+            serde_json::to_string_pretty(&report_value).expect("a report converts to JSON");
+        report.push('\n');
+        write(&report_path, report.as_bytes())?;
         variants.push(entry);
     }
     Ok(json!({
