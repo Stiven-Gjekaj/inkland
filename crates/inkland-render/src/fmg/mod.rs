@@ -2,4 +2,6 @@
 
 pub mod color;
 pub mod geom;
+pub mod icons;
+mod icons_data;
 pub mod style;
