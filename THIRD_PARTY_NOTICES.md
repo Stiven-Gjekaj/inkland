@@ -16,6 +16,15 @@ Some data tables come from it. This file keeps its license notice.
     `src/model/physical/heightmap-generator.ts`. In inkland:
     `BLOB_POWER` and `LINE_POWER` in
     `crates/inkland-core/src/heightmap/mod.rs`.
+  - The default temperatures, the default winds, and the precipitation
+    factor of each latitude band, from
+    `src/model/physical/temperature-generator.ts`,
+    `src/model/physical/precipitation-generator.ts`, and
+    `src/model/options/options-model.ts`. In inkland:
+    `crates/inkland-core/src/climate.rs`.
+  - The biome list and the moisture-temperature biome matrix, from
+    `src/model/physical/biomes-generator.ts`. In inkland:
+    `crates/inkland-core/src/biomes.rs`.
 
 ```text
 MIT License
