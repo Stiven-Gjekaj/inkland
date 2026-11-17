@@ -20,7 +20,6 @@ pub const PLACE_LINE_PT: f64 = 0.5;
 pub const ROAD_PT: f64 = 0.7;
 pub const TRAIL_PT: f64 = 0.5;
 pub const RIVER_MIN_PT: f64 = 0.5;
-pub const RIVER_STEP_PT: f64 = 0.35;
 pub const RIVER_MAX_PT: f64 = 2.0;
 
 /// Black and white only, so the file prints the same on each printer.
@@ -307,14 +306,19 @@ fn write_relief(
     s.push_str("</g>\n");
 }
 
-/// The line width of a river, in points: wider for more water.
-pub fn river_width_pt(flux: f64, threshold: f64, min_pt: f64) -> f64 {
-    let w = RIVER_MIN_PT + RIVER_STEP_PT * libm::log2(1.0 + flux / threshold);
+/// The line width of a river at its mouth, in points. `width_km` is the
+/// FMG width of the river (`River::width`). The original program draws the
+/// river `2 * 1.5 * width_km ^ (1 / 1.8)` map pixels wide (`getWidth` turned
+/// back into `getOffset`); `mm_per_px` gives the millimetres of one map
+/// pixel on the page (see `fmg::geom::Px`).
+pub fn river_width_pt(width_km: f64, mm_per_px: f64, min_pt: f64) -> f64 {
+    let px = 3.0 * libm::pow(width_km.max(0.0), 1.0 / 1.8);
+    let w = px * mm_per_px / crate::page::MM_PER_PT;
     w.clamp(RIVER_MIN_PT, RIVER_MAX_PT).max(min_pt)
 }
 
 fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Variant, page: &Page) {
-    let threshold = inkland_core::rivers::river_threshold(world.grid.len());
+    let mm_per_px = crate::fmg::geom::Px::new(page, config.frame.width, config.frame.height).mm;
     let min = config.render.min_line_width_pt;
     let overlay = crate::labels::overlay_of(config, variant);
     let mut items: Vec<(String, String, f64)> = world
@@ -334,7 +338,7 @@ fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Varian
                 None => format!("river-{}", r.id),
             };
             let d = path_data(page, &r.points, false);
-            (!d.is_empty()).then(|| (id, d, line_mm(river_width_pt(r.flux, threshold, min))))
+            (!d.is_empty()).then(|| (id, d, line_mm(river_width_pt(r.width, mm_per_px, min))))
         })
         .collect();
     items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -732,9 +736,9 @@ mod tests {
                 r.id
             );
         }
-        assert!(river_width_pt(0.0, 50.0, 0.5) >= 0.5);
-        assert!(river_width_pt(1e9, 50.0, 0.5) <= RIVER_MAX_PT);
-        assert!(river_width_pt(400.0, 50.0, 0.5) > river_width_pt(60.0, 50.0, 0.5));
+        assert!(river_width_pt(0.0, 0.1, 0.5) >= 0.5);
+        assert!(river_width_pt(1e9, 0.1, 0.5) <= RIVER_MAX_PT);
+        assert!(river_width_pt(4.0, 0.1, 0.5) > river_width_pt(1.0, 0.1, 0.5));
     }
 
     #[test]
