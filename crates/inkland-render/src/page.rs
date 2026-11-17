@@ -10,6 +10,13 @@ pub fn pt(v: f64) -> f64 {
     v * MM_PER_PT
 }
 
+/// A line width in points to millimetres, rounded up to 3 decimals. The SVG
+/// writes 3 decimals, and a width that rounds down could fall below the
+/// least permitted width.
+pub fn line_mm(v: f64) -> f64 {
+    (pt(v) * 1000.0 - 1e-9).ceil() / 1000.0
+}
+
 /// Where the world goes on the page.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Page {
@@ -109,6 +116,15 @@ mod tests {
         // y = 0 is the top of the page with top-left, the bottom with bottom-left.
         assert!(a.to_page([0.0, 0.0])[1] < a.to_page([0.0, 300.0])[1]);
         assert!(b.to_page([0.0, 0.0])[1] > b.to_page([0.0, 300.0])[1]);
+    }
+
+    #[test]
+    fn a_line_width_never_rounds_below_its_points() {
+        for v in [0.5, 0.75, 1.0, 1.3, 2.0] {
+            let mm = line_mm(v);
+            assert!(mm / MM_PER_PT >= v, "{v} pt gives {mm} mm");
+            assert_eq!(mm, inkland_core::num::round(mm, 3));
+        }
     }
 
     #[test]

@@ -5,7 +5,7 @@
 //! coordinates have 3 decimals. Groups and elements have stable ids, and the
 //! writer puts them in a fixed order.
 
-use crate::page::{Page, pt};
+use crate::page::{Page, line_mm};
 use inkland_core::config::{Config, Variant};
 use inkland_core::num::fixed;
 use inkland_core::world::World;
@@ -35,8 +35,8 @@ fn n(v: f64) -> String {
 pub fn render(world: &World, config: &Config, variant: &Variant) -> String {
     let page = Page::new(config, variant);
     let min = config.render.min_line_width_pt;
-    let coast_w = pt(COAST_WIDTH_PT.max(min));
-    let neat_w = pt(NEATLINE_WIDTH_PT.max(min));
+    let coast_w = line_mm(COAST_WIDTH_PT.max(min));
+    let neat_w = line_mm(NEATLINE_WIDTH_PT.max(min));
     let [mx, my, mw, mh] = page.map_rect();
 
     let mut s = String::new();
@@ -92,7 +92,7 @@ fn write_coast(s: &mut String, world: &World, page: &Page, coast_w: f64, min: f6
     let _ = writeln!(
         s,
         "<g id=\"water-lines\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\">",
-        n(pt(0.5f64.max(min)))
+        n(line_mm(0.5f64.max(min)))
     );
     for (i, line) in crate::decor::water_lines(world).iter().enumerate() {
         let pts: Vec<[f64; 2]> = line
@@ -129,7 +129,7 @@ fn write_relief(s: &mut String, world: &World, config: &Config, page: &Page, min
     let _ = writeln!(
         s,
         "<g id=\"relief\" clip-path=\"url(#clip-map)\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">",
-        n(pt(0.5f64.max(min)))
+        n(line_mm(0.5f64.max(min)))
     );
     for (sym, [x, y]) in symbols {
         let fill = match sym {
@@ -169,7 +169,7 @@ fn write_rivers(s: &mut String, world: &World, config: &Config, page: &Page) {
                 None => format!("river-{}", r.id),
             };
             let d = path_data(page, &r.points, false);
-            (!d.is_empty()).then(|| (id, d, pt(river_width_pt(r.flux, threshold, min))))
+            (!d.is_empty()).then(|| (id, d, line_mm(river_width_pt(r.flux, threshold, min))))
         })
         .collect();
     items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -279,7 +279,7 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
     let _ = writeln!(
         s,
         "<g id=\"borders-provinces\" stroke-width=\"{}\" stroke-dasharray=\"0.3 0.9\">",
-        n(pt(PROVINCE_BORDER_PT.max(min)))
+        n(line_mm(PROVINCE_BORDER_PT.max(min)))
     );
     for (i, l) in chain_edges(&province_edges).iter().enumerate() {
         let d = line(l);
@@ -291,7 +291,7 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
     let _ = writeln!(
         s,
         "<g id=\"borders-states\" stroke-width=\"{}\" stroke-dasharray=\"2 0.8 0.4 0.8\">",
-        n(pt(STATE_BORDER_PT.max(min)))
+        n(line_mm(STATE_BORDER_PT.max(min)))
     );
     for (i, l) in chain_edges(&state_edges).iter().enumerate() {
         let d = line(l);
@@ -307,8 +307,8 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
     use std::collections::BTreeSet;
     let min = config.render.min_line_width_pt;
     let style = |kind: RoadKind| match kind {
-        RoadKind::Road => (n(pt(ROAD_PT.max(min))), "1.6 0.5"),
-        RoadKind::Trail => (n(pt(TRAIL_PT.max(min))), "0.5 0.6"),
+        RoadKind::Road => (n(line_mm(ROAD_PT.max(min))), "1.6 0.5"),
+        RoadKind::Trail => (n(line_mm(TRAIL_PT.max(min))), "0.5 0.6"),
     };
     let _ = writeln!(
         s,
@@ -428,7 +428,7 @@ fn place_symbol(
 }
 
 fn write_places(s: &mut String, world: &World, config: &Config, page: &Page) {
-    let w = n(pt(PLACE_LINE_PT.max(config.render.min_line_width_pt)));
+    let w = n(line_mm(PLACE_LINE_PT.max(config.render.min_line_width_pt)));
     let [x0, y0, x1, y1] = page.view;
     let mut items: Vec<(String, String)> = world
         .society
@@ -545,8 +545,8 @@ mod tests {
         c.render.min_line_width_pt = 2.0;
         let w = World::build(&c).unwrap();
         let s = render(&w, &c, &c.variants[0]);
-        assert!(s.contains(&format!("stroke-width=\"{}\"", n(pt(2.0)))));
-        assert!(!s.contains(&format!("stroke-width=\"{}\"", n(pt(COAST_WIDTH_PT)))));
+        assert!(s.contains(&format!("stroke-width=\"{}\"", n(line_mm(2.0)))));
+        assert!(!s.contains(&format!("stroke-width=\"{}\"", n(line_mm(COAST_WIDTH_PT)))));
     }
 
     #[test]

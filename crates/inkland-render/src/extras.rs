@@ -4,7 +4,7 @@
 //! scale bar for its own scale. All text is real `<text>`, with the font
 //! family of the config.
 
-use crate::page::{Page, pt};
+use crate::page::{Page, line_mm, pt};
 use inkland_core::config::{Config, Extras, Variant};
 use inkland_core::num::fixed;
 use std::fmt::Write as _;
@@ -62,7 +62,7 @@ pub fn nice_length(max: f64) -> f64 {
 pub fn write(s: &mut String, config: &Config, variant: &Variant, page: &Page) {
     let e = merged(config, variant);
     let min = config.render.min_line_width_pt;
-    let line = n(pt(0.5f64.max(min)));
+    let line = n(line_mm(0.5f64.max(min)));
     let font = xml(&config.render.fonts.other);
     let title_font = xml(&config.render.fonts.title);
     let [mx, my, mw, mh] = page.map_rect();
@@ -210,7 +210,7 @@ pub fn write(s: &mut String, config: &Config, variant: &Variant, page: &Page) {
             n(y),
             n(w),
             n(size * 1.8),
-            n(pt(1.0f64.max(min)))
+            n(line_mm(1.0f64.max(min)))
         );
         let _ = writeln!(
             s,
