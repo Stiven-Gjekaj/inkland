@@ -651,6 +651,40 @@ mod pin_tests {
         }
     }
 
+    /// The exact sites and the region ranges hold on each lattice of the
+    /// first grid, also after the second grid.
+    #[test]
+    fn pins_hold_on_each_lattice() {
+        let points = json!([
+            { "id": "a", "kind": "town", "at": [120.5, 88.25] },
+            { "id": "b", "kind": "city", "at": [250.0, 200.0] },
+            { "id": "port", "kind": "city", "at": [21.0, 150.0], "port": true }
+        ]);
+        for lattice in ["square", "hex-pointy", "hex-flat", "diamond", "triangle"] {
+            let mut c = config(5, "continents", points.clone());
+            c.world.lattice = serde_json::from_value(json!(lattice)).unwrap();
+            let w = World::build(&c).unwrap();
+            for (i, p) in c.pins.points.iter().enumerate() {
+                let cell = w.pin_cells[i];
+                assert_eq!(w.grid.points[cell], p.at, "{lattice}: {} moved", p.id);
+                assert_eq!(w.grid.find_cell(p.at[0], p.at[1]), cell, "{lattice}");
+                assert!(w.features.is_land(cell), "{lattice}: {} is not land", p.id);
+            }
+            for r in &c.pins.regions {
+                let shape = Shape::of(r).unwrap();
+                let [lo, hi] = effective_range(r, w.sea_level);
+                for cell in (0..w.grid.len()).filter(|&k| shape.contains(w.grid.points[k])) {
+                    let h = w.heights[cell];
+                    assert!(
+                        h >= lo.ceil() && h <= hi.floor().max(lo.ceil()),
+                        "{lattice}: {}",
+                        r.id
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn a_sea_in_the_middle_of_land_is_refused_unless_landlocked() {
         let make = |landlocked: bool| -> Config {
