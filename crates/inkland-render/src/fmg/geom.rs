@@ -78,7 +78,15 @@ pub struct Edge {
 /// cell; 0 is no type. Each ring has the area on the same side, so a hole
 /// turns the other way. The result is in the order of the types.
 pub fn rings(world: &World, type_of: &dyn Fn(usize) -> u32) -> BTreeMap<u32, Vec<Vec<Edge>>> {
-    let g = &world.grid;
+    rings_on(&world.grid, type_of)
+}
+
+/// The rings of the areas of each type on a grid: the second grid of the
+/// world, or its first grid (`World::base`).
+pub fn rings_on(
+    g: &inkland_core::grid::Grid,
+    type_of: &dyn Fn(usize) -> u32,
+) -> BTreeMap<u32, Vec<Vec<Edge>>> {
     let mut by_type: BTreeMap<u32, Vec<Edge>> = BTreeMap::new();
     for c in 0..g.len() {
         let t = type_of(c);

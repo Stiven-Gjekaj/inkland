@@ -153,11 +153,6 @@ pub fn offset(flux: f64, index: usize, width_factor: f64, start: f64) -> f64 {
     width_factor * (length_width + flux_width) + start
 }
 
-/// The width of a river at its source (`getSourceWidth`).
-pub fn source_width(flux: f64) -> f64 {
-    inkland_core::num::round((libm::pow(flux, 0.9) / FLUX_FACTOR).min(MAX_FLUX_WIDTH), 2)
-}
-
 /// Bends between the points of a river (`meander`). Each point of the
 /// course stays where it is. The result is the points and, for each point,
 /// the index of its course point or `None`.
@@ -258,17 +253,6 @@ pub fn rivers(s: &mut String, ctx: &Ctx) {
     let w = ctx.world;
     let cfg = ctx.config;
     let overlay = crate::labels::overlay_of(cfg, ctx.variant);
-    // The water of the original program is in units of precipitation; the
-    // flux of inkland is in cells of mean land precipitation.
-    let land: Vec<usize> = (0..w.grid.len())
-        .filter(|&c| w.features.is_land(c))
-        .collect();
-    let mean = if land.is_empty() {
-        1.0
-    } else {
-        land.iter().map(|&c| w.precipitation[c]).sum::<f64>() / land.len() as f64
-    };
-    let factor = inkland_core::num::round(1.0 / libm::pow(w.grid.len() as f64 / 10_000.0, 0.25), 2);
     let mut items: Vec<(String, &'static str, String)> = Vec::new();
     for r in &w.rivers {
         if r.course.is_some_and(|k| {
@@ -284,23 +268,20 @@ pub fn rivers(s: &mut String, ctx: &Ctx) {
             Some(k) => format!("river-{}", cfg.pins.rivers[k].id),
             None => format!("river-{}", r.id),
         };
-        let flux_at = |i: usize| -> f64 {
-            let f = r.cells.get(i).map_or(r.flux, |&c| w.drainage.flux[c]);
-            f * mean
-        };
+        // The water of each course point (FMG `cells.fl`).
+        let flux_at = |i: usize| -> f64 { r.cells.get(i).map_or(r.flux, |&c| w.drainage.flux[c]) };
         let pts: Vec<[f64; 2]> = r.points.iter().map(|&p| ctx.p(p)).collect();
         let water_last = r.points.len() > r.cells.len();
         let bent: Vec<([f64; 2], f64)> = meander(&pts, water_last)
             .into_iter()
             .map(|(p, k)| (p, k.map_or(0.0, flux_at)))
             .collect();
-        let wf = if r.parent.is_none() {
-            factor * 1.2
-        } else {
-            factor
-        };
-        let start = source_width(flux_at(0));
-        items.push((id, river_group(ctx, &r.cells), river_path(&bent, wf, start)));
+        // The width factor and the source width of the river stage.
+        items.push((
+            id,
+            river_group(ctx, &r.cells),
+            river_path(&bent, r.width_factor, r.source_width),
+        ));
     }
     items.sort_by(|a, b| a.0.cmp(&b.0));
     let _ = writeln!(
@@ -334,7 +315,6 @@ mod tests {
     fn a_river_is_wider_at_its_mouth() {
         assert!(offset(5000.0, 20, 1.0, 0.1) > offset(10.0, 1, 1.0, 0.1));
         assert_eq!(offset(5000.0, 0, 1.0, 0.1), 0.1);
-        assert!(source_width(1e9) <= 1.0);
     }
 
     #[test]

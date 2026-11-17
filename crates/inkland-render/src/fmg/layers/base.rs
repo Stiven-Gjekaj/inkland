@@ -6,7 +6,7 @@
 use super::super::Ctx;
 use super::super::color::{height_color, height_scheme};
 use super::super::geom::{self, Edge, basis_closed, n};
-use inkland_core::grid::OUTSIDE;
+use inkland_core::grid::{Grid, OUTSIDE};
 use inkland_core::rand::Rand;
 use inkland_core::seed::{Layer, SeedTree};
 use std::collections::VecDeque;
@@ -43,9 +43,10 @@ pub fn feature_defs(d: &mut String, ctx: &Ctx) {
     );
 }
 
-/// The distance of each cell from land, in cells: 0 on land.
+/// The distance of each cell of the first grid from land, in cells: 0 on
+/// land. The ocean layers of the original program use the first grid.
 fn coast_distance(ctx: &Ctx, limit: u32) -> Vec<u32> {
-    let w = ctx.world;
+    let w = &ctx.world.base;
     let g = &w.grid;
     let mut d = vec![u32::MAX; g.len()];
     let mut queue = VecDeque::new();
@@ -70,8 +71,7 @@ fn coast_distance(ctx: &Ctx, limit: u32) -> Vec<u32> {
 }
 
 /// Keep each `every`-th point of a ring, and each point on the frame.
-fn relax(ctx: &Ctx, ring: &[Edge], every: usize) -> Vec<[f64; 2]> {
-    let g = &ctx.world.grid;
+fn relax(ctx: &Ctx, g: &Grid, ring: &[Edge], every: usize) -> Vec<[f64; 2]> {
     ring.iter()
         .enumerate()
         .filter(|(i, e)| i % every == 0 || e.other == OUTSIDE)
@@ -113,10 +113,10 @@ pub fn ocean(s: &mut String, ctx: &Ctx) {
         let dist = coast_distance(ctx, max + 1);
         let opacity = inkland_core::num::fixed(0.4 / limits.len() as f64, 2);
         for t in &limits {
-            let rings = geom::rings(ctx.world, &|c| u32::from(dist[c] <= *t));
+            let rings = geom::rings_on(&ctx.world.base.grid, &|c| u32::from(dist[c] <= *t));
             let mut d = String::new();
             for ring in rings.get(&1).into_iter().flatten() {
-                let pts = relax(ctx, ring, 1 + 2 * (*t as usize));
+                let pts = relax(ctx, &ctx.world.base.grid, ring, 1 + 2 * (*t as usize));
                 if pts.len() >= 4 {
                     d.push_str(&basis_closed(&pts));
                 }
@@ -256,11 +256,12 @@ fn waves(s: &mut String, ctx: &Ctx) {
     let [mx, my, mw, mh] = ctx.px.map_rect();
     let distance_at = |x: f64, y: f64| -> f64 {
         let wp = ctx.px.page.to_world([x * ctx.px.mm, y * ctx.px.mm]);
-        let c = w
+        let b = &w.base;
+        let c = b
             .grid
             .find_cell(wp[0].clamp(0.0, w.width), wp[1].clamp(0.0, w.height));
-        if w.features.is_land(c)
-            || w.features.get(w.features.of_cell[c]).kind
+        if b.features.is_land(c)
+            || b.features.get(b.features.of_cell[c]).kind
                 == inkland_core::features::FeatureKind::Lake
         {
             return 0.0;
@@ -427,10 +428,12 @@ pub fn coastline(s: &mut String, ctx: &Ctx) {
 /// (`drawHeightmap`).
 pub fn heightmap(s: &mut String, ctx: &Ctx) {
     let w = ctx.world;
+    // The original program draws the heights of the first grid.
+    let g = &w.base.grid;
     let st = &ctx.style;
     // Heights on the scale of the original program: sea level is 20.
     let h = |c: usize| {
-        (w.heights[c] - w.sea_level + 20.0)
+        (w.base.heights[c] - w.sea_level + 20.0)
             .clamp(0.0, 100.0)
             .round()
     };
@@ -487,10 +490,10 @@ pub fn heightmap(s: &mut String, ctx: &Ctx) {
         let mut level = lo;
         while level <= hi {
             let lv = f64::from(level);
-            let rings = geom::rings(w, &|c| u32::from(h(c) >= lv));
+            let rings = geom::rings_on(g, &|c| u32::from(h(c) >= lv));
             let mut d = String::new();
             for ring in rings.get(&1).into_iter().flatten() {
-                let pts = relax(ctx, ring, 1);
+                let pts = relax(ctx, g, ring, 1);
                 if pts.len() >= 3 {
                     d.push_str(&basis_closed(&pts));
                 }
@@ -516,6 +519,7 @@ pub fn heightmap(s: &mut String, ctx: &Ctx) {
 /// Contour lines of the land heights (`heightmap-contours.ts`, simpler):
 /// a line at each fourth height unit, and a wider line at each twentieth.
 fn contour_lines(s: &mut String, ctx: &Ctx, p: &[&str], h: &dyn Fn(usize) -> f64) {
+    let g = &ctx.world.base.grid;
     let st = &ctx.style;
     let color = st
         .option_str(p, "contours.color")
@@ -531,10 +535,10 @@ fn contour_lines(s: &mut String, ctx: &Ctx, p: &[&str], h: &dyn Fn(usize) -> f64
     let mut level = 24u32;
     while level < 100 {
         let lv = f64::from(level);
-        let rings = geom::rings(ctx.world, &|c| u32::from(h(c) >= lv));
+        let rings = geom::rings_on(g, &|c| u32::from(h(c) >= lv));
         let mut d = String::new();
         for ring in rings.get(&1).into_iter().flatten() {
-            let pts = relax(ctx, ring, 1);
+            let pts = relax(ctx, g, ring, 1);
             if pts.len() >= 3 {
                 d.push_str(&basis_closed(&pts));
             }

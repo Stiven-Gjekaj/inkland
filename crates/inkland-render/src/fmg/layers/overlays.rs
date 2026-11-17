@@ -175,7 +175,8 @@ pub fn coordinates(s: &mut String, ctx: &Ctx) {
 /// Temperature: shapes of equal temperature, coloured by temperature
 /// (`drawTemperature`).
 pub fn temperature(s: &mut String, ctx: &Ctx) {
-    let w = ctx.world;
+    // The original program draws the temperature of the first grid.
+    let w = &ctx.world.base;
     let temp = &w.temperature;
     let tmin = temp.iter().copied().fold(f64::INFINITY, f64::min).round();
     let tmax = temp
@@ -202,7 +203,7 @@ pub fn temperature(s: &mut String, ctx: &Ctx) {
     let mut labels = String::new();
     let mut t = tmin + step;
     while t < tmax {
-        let rings = geom::rings(w, &|c| u32::from(temp[c].round() >= t));
+        let rings = geom::rings_on(&w.grid, &|c| u32::from(temp[c].round() >= t));
         let mut d = String::new();
         for ring in rings.get(&1).into_iter().flatten() {
             let pts: Vec<[f64; 2]> = ring
@@ -247,7 +248,8 @@ pub fn temperature(s: &mut String, ctx: &Ctx) {
 /// Precipitation: a circle on each land cell, larger for more rain
 /// (`drawPrecipitation`).
 pub fn precipitation(s: &mut String, ctx: &Ctx) {
-    let w = ctx.world;
+    // The original program draws the precipitation of the first grid.
+    let w = &ctx.world.base;
     let g = &w.grid;
     let modifier = libm::pow(g.len() as f64 / 10_000.0, 0.25);
     let [vx0, vy0, vx1, vy1] = ctx.px.page.view;
