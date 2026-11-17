@@ -43,6 +43,8 @@ pub struct World {
     pub biomes: Vec<u8>,
     /// Cultures, places, states, and provinces.
     pub society: crate::society::Society,
+    /// Pinned roads first, in config order, then the generated network.
+    pub roads: Vec<crate::roads::Road>,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -189,6 +191,17 @@ impl World {
             river_threshold: river_threshold(grid.len()),
             pin_cells: &pin_cells,
         });
+        let roads = crate::roads::build(&crate::roads::Input {
+            config,
+            grid: &grid,
+            heights: &heights,
+            features: &features,
+            biomes: &biomes,
+            rivers: &rivers,
+            flux: &drainage.flux,
+            river_threshold: river_threshold(grid.len()),
+            society: &society,
+        })?;
         Ok(World {
             seed: config.seed,
             width: w,
@@ -206,6 +219,7 @@ impl World {
             rivers,
             biomes,
             society,
+            roads,
         })
     }
 

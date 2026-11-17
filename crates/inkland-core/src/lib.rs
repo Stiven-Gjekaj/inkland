@@ -17,6 +17,7 @@ pub mod names;
 pub mod num;
 pub mod rand;
 pub mod rivers;
+pub mod roads;
 pub mod seed;
 pub mod society;
 pub mod world;
