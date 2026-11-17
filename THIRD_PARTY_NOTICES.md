@@ -46,6 +46,16 @@ Some data tables come from it. This file keeps its license notice.
     feature names, from `src/model/physical/river-generator.ts` and
     `src/model/physical/features-generator.ts`. In inkland:
     `crates/inkland-core/src/geonames.rs`.
+  - The 15 style presets, from `src/model/styles/default-styles.json` and
+    `public/styles/*.json`. In inkland: `crates/inkland-render/assets/fmg/styles`.
+  - The relief, place, and port icons (SVG files), from
+    `src/assets/icons/relief`, `burgs`, and `ports`. The place icons of the
+    set `watabou` are by Watabou (Oleg Dolya); each file names its author.
+    In inkland: `crates/inkland-render/assets/fmg/icons`.
+  - The SVG filters, the compass rose, and the grid patterns, from
+    `src/index.html`, and the biome colours and relief pools, from
+    `src/model/physical/biomes-generator.ts`. In inkland:
+    `crates/inkland-render/src/fmg/`.
 - Test data copied into inkland:
   - The test maps `tests/fixtures/1.112.1.map` and `1.154.0.map`, with gzip
     and no other change. In inkland: `fixtures/azgaar/*.map.gz`. They come
