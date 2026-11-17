@@ -190,6 +190,10 @@ pub struct Input<'a> {
     pub rivers: &'a [crate::rivers::River],
     pub river_threshold: f64,
     pub pin_cells: &'a [usize],
+    /// The lakes, for the outlets of lake ports.
+    pub lakes: &'a [crate::rivers::Lake],
+    /// The group of each feature (`geonames::groups`).
+    pub groups: &'a [&'static str],
 }
 
 /// Build the society.
@@ -206,6 +210,8 @@ pub fn build(input: &Input) -> Society {
         rivers,
         river_threshold,
         pin_cells,
+        lakes,
+        groups,
     } = *input;
     let n = grid.len();
     let tree = SeedTree::new(config.seed);
@@ -217,10 +223,10 @@ pub fn build(input: &Input) -> Society {
         sea_level,
         features,
         biomes,
-        temperature,
         drainage,
         rivers,
         river_threshold,
+        groups,
     });
     // Cultures (FMG generate and expand).
     let culture_input = crate::cultures::Input {
@@ -258,6 +264,7 @@ pub fn build(input: &Input) -> Society {
         cell_culture: &cell_culture,
         pin_cells,
         chains: &chains,
+        lakes,
     };
     let mut prng = Rand::new(tree.part_rng(Layer::Places, "generate"));
     let mut places = crate::burgs::generate(&burg_input, &mut used_names, &mut prng, &mut nrng);

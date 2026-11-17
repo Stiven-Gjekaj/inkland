@@ -1,17 +1,16 @@
 //! The cell data that the society stages of FMG read, and `rankCells`
 //! (`population-generator.ts`).
 //!
-//! FMG works on its second graph (`pack`). inkland has one grid, so this
-//! module makes the same cell data on that grid:
+//! The cells are the cells of the second grid (`pack`). This module
+//! collects the cell data that the society stages read:
 //!
 //! - `h`: the height on the FMG scale, where 20 is sea level.
-//! - `t`: the distance field of `markupPack`. 1 is a land cell next to
-//!   water, 2 is a land cell next to such a cell, and so on. -1 is a water
-//!   cell next to land, then -2 to -9.
-//! - `haven`: the nearest water cell next to a coastal land cell. `harbor`:
-//!   the number of water cells next to it.
-//! - `fl` and `conf`: the water flux on the FMG scale, where a river forms
-//!   at 30, and the flux of the smaller rivers at a confluence.
+//! - `t`, `haven`, `harbor`: the coast markup of `markupPack`
+//!   (`Features::distance`, `haven`, `harbor`).
+//! - `group`: the group of the feature of each cell (`defineGroups`), for
+//!   example `isle` or the lake subtype `salt`.
+//! - `fl` and `conf`: the water flux, where a river forms at 30, and the
+//!   flux of the smaller rivers at a confluence.
 //! - `s` and `pop`: suitability and rural population of `rankCells`.
 
 use crate::biomes::HABITABILITY;
@@ -28,8 +27,17 @@ pub const NAVIGABLE_FLUX: f64 = 100.0;
 const ESTUARY: f64 = 15.0;
 const OCEAN_COAST: f64 = 5.0;
 const SAFE_HARBOR: f64 = 20.0;
-const FRESHWATER: f64 = 30.0;
-const FROZEN: f64 = 1.0;
+/// The bonus of the coast of each lake subtype.
+fn lake_score(group: &str) -> f64 {
+    match group {
+        "freshwater" => 30.0,
+        "salt" => 10.0,
+        "frozen" => 1.0,
+        "dry" | "sinkhole" => -5.0,
+        "lava" => -30.0,
+        _ => 0.0,
+    }
+}
 
 /// What `Cells::new` reads.
 pub struct Input<'a> {
@@ -38,10 +46,11 @@ pub struct Input<'a> {
     pub sea_level: f64,
     pub features: &'a Features,
     pub biomes: &'a [u8],
-    pub temperature: &'a [f64],
     pub drainage: &'a Drainage,
     pub rivers: &'a [River],
     pub river_threshold: f64,
+    /// The group of each feature (`geonames::groups`).
+    pub groups: &'a [&'static str],
 }
 
 /// The cell data of the society stages.
@@ -64,6 +73,8 @@ pub struct Cells {
     pub s: Vec<f64>,
     /// Rural population, in population points.
     pub pop: Vec<f64>,
+    /// The group of the feature of each cell.
+    pub group: Vec<&'static str>,
     /// `true` for a cell of a frozen lake.
     pub frozen: Vec<bool>,
     /// `true` for a land cell on a small island ("isle").
@@ -80,10 +91,6 @@ pub fn cell_area(grid: &Grid, cell: usize) -> f64 {
         a += p[0] * q[1] - q[0] * p[1];
     }
     (a / 2.0).abs()
-}
-
-fn dist2(a: [f64; 2], b: [f64; 2]) -> f64 {
-    (a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1])
 }
 
 /// The median of the values, as in d3.
@@ -108,55 +115,25 @@ impl Cells {
             sea_level,
             features,
             biomes,
-            temperature,
             drainage,
             rivers,
             river_threshold,
+            groups,
         } = *input;
         let n = grid.len();
-        let land = |c: usize| features.is_land(c);
         let h: Vec<f64> = heights
             .iter()
             .map(|&x| (x - sea_level + 20.0).clamp(0.0, 100.0))
             .collect();
 
-        // Distance field, haven, and harbor.
-        let mut t = vec![0i32; n];
-        let mut haven = vec![None; n];
-        let mut harbor = vec![0u8; n];
-        for c in 0..n {
-            if !land(c) {
-                continue;
-            }
-            let water: Vec<usize> = grid.neighbors(c).filter(|&m| !land(m)).collect();
-            if water.is_empty() {
-                continue;
-            }
-            t[c] = 1;
-            for &m in &water {
-                t[m] = -1;
-            }
-            let mut best = water[0];
-            for &m in &water[1..] {
-                if dist2(grid.points[c], grid.points[m]) < dist2(grid.points[c], grid.points[best])
-                {
-                    best = m;
-                }
-            }
-            haven[c] = Some(best);
-            harbor[c] = water.len().min(255) as u8;
-        }
-        for c in 0..n {
-            if t[c] == 1 {
-                for m in grid.neighbors(c) {
-                    if land(m) && t[m] == 0 {
-                        t[m] = 2;
-                    }
-                }
-            }
-        }
-        markup(grid, &mut t, 3, 1, 128);
-        markup(grid, &mut t, -2, -1, -10);
+        // The coast markup of the second grid.
+        let t: Vec<i32> = features.distance.iter().map(|&d| i32::from(d)).collect();
+        let haven: Vec<Option<usize>> = features
+            .haven
+            .iter()
+            .map(|&h| (h != crate::features::NO_HAVEN).then_some(h as usize))
+            .collect();
+        let harbor = features.harbor.clone();
 
         let area: Vec<f64> = (0..n).map(|c| cell_area(grid, c)).collect();
 
@@ -185,38 +162,13 @@ impl Cells {
             }
         }
 
-        // Lakes: frozen when the mean temperature is below -5 C, as in the
-        // feature groups of inkland. Isles: land features of less than 0.5 %
-        // of the cells, or of less than 10 cells.
-        let mut cells_of: Vec<Vec<usize>> = vec![Vec::new(); features.list.len() + 1];
-        for (c, &f) in features.of_cell.iter().enumerate() {
-            cells_of[f as usize].push(c);
-        }
-        let mut frozen = vec![false; n];
-        let mut isle = vec![false; n];
-        for f in &features.list {
-            let cells = &cells_of[f.id as usize];
-            match f.kind {
-                FeatureKind::Lake => {
-                    let mean = cells.iter().map(|&c| temperature[c]).sum::<f64>()
-                        / cells.len().max(1) as f64;
-                    if mean < -5.0 {
-                        for &c in cells {
-                            frozen[c] = true;
-                        }
-                    }
-                }
-                FeatureKind::Island => {
-                    let share = f64::from(f.cells) / n.max(1) as f64;
-                    if !(share >= 0.1 || (share >= 0.005 && f.cells >= 10)) {
-                        for &c in cells {
-                            isle[c] = true;
-                        }
-                    }
-                }
-                FeatureKind::Ocean => {}
-            }
-        }
+        let group: Vec<&'static str> = features
+            .of_cell
+            .iter()
+            .map(|&f| groups.get(f as usize - 1).copied().unwrap_or(""))
+            .collect();
+        let frozen: Vec<bool> = group.iter().map(|&g| g == "frozen").collect();
+        let isle: Vec<bool> = group.iter().map(|&g| g == "isle").collect();
 
         let mut cells = Cells {
             h,
@@ -230,6 +182,7 @@ impl Cells {
             r,
             s: vec![0.0; n],
             pop: vec![0.0; n],
+            group,
             frozen,
             isle,
         };
@@ -279,7 +232,7 @@ impl Cells {
                 }
                 if let Some(hv) = self.haven[i] {
                     if lake(hv) {
-                        score += if self.frozen[hv] { FROZEN } else { FRESHWATER };
+                        score += lake_score(self.group[hv]);
                     } else {
                         score += OCEAN_COAST;
                         if self.harbor[i] == 1 {
@@ -296,34 +249,6 @@ impl Cells {
                 0.0
             };
         }
-    }
-}
-
-/// The `markup` loop of FMG: from `start`, mark the unmarked neighbors of
-/// the cells of the step before, until no cell changes or the limit.
-fn markup(grid: &Grid, t: &mut [i32], start: i32, increment: i32, limit: i32) {
-    let mut distance = start;
-    loop {
-        if distance == limit {
-            break;
-        }
-        let prev = distance - increment;
-        let mut marked = 0;
-        for c in 0..t.len() {
-            if t[c] != prev {
-                continue;
-            }
-            for m in grid.neighbors(c) {
-                if t[m] == 0 {
-                    t[m] = distance;
-                    marked += 1;
-                }
-            }
-        }
-        if marked == 0 {
-            break;
-        }
-        distance += increment;
     }
 }
 

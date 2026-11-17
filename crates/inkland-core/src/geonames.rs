@@ -238,64 +238,13 @@ pub fn build(input: &Input) -> Names {
     }
 
     // Feature groups (FMG `defineGroups`).
-    let base = input.base_cells as f64;
-    let mut lake_of_feature = vec![None; input.features.list.len()];
-    for lake in input.lakes {
-        lake_of_feature[lake.feature as usize - 1] = Some(lake);
-    }
-    // The water features around each land feature.
-    let mut around: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); input.features.list.len()];
-    for c in 0..g.len() {
-        if !input.features.is_land(c) {
-            continue;
-        }
-        let f = input.features.of_cell[c];
-        for m in g.neighbors(c) {
-            if !input.features.is_land(m) {
-                around[f as usize - 1].insert(input.features.of_cell[m]);
-            }
-        }
-    }
-    let groups: Vec<&'static str> = input
-        .features
-        .list
-        .iter()
-        .map(|f| {
-            let cells = f64::from(f.cells);
-            match f.kind {
-                FeatureKind::Island => {
-                    let water = &around[f.id as usize - 1];
-                    let in_lake = !water.is_empty()
-                        && !f.border
-                        && water
-                            .iter()
-                            .all(|&w| input.features.get(w).kind == FeatureKind::Lake);
-                    if in_lake {
-                        "lake_island"
-                    } else if cells > base / 10.0 {
-                        "continent"
-                    } else if cells > base / 1000.0 {
-                        "island"
-                    } else {
-                        "isle"
-                    }
-                }
-                FeatureKind::Lake => match lake_of_feature[f.id as usize - 1] {
-                    Some(l) => lake_group(l, f.height, f.cells, f.first_cell, input.sea_level),
-                    None => "freshwater",
-                },
-                FeatureKind::Ocean => {
-                    if cells > base / 25.0 {
-                        "ocean"
-                    } else if cells > base / 1000.0 {
-                        "sea"
-                    } else {
-                        "gulf"
-                    }
-                }
-            }
-        })
-        .collect();
+    let groups = groups(
+        g,
+        input.features,
+        input.lakes,
+        input.base_cells,
+        input.sea_level,
+    );
 
     // Feature names (FMG `defineNames`).
     let mut rng = Rand::new(tree.part_rng(Layer::Names, "features"));
@@ -352,6 +301,76 @@ pub fn build(input: &Input) -> Names {
         });
     }
     Names { rivers, features }
+}
+
+/// The group of each feature (FMG `defineGroups`): `continent`, `island`,
+/// `isle`, or `lake_island` for land; a lake subtype (`freshwater`, `salt`,
+/// `frozen`, `dry`, `sinkhole`, `lava`) for a lake; `ocean`, `sea`, or
+/// `gulf` for the ocean. `base_cells` is the cell count of the first grid.
+pub fn groups(
+    g: &Grid,
+    features: &Features,
+    lakes: &[Lake],
+    base_cells: usize,
+    sea_level: f64,
+) -> Vec<&'static str> {
+    let base = base_cells as f64;
+    let mut lake_of_feature = vec![None; features.list.len()];
+    for lake in lakes {
+        lake_of_feature[lake.feature as usize - 1] = Some(lake);
+    }
+    // The water features around each land feature.
+    let mut around: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); features.list.len()];
+    for c in 0..g.len() {
+        if !features.is_land(c) {
+            continue;
+        }
+        let f = features.of_cell[c];
+        for m in g.neighbors(c) {
+            if !features.is_land(m) {
+                around[f as usize - 1].insert(features.of_cell[m]);
+            }
+        }
+    }
+    features
+        .list
+        .iter()
+        .map(|f| {
+            let cells = f64::from(f.cells);
+            match f.kind {
+                FeatureKind::Island => {
+                    let water = &around[f.id as usize - 1];
+                    let in_lake = !water.is_empty()
+                        && !f.border
+                        && water
+                            .iter()
+                            .all(|&w| features.get(w).kind == FeatureKind::Lake);
+                    if in_lake {
+                        "lake_island"
+                    } else if cells > base / 10.0 {
+                        "continent"
+                    } else if cells > base / 1000.0 {
+                        "island"
+                    } else {
+                        "isle"
+                    }
+                }
+                FeatureKind::Lake => match lake_of_feature[f.id as usize - 1] {
+                    Some(l) => lake_group(l, f.height, f.cells, f.first_cell, sea_level),
+                    None => "freshwater",
+                },
+                FeatureKind::Ocean => {
+                    if cells > base / 25.0 {
+                        "ocean"
+                    } else if cells > base / 1000.0 {
+                        "sea"
+                    } else {
+                        "gulf"
+                    }
+                }
+            }
+        })
+        .collect()
 }
 
 /// The group of a lake (FMG `defineLakeSubtype`). FMG compares the height

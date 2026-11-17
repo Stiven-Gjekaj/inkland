@@ -36,6 +36,7 @@ pub struct Input<'a> {
     pub pin_cells: &'a [usize],
     /// Chain 0 is the wildlands; chain `k` is culture `k`.
     pub chains: &'a [Chain],
+    pub lakes: &'a [crate::rivers::Lake],
 }
 
 fn dist2(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -482,8 +483,13 @@ pub fn specify(
 
 /// The water feature where a river ends (`resolveDrainFeature`).
 fn drain_feature(input: &Input, cell: usize) -> u32 {
+    drain_of_river(input, input.cells.r[cell])
+}
+
+/// The water feature where a river and the rivers it joins end.
+fn drain_of_river(input: &Input, river: u32) -> u32 {
     let by_id: BTreeMap<u32, &River> = input.rivers.iter().map(|r| (r.id, r)).collect();
-    let mut id = input.cells.r[cell];
+    let mut id = river;
     let mut seen = BTreeSet::new();
     while let Some(r) = by_id.get(&id) {
         if !seen.insert(id) {
@@ -548,10 +554,23 @@ pub fn assign_ports(input: &Input, places: &mut [Place]) {
         }
         if let Some(haven) = cells.haven[p.cell] {
             let harbor = cells.harbor[p.cell];
-            let water = features.of_cell[haven];
+            let mut water = features.of_cell[haven];
             let f = features.get(water);
-            if f.cells <= 1 || (f.kind == FeatureKind::Lake && cells.frozen[haven]) {
+            if f.cells <= 1 || ["dry", "frozen", "lava"].contains(&cells.group[haven]) {
                 continue;
+            }
+            // A lake with an outlet trades on the water where it drains.
+            if f.kind == FeatureKind::Lake
+                && let Some(out) = input
+                    .lakes
+                    .iter()
+                    .find(|l| l.feature == water)
+                    .and_then(|l| l.outlet)
+            {
+                let drain = drain_of_river(input, out);
+                if drain != NONE {
+                    water = drain;
+                }
             }
             if temperature[p.cell].trunc() <= 0.0 {
                 continue;

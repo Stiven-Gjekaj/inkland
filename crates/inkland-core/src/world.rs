@@ -345,6 +345,7 @@ impl World {
             &drainage.flux,
             &regions,
         );
+        let groups = crate::geonames::groups(&grid, &features, &lakes, base_grid_len, sea_level);
         let mut society = crate::society::build(&crate::society::Input {
             config,
             grid: &grid,
@@ -357,6 +358,8 @@ impl World {
             rivers: &rivers,
             river_threshold: river_threshold(grid.len()),
             pin_cells: &pin_cells,
+            lakes: &lakes,
+            groups: &groups,
         });
         let routes = crate::roads::build(&crate::roads::Input {
             config,
