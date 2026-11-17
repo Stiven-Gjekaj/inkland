@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "seed": 2026,
+  "units": {
+    "name": "mile"
+  },
+  "frame": {
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "cells": 12000,
+    "template": "pangea"
+  },
+  "pins": {
+    "points": [
+      {
+        "id": "kingsholm",
+        "kind": "city",
+        "at": [
+          150,
+          120
+        ],
+        "name": "Kingsholm"
+      },
+      {
+        "id": "harbour",
+        "kind": "city",
+        "at": [
+          22,
+          180
+        ],
+        "name": "Harbour",
+        "port": true
+      },
+      {
+        "id": "ford",
+        "kind": "village",
+        "at": [
+          130,
+          200
+        ],
+        "name": "Ford"
+      }
+    ],
+    "regions": [
+      {
+        "id": "western-sea",
+        "kind": "sea",
+        "box": [
+          0,
+          0,
+          20,
+          300
+        ],
+        "name": "The Western Sea"
+      },
+      {
+        "id": "grey-teeth",
+        "kind": "mountains",
+        "polygon": [
+          [
+            200,
+            40
+          ],
+          [
+            270,
+            50
+          ],
+          [
+            260,
+            130
+          ],
+          [
+            210,
+            120
+          ]
+        ],
+        "edge": 12
+      },
+      {
+        "id": "wolds",
+        "kind": "hills",
+        "circle": {
+          "at": [
+            240,
+            220
+          ],
+          "r": 30
+        },
+        "height": [
+          35,
+          50
+        ],
+        "edge": 8
+      },
+      {
+        "id": "low-fen",
+        "kind": "marsh",
+        "polygon": [
+          [
+            60,
+            230
+          ],
+          [
+            100,
+            225
+          ],
+          [
+            105,
+            260
+          ],
+          [
+            65,
+            265
+          ]
+        ]
+      }
+    ],
+    "rivers": [
+      {
+        "id": "dunn",
+        "name": "Dunn",
+        "source": {
+          "region": "grey-teeth"
+        },
+        "through": [
+          {
+            "place": "kingsholm"
+          }
+        ],
+        "mouth": [
+          19,
+          110
+        ]
+      },
+      {
+        "id": "brann",
+        "name": "Brann",
+        "source": {
+          "region": "wolds"
+        },
+        "through": [
+          {
+            "place": "ford"
+          }
+        ],
+        "mouth": {
+          "region": "low-fen"
+        }
+      },
+      {
+        "id": "corrin",
+        "name": "Corrin",
+        "source": [
+          120,
+          150
+        ],
+        "mouth": {
+          "place": "harbour"
+        }
+      },
+      {
+        "id": "tey",
+        "name": "Tey",
+        "source": [
+          110,
+          260
+        ],
+        "mouth": {
+          "place": "harbour"
+        }
+      }
+    ]
+  },
+  "variants": [
+    {
+      "name": "full",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 250
+      }
+    }
+  ]
+}
