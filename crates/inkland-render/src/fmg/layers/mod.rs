@@ -3,6 +3,7 @@
 pub(crate) mod areas;
 mod base;
 mod decor;
+mod lines;
 mod palette;
 mod text;
 
@@ -30,9 +31,9 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         States => areas::states(s, ctx),
         Provinces => areas::provinces(s, ctx),
         Zones => areas::zones(s, ctx),
-        Borders => {}
-        Routes => {}
-        Rivers => {}
+        Borders => lines::borders(s, ctx),
+        Routes => lines::routes(s, ctx),
+        Rivers => lines::rivers(s, ctx),
         Relief => {}
         BurgIcons => {}
         Ice => {}
