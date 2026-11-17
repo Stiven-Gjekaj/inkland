@@ -32,8 +32,14 @@ export component AppWindow inherits Window {
             MenuItem { title: "Open..."; activated => { Actions.open(); } }
             MenuItem { title: "Save"; activated => { Actions.save(); } }
             MenuItem { title: "Save As..."; activated => { Actions.save-as(); } }
+            MenuItem { title: "Save Edit Script..."; activated => { Actions.save-script(); } }
             MenuSeparator {}
             MenuItem { title: "Quit"; activated => { Actions.quit(); } }
+        }
+        Menu {
+            title: "Edit";
+            MenuItem { title: "Undo"; enabled: AppState.can-undo; activated => { Actions.undo(); } }
+            MenuItem { title: "Redo"; enabled: AppState.can-redo; activated => { Actions.redo(); } }
         }
         Menu {
             title: "View";
@@ -44,6 +50,23 @@ export component AppWindow inherits Window {
             MenuItem { title: "About inkland"; activated => { root.show-about = true; } }
         }
     }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.modifiers.control || event.modifiers.meta) && (event.text == "z" || event.text == "Z") {
+                if event.modifiers.shift { Actions.redo(); } else { Actions.undo(); }
+                return accept;
+            }
+            if (event.modifiers.control || event.modifiers.meta) && (event.text == "y" || event.text == "Y") {
+                Actions.redo();
+                return accept;
+            }
+            if event.text == Key.Escape {
+                AppState.tool = Tool.select;
+                return accept;
+            }
+            reject
+        }
 
         VerticalLayout {
             HorizontalLayout {
@@ -56,6 +79,11 @@ export component AppWindow inherits Window {
                     ToolButton { text: "Select and move pins"; tool: Tool.select; }
                     ToolButton { text: "Add point pin"; tool: Tool.add-pin; }
                     ToolButton { text: "Heightmap brush"; tool: Tool.brush; }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Button { text: "Undo"; enabled: AppState.can-undo; clicked => { Actions.undo(); } }
+                        Button { text: "Redo"; enabled: AppState.can-redo; clicked => { Actions.redo(); } }
+                    }
                     if AppState.tool == Tool.brush: BrushTool {}
                     LayersPanel {}
                 }
@@ -73,6 +101,7 @@ export component AppWindow inherits Window {
             }
             StatusBar {}
         }
+    }
 
     if root.show-about: Rectangle {
         background: #00000080;
@@ -99,5 +128,9 @@ export component AppWindow inherits Window {
                 Button { text: "Close"; clicked => { root.show-about = false; } }
             }
         }
+    }
+
+    public function focus-keys() {
+        keys.focus();
     }
 }

@@ -51,6 +51,9 @@ export global AppState {
     in property <length> pointer-y;
     in property <bool> pointer-in-map;
 
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+
     in property <string> status-position;
     in property <string> status-cell;
     in property <string> message;
@@ -74,10 +77,13 @@ export global Actions {
     callback select-pin(string);
     callback rename-pin(string, string);
     callback remove-pin(string);
+    callback undo();
+    callback redo();
 
     callback open();
     callback save();
     callback save-as();
+    callback save-script();
     callback quit();
 
     // The Rust code calls this from the event loop when a worker thread

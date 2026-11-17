@@ -306,6 +306,8 @@ impl Controller {
         let st = self.state.borrow();
         let e = &st.editor;
         let c = e.config();
+        g.set_can_undo(e.can_undo());
+        g.set_can_redo(e.can_redo());
         let selected = e.selected.clone().unwrap_or_default();
         let name = e
             .points()
@@ -478,6 +480,7 @@ impl Controller {
     }
 
     fn pointer_down(self: &Rc<Self>, p: [f64; 2], pan: bool) {
+        self.ui().invoke_focus_keys();
         let mut st = self.state.borrow_mut();
         if pan {
             st.drag = Drag::Pan { last: p };
@@ -785,6 +788,24 @@ fn main() -> Result<(), slint::PlatformError> {
         c.edited(r, &format!("remove the pin {id}"));
     });
     let c = Rc::clone(&app);
+    a.on_undo(move || {
+        let r = c.state.borrow_mut().editor.undo();
+        match r {
+            Ok(true) => c.edited(Ok(()), "undo"),
+            Ok(false) => c.message("there is nothing to undo", false),
+            Err(e) => c.message(&format!("undo: {e}"), true),
+        }
+    });
+    let c = Rc::clone(&app);
+    a.on_redo(move || {
+        let r = c.state.borrow_mut().editor.redo();
+        match r {
+            Ok(true) => c.edited(Ok(()), "redo"),
+            Ok(false) => c.message("there is nothing to redo", false),
+            Err(e) => c.message(&format!("redo: {e}"), true),
+        }
+    });
+    let c = Rc::clone(&app);
     a.on_open(move || {
         let dialog = rfd::FileDialog::new().add_filter("inkland config", &["json"]);
         if let Some(path) = dialog.pick_file() {
@@ -804,6 +825,16 @@ fn main() -> Result<(), slint::PlatformError> {
     });
     let c = Rc::clone(&app);
     a.on_save_as(move || c.save_as());
+    let c = Rc::clone(&app);
+    a.on_save_script(move || {
+        let dialog = rfd::FileDialog::new()
+            .add_filter("inkland edit script", &["json"])
+            .set_file_name("edits.json");
+        if let Some(path) = dialog.save_file() {
+            let text = c.state.borrow().editor.script_json();
+            c.write(&path, &text, "edit script");
+        }
+    });
     a.on_quit(|| {
         let _ = slint::quit_event_loop();
     });
