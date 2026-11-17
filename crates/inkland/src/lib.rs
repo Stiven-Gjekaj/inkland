@@ -295,16 +295,35 @@ pub fn preview_png(
     Ok((p.png, warnings))
 }
 
+/// The print checks that test black and white output. They do not apply
+/// to `colour` mode, which has colours, effects, thin lines, and the fonts
+/// of its style.
+pub const PRINT_ONLY_CHECKS: [&str; 5] = [
+    "no_opacity",
+    "no_masks_filters_rgba",
+    "black_and_white",
+    "min_line_width",
+    "font_families_allowed",
+];
+
 /// Run the print checks on SVG text with the line width and the fonts of a
-/// config.
+/// config. In `colour` mode, a print-only check gives `"applicable":
+/// false` and passes.
 pub fn check_svg(svg: &str, config: &Config) -> Vec<Value> {
     let opts = inkland_render::checks::CheckOptions {
         min_line_width_pt: config.render.min_line_width_pt,
         fonts_allowed: config.render.fonts_allowed.clone(),
     };
+    let colour = config.render.mode == inkland_core::config::RenderMode::Colour;
     inkland_render::checks::check_svg(svg, &opts)
         .iter()
-        .map(|c| c.to_json())
+        .map(|c| {
+            if colour && PRINT_ONLY_CHECKS.contains(&c.name) {
+                json!({ "name": c.name, "pass": true, "applicable": false })
+            } else {
+                c.to_json()
+            }
+        })
         .collect()
 }
 
@@ -611,6 +630,30 @@ mod tests {
         let one = generate(&c, Some("half")).unwrap();
         assert_eq!(one.variants.len(), 1);
         assert_eq!(one.world_json, out.world_json);
+    }
+
+    #[test]
+    fn colour_mode_reports_the_print_only_checks_as_not_applicable() {
+        let c = config(json!({ "world": { "cells": 1000 }, "render": { "mode": "colour" } }));
+        let out = generate(&c, None).unwrap();
+        let checks = out.variants[0].report["checks"].as_array().unwrap().clone();
+        for name in PRINT_ONLY_CHECKS {
+            let c = checks.iter().find(|c| c["name"] == name).unwrap();
+            assert_eq!(c["applicable"], false, "{name}");
+            assert_eq!(c["pass"], true, "{name}");
+        }
+        for name in ["all_text_is_text_elements", "deterministic_ids"] {
+            let c = checks.iter().find(|c| c["name"] == name).unwrap();
+            assert_eq!(c["pass"], true, "{name}");
+            assert!(c.get("applicable").is_none(), "{name}");
+        }
+        // The same SVG fails the black and white check in print-safe mode.
+        let print = check_svg(&out.variants[0].svg, &config(json!({})));
+        let bw = print
+            .iter()
+            .find(|c| c["name"] == "black_and_white")
+            .unwrap();
+        assert_eq!(bw["pass"], false);
     }
 
     #[test]
