@@ -76,3 +76,46 @@ fn each_map_generates() {
         );
     }
 }
+
+/// The closing test of milestone 13: the land and the sea of the world agree
+/// with the map. Each cell is land when the map height at its site is at or
+/// above sea level. Only the land that the places force can differ.
+#[test]
+fn land_and_sea_agree_with_the_map() {
+    for file in maps() {
+        let name = file.file_stem().unwrap().to_string_lossy().into_owned();
+        let mut c = import(&file).config;
+        for p in &mut c.pins.points {
+            p.port = false;
+        }
+        let Template::Raster { raster } = c.world.template.clone() else {
+            panic!("{name}: the template is not a raster");
+        };
+        let w = inkland_core::world::World::build(&c).unwrap();
+        let sea_level = f64::from(c.world.sea_level);
+        let (mut differ, mut forced) = (0usize, 0usize);
+        let n = w.grid.len();
+        let mut near_place = vec![false; n];
+        for &cell in &w.pin_cells {
+            near_place[cell] = true;
+            for m in w.grid.neighbors(cell) {
+                near_place[m] = true;
+            }
+        }
+        for cell in 0..n {
+            let [x, y] = w.grid.points[cell];
+            let map_land = f64::from(raster.sample(x, y, w.width, w.height)) >= sea_level;
+            if map_land != w.features.is_land(cell) {
+                if near_place[cell] {
+                    forced += 1;
+                } else {
+                    differ += 1;
+                }
+            }
+        }
+        assert_eq!(
+            differ, 0,
+            "{name}: {differ} cells differ away from the places ({forced} near them)"
+        );
+    }
+}
