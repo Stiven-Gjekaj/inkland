@@ -25,7 +25,7 @@ fn point(p: [f64; 2]) -> Value {
 /// overlay, a variant, or a render option changes.
 pub fn world_value(world: &World, config: &Config) -> Value {
     let g = &world.grid;
-    json!({
+    let mut v = json!({
         "format": FORMAT,
         "format_version": FORMAT_VERSION,
         "tool": { "name": "inkland", "version": env!("CARGO_PKG_VERSION") },
@@ -61,14 +61,23 @@ pub fn world_value(world: &World, config: &Config) -> Value {
         "precipitation": world.precipitation.iter().map(|&p| p as u32).collect::<Vec<_>>(),
         "flux": world.drainage.flux.iter().map(|&f| round(f, 3)).collect::<Vec<_>>(),
         "biomes": world.biomes.iter().map(|&b| inkland_core::biomes::NAMES[b as usize]).collect::<Vec<_>>(),
-        "features": world.features.list.iter().zip(&world.names.features).map(|(f, n)| json!({
-            "id": f.id,
-            "kind": f.kind.name(),
-            "group": n.group,
-            "name": n.name,
-            "cells": f.cells,
-            "border": f.border,
-        })).collect::<Vec<_>>(),
+        "features": world.features.list.iter().zip(&world.names.features).map(|(f, n)| {
+            let mut v = json!({
+                "id": f.id,
+                "kind": f.kind.name(),
+                "group": n.group,
+                "name": n.name,
+                "cells": f.cells,
+                "border": f.border,
+                "area": round(f.area, 3),
+                "outline": f.outline.iter().map(|&v| point(world.grid.vertices[v as usize])).collect::<Vec<_>>(),
+            });
+            if f.kind == inkland_core::features::FeatureKind::Lake {
+                v["height"] = json!(round(f.height, 3));
+                v["shoreline"] = json!(f.shoreline);
+            }
+            v
+        }).collect::<Vec<_>>(),
         "religions": world.religions.list.iter().map(|r| json!({
             "id": r.id,
             "name": r.name,
@@ -127,7 +136,19 @@ pub fn world_value(world: &World, config: &Config) -> Value {
             "closed": c.closed,
             "points": c.points.iter().map(|&p| point(p)).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
-    })
+    });
+    // Cell data of the coast (FMG `markupPack`).
+    v["distance"] = json!(world.features.distance);
+    v["haven"] = json!(
+        world
+            .features
+            .haven
+            .iter()
+            .map(|&h| (h != inkland_core::features::NO_HAVEN).then_some(h))
+            .collect::<Vec<_>>()
+    );
+    v["harbor"] = json!(world.features.harbor);
+    v
 }
 
 /// The JSON value of one river.

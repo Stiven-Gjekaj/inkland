@@ -43,7 +43,21 @@ pub struct Feature {
     pub cells: u32,
     /// `true` if a cell of the feature touches the frame edge.
     pub border: bool,
+    /// The area of the cells, in square units. Only after `mark_pack`.
+    pub area: f64,
+    /// The outer outline: a closed loop of vertex indices, first and last
+    /// the same. Empty for an ocean, and before `mark_pack`.
+    pub outline: Vec<u32>,
+    /// The land cells next to a lake, in cell order. Empty for other
+    /// features.
+    pub shoreline: Vec<usize>,
+    /// The surface height of a lake: 0.1 below its lowest shore cell, as in
+    /// FMG `Lakes.getHeight`. 0 for other features.
+    pub height: f64,
 }
+
+/// No cell: a land cell with no water next to it has no haven.
+pub const NO_HAVEN: u32 = u32::MAX;
 
 /// All features of a world.
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +65,16 @@ pub struct Features {
     /// The feature id of each cell.
     pub of_cell: Vec<u32>,
     pub list: Vec<Feature>,
+    /// The distance of each cell to the coast (FMG `cells.t`): 1 for land
+    /// next to water, 2 for land next to that, then 3, 4, ...; -1 for water
+    /// next to land, then -2 to -9. Empty before `mark_pack`.
+    pub distance: Vec<i8>,
+    /// The nearest water cell next to each coastal land cell (FMG
+    /// `cells.haven`), else `NO_HAVEN`. Empty before `mark_pack`.
+    pub haven: Vec<u32>,
+    /// The number of water cells next to each land cell (FMG
+    /// `cells.harbor`). Empty before `mark_pack`.
+    pub harbor: Vec<u8>,
 }
 
 impl Features {
@@ -91,9 +115,109 @@ impl Features {
                 first_cell: first as u32,
                 cells: count,
                 border,
+                area: 0.0,
+                outline: Vec::new(),
+                shoreline: Vec::new(),
+                height: 0.0,
             });
         }
-        Features { of_cell, list }
+        Features {
+            of_cell,
+            list,
+            distance: Vec::new(),
+            haven: Vec::new(),
+            harbor: Vec::new(),
+        }
+    }
+
+    /// Group the cells of the second grid into features, and add the data
+    /// of FMG `markupPack`: the distance field, the haven and the harbor of
+    /// each coastal cell, and the area, the outline, the shoreline, and the
+    /// lake height of each feature.
+    pub fn mark_pack(grid: &Grid, heights: &[f64], sea_level: f64) -> Features {
+        let mut f = Features::mark(grid, heights, sea_level);
+        let n = grid.len();
+        let land = |c: usize| heights[c] >= sea_level;
+        let mut t = vec![0i8; n];
+        let mut haven = vec![NO_HAVEN; n];
+        let mut harbor = vec![0u8; n];
+        for c in 0..n {
+            if !land(c) {
+                continue;
+            }
+            let p = grid.points[c];
+            let mut best: Option<(f64, usize)> = None;
+            for m in grid.neighbors(c).filter(|&m| !land(m)) {
+                t[c] = 1;
+                t[m] = -1;
+                harbor[c] = harbor[c].saturating_add(1);
+                let q = grid.points[m];
+                let d = (p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2);
+                if best.is_none_or(|(bd, _)| d < bd) {
+                    best = Some((d, m));
+                }
+            }
+            if let Some((_, m)) = best {
+                haven[c] = m as u32;
+            }
+        }
+        for c in 0..n {
+            if land(c) && t[c] == 0 && grid.neighbors(c).any(|m| t[m] == 1) {
+                t[c] = 2;
+            }
+        }
+        crate::lakes::mark_rings(grid, &mut t, 3, 1, i8::MAX);
+        crate::lakes::mark_rings(grid, &mut t, -2, -1, -10);
+
+        let mut area = vec![0.0; f.list.len()];
+        for c in 0..n {
+            area[f.of_cell[c] as usize - 1] += grid.area(c);
+        }
+        let mut shore: Vec<Vec<usize>> = vec![Vec::new(); f.list.len()];
+        for c in 0..n {
+            if land(c) {
+                for m in grid.neighbors(c) {
+                    let k = f.of_cell[m] as usize - 1;
+                    if f.list[k].kind == FeatureKind::Lake && shore[k].last() != Some(&c) {
+                        shore[k].push(c);
+                    }
+                }
+            }
+        }
+        for (k, feature) in f.list.iter_mut().enumerate() {
+            feature.area = area[k];
+            if feature.kind != FeatureKind::Ocean {
+                let id = feature.id;
+                feature.outline = outlines(grid, &|c| f.of_cell[c] == id)
+                    .into_iter()
+                    .max_by(|a, b| {
+                        loop_area(grid, a)
+                            .total_cmp(&loop_area(grid, b))
+                            .then(b.len().cmp(&a.len()))
+                    })
+                    .unwrap_or_default();
+            }
+            if feature.kind == FeatureKind::Lake {
+                let mut cells = std::mem::take(&mut shore[k]);
+                cells.sort_unstable();
+                cells.dedup();
+                let lowest = cells
+                    .iter()
+                    .map(|&c| heights[c])
+                    .fold(f64::INFINITY, f64::min);
+                let lowest = if lowest.is_finite() {
+                    lowest
+                } else {
+                    sea_level
+                };
+                feature.height = ((lowest - 0.1) * 100.0).round() / 100.0;
+                feature.shoreline = cells;
+            }
+        }
+        f.distance = t;
+        f.haven = haven;
+        f.harbor = harbor;
+        f
     }
 
     pub fn get(&self, id: u32) -> &Feature {
@@ -103,6 +227,63 @@ impl Features {
     pub fn is_land(&self, cell: usize) -> bool {
         self.get(self.of_cell[cell]).kind.is_land()
     }
+}
+
+/// The outlines of a set of cells: closed loops of vertex indices, first
+/// and last the same. An edge next to the outside of the frame is a part
+/// of the outline. The cells of the set are on the left of each loop.
+pub fn outlines(grid: &Grid, inside: &dyn Fn(usize) -> bool) -> Vec<Vec<u32>> {
+    // Each Voronoi vertex is on three cells, so it has at most one outline
+    // edge out.
+    let mut out: Vec<u32> = vec![u32::MAX; grid.vertices.len()];
+    let mut starts = Vec::new();
+    for c in 0..grid.len() {
+        if !inside(c) {
+            continue;
+        }
+        let poly = &grid.polygons[c];
+        let k = poly.len();
+        for (i, &other) in grid.edge_cells[c].iter().enumerate() {
+            if other != OUTSIDE && inside(other as usize) {
+                continue;
+            }
+            out[poly[i] as usize] = poly[(i + 1) % k];
+            starts.push(poly[i]);
+        }
+    }
+    starts.sort_unstable();
+    let mut used = vec![false; out.len()];
+    let mut loops = Vec::new();
+    for start in starts {
+        if used[start as usize] {
+            continue;
+        }
+        let mut ring = vec![start];
+        let mut v = start;
+        loop {
+            used[v as usize] = true;
+            v = out[v as usize];
+            ring.push(v);
+            if v == start || v == u32::MAX || used[v as usize] {
+                break;
+            }
+        }
+        if *ring.last().expect("a ring has a start") == start {
+            loops.push(ring);
+        }
+    }
+    loops
+}
+
+/// The area that a closed loop of vertices encloses, in square units.
+pub fn loop_area(grid: &Grid, ring: &[u32]) -> f64 {
+    let mut sum = 0.0;
+    for w in ring.windows(2) {
+        let a = grid.vertices[w[0] as usize];
+        let b = grid.vertices[w[1] as usize];
+        sum += a[0] * b[1] - b[0] * a[1];
+    }
+    (sum / 2.0).abs()
 }
 
 /// A coastline: a line between one land feature and one water feature.
@@ -314,6 +495,62 @@ mod tests {
             "{ys:?}"
         );
         assert!(line.points.iter().all(|p| (p[0] - 200.0).abs() < 15.0));
+    }
+
+    #[test]
+    fn the_pack_markup_gives_havens_harbors_and_distances() {
+        let g = grid();
+        let mut h = disc(&g, 200.0, 150.0, 100.0);
+        for (c, p) in g.points.iter().enumerate() {
+            if ((p[0] - 200.0).powi(2) + (p[1] - 150.0).powi(2)).sqrt() < 25.0 {
+                h[c] = 5.0;
+            }
+        }
+        let f = Features::mark_pack(&g, &h, 20.0);
+        let d2 = |a: usize, b: usize| {
+            (g.points[a][0] - g.points[b][0]).powi(2) + (g.points[a][1] - g.points[b][1]).powi(2)
+        };
+        for c in 0..g.len() {
+            let water: Vec<usize> = g.neighbors(c).filter(|&m| h[m] < 20.0).collect();
+            if h[c] >= 20.0 {
+                assert_eq!(f.harbor[c] as usize, water.len());
+                if water.is_empty() {
+                    assert_eq!(f.haven[c], NO_HAVEN);
+                    assert!(f.distance[c] >= 2, "{}", f.distance[c]);
+                    let lower = g.neighbors(c).any(|m| f.distance[m] == f.distance[c] - 1);
+                    assert!(lower, "land cell {c} at distance {}", f.distance[c]);
+                } else {
+                    assert_eq!(f.distance[c], 1);
+                    let haven = f.haven[c] as usize;
+                    assert!(water.contains(&haven));
+                    assert!(water.iter().all(|&m| d2(c, haven) <= d2(c, m)));
+                }
+            } else {
+                assert!(f.distance[c] <= 0);
+                assert_eq!(f.haven[c], NO_HAVEN);
+            }
+        }
+        let lake = f.list.iter().find(|x| x.kind == FeatureKind::Lake).unwrap();
+        assert!(!lake.shoreline.is_empty());
+        for &c in &lake.shoreline {
+            assert!(h[c] >= 20.0);
+            assert!(g.neighbors(c).any(|m| f.of_cell[m] == lake.id));
+        }
+        // The lake is 0.1 below its lowest shore cell.
+        assert_eq!(lake.height, 49.9);
+        // The outline of a feature is closed and encloses about its area.
+        for x in f.list.iter().filter(|x| x.kind != FeatureKind::Ocean) {
+            assert_eq!(x.outline.first(), x.outline.last());
+            let a = loop_area(&g, &x.outline);
+            if x.kind == FeatureKind::Lake {
+                assert!((a - x.area).abs() < 1e-6 * x.area, "{a} {}", x.area);
+            } else {
+                // The island outline also holds the lake inside it.
+                assert!(a > x.area, "{a} {}", x.area);
+            }
+        }
+        let total: f64 = f.list.iter().map(|x| x.area).sum();
+        assert!(total > 400.0 * 300.0);
     }
 
     #[test]

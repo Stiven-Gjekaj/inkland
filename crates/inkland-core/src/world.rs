@@ -269,7 +269,7 @@ impl World {
         };
         let courses = crate::courses::plan_courses(&plan, &mut heights)?;
 
-        let features = Features::mark(&grid, &heights, sea_level);
+        let features = Features::mark_pack(&grid, &heights, sea_level);
         for r in &regions {
             if r.pin.kind != RegionKind::Sea || r.pin.landlocked {
                 continue;
