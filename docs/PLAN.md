@@ -545,6 +545,38 @@ and the test that closes each milestone. We stop for a review after each one.
 - The PNG preview loads the system fonts and `font_dirs`. It matches a
   family name without regard to case, because a font file can name its
   family "IM FELL English". A missing family gives `FONT_NOT_FOUND`.
+## 6.7 Notes from Milestone 13
+
+- `inkland import --map FILE.map -o CONFIG.json` makes a config from a map of
+  Azgaar's Fantasy Map Generator (FMG). It prints a JSON summary: the
+  version, the seed, the size, the unit, the raster size, the counts of
+  places, capitals, ports, and states, and the burgs that it did not keep.
+- The import reads plain text, gzip data, and base64 text. It reads map
+  versions 1.100.0 to 1.158.x. It refuses other versions with `MAP_VERSION`.
+  A file that it cannot read gives `MAP_PARSE`.
+- The import reads the version, the seed, and the map size in pixels
+  (record 0), the distance unit and scale (record 1), the grid lattice and
+  its heights (records 6 and 7), the state names (record 14), and the burgs
+  (record 15).
+- The config: the frame is the map size times the distance scale. The unit
+  name is the distance unit of the map. `world.template` is a raster of the
+  grid heights. `world.cells` is the number of grid cells. `world.states` is
+  the number of states with a capital. `world.towns` is 0, because each
+  burg is a pin.
+- Each burg is a point pin. The id comes from the name, in lower-case ASCII
+  letters and digits. A second burg with the same id gets `-2`, `-3`, and
+  so on. A capital is a `city` with `capital_of` set to the name of its
+  state. Another burg is a `town`. The port flag stays.
+- The import skips removed burgs, empty entries, burgs without a position,
+  burgs outside the frame, and burgs at the same position as an earlier
+  burg. It does not make pinned rivers, regions, or roads.
+- A raster template gives each cell the height of the raster value nearest
+  to its site. Pins apply after the raster, as after template steps.
+- Two FMG test maps, 1.112.1 and 1.154.0, are in `fixtures/azgaar/` with
+  gzip (about 1 MB each). They import to valid configs and generate. Each
+  place stays exactly where the map has it, on land. The land and the sea
+  of each world agree with the map, except for the cells that the places
+  force to land.
 
 ## 7. Road lengths in the report
 
