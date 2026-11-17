@@ -22,6 +22,7 @@ later milestones.
 ```sh
 cargo run -p inkland-cli -- generate --config fixtures/golden/society-book-layout.json --out-dir out --preview out/preview.png
 cargo run -p inkland-cli -- generate --config fixtures/configs/full.json --dry-run
+cargo run -p inkland-cli -- import --map fixtures/azgaar/1.154.0.map -o imported.json
 cargo run -p inkland-cli -- schema
 cargo run -p inkland-cli -- version
 ```
@@ -36,6 +37,10 @@ cargo run -p inkland-cli -- version
 
 `generate --dry-run` checks the config and the pins, prints a report, and
 writes nothing.
+
+`import` makes a config from a map file of Azgaar's Fantasy Map Generator.
+The config has the heights of the map as a raster template, and a pinned
+place for each burg. See the notes of Milestone 13 in [the plan](docs/PLAN.md).
 
 All output is JSON on stdout. An error has a stable code and a JSON Pointer
 to the bad value. See [the error codes](docs/ERRORS.md).
