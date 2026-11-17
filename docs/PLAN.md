@@ -412,11 +412,11 @@ and the test that closes each milestone. We stop for a review after each one.
   `height` only lifts water to sea level. Where regions overlap, a cell gets
   a height in all of their ranges.
 - A point pin is the exact site of its cell, so its report error is 0. The
-  cell of a place is land. The ring around a place that is not a port is
-  land too, except cells in forced water.
+  cell of a place is land. Its neighbors keep their terrain, so a place
+  can be on the coast.
 - A port needs one water cell next to it. If the terrain gives none, a
   channel of at most 8 cells joins the port to the nearest water. The
-  channel does not cross other places, the rings around them, or forced land.
+  channel does not cross other places or forced land.
   Else the error is `PORT_NOT_NEAR_COAST`.
 - After the features are known, each `sea` region without `landlocked: true`
   must be part of the ocean, else `SEA_NOT_CONNECTED`.
