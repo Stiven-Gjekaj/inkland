@@ -178,6 +178,9 @@ pub enum Kind {
 pub struct Placed {
     pub id: String,
     pub kind: Kind,
+    /// The style group of the label: `capital`, `city`, `town`, `village`,
+    /// `fort`, `hamlet`, `river`, `lake`, `state`, `region`, or `feature`.
+    pub group: &'static str,
     pub text: String,
     pub family: String,
     /// Font size, in mm.
@@ -235,6 +238,7 @@ struct Candidate {
 struct Request {
     id: String,
     kind: Kind,
+    group: &'static str,
     text: String,
     family: String,
     size: f64,
@@ -676,9 +680,62 @@ fn fixed_obstacles(world: &World, config: &Config, variant: &Variant, page: &Pag
     out
 }
 
-/// Place the labels of a variant.
+/// The look of a label group: its font family and its letter case.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Look {
+    pub family: String,
+    /// `true` for text in capital letters.
+    pub upper: bool,
+}
+
+impl Look {
+    /// The text of a label in this look.
+    pub fn text(&self, t: &str) -> String {
+        if self.upper {
+            t.to_uppercase()
+        } else {
+            t.to_owned()
+        }
+    }
+}
+
+/// The label group of a place.
+pub fn place_group(kind: PlaceKind, capital: bool) -> &'static str {
+    if capital {
+        return "capital";
+    }
+    match kind {
+        PlaceKind::City => "city",
+        PlaceKind::Town | PlaceKind::Custom => "town",
+        PlaceKind::Village => "village",
+        PlaceKind::Fortress => "fort",
+        PlaceKind::Ruin => "hamlet",
+    }
+}
+
+/// Place the labels of a variant with the fonts of the config.
 pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> Labels {
     let fonts = &config.render.fonts;
+    let style = |group: &'static str| Look {
+        family: if matches!(group, "state" | "region") {
+            fonts.labels_sc.clone()
+        } else {
+            fonts.labels.clone()
+        },
+        upper: false,
+    };
+    place_with(world, config, variant, page, &style)
+}
+
+/// Place the labels of a variant. `style` gives the look of each label
+/// group.
+pub fn place_with(
+    world: &World,
+    config: &Config,
+    variant: &Variant,
+    page: &Page,
+    style: &dyn Fn(&'static str) -> Look,
+) -> Labels {
     let sizes = &config.render.font_sizes_pt;
     let [mx, my, mw, mh] = page.map_rect();
     let inner = [mx + 0.5, my + 0.5, mx + mw - 0.5, my + mh - 0.5];
@@ -730,7 +787,10 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
                 sizes.place_town
             },
         );
-        let f = FontMetrics::of(&fonts.labels);
+        let group = place_group(p.kind, p.capital);
+        let look = style(group);
+        let text = look.text(&p.name);
+        let f = FontMetrics::of(&look.family);
         let id = match &p.pin {
             Some(pin) => format!("label-place-{pin}"),
             None => format!("label-place-{}", p.id),
@@ -746,14 +806,15 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
             candidates: point_candidates(
                 page.to_page(p.at),
                 symbol_radius(p.kind, p.capital),
-                &p.name,
+                &text,
                 f,
                 size,
             ),
             id,
             kind: Kind::Place,
-            text: p.name.clone(),
-            family: fonts.labels.clone(),
+            group,
+            text,
+            family: look.family,
             size,
             required,
             rank,
@@ -791,14 +852,17 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
             },
         };
         let size = size_of("river", &key, sizes.river);
-        let f = FontMetrics::of(&fonts.labels);
+        let look = style("river");
+        let name = look.text(&name);
+        let f = FontMetrics::of(&look.family);
         let spacing = 0.1 * size;
         requests.push(Request {
             candidates: river_candidates(&river_lines[i], inner, i, &name, f, size, spacing),
             id: format!("label-river-{key}"),
             kind: Kind::River,
+            group: "river",
             text: name,
-            family: fonts.labels.clone(),
+            family: look.family,
             size,
             required,
             rank: if required { 1 } else { 6 },
@@ -819,13 +883,16 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
             continue;
         }
         let size = pt(sizes.river);
-        let f = FontMetrics::of(&fonts.labels);
+        let look = style("lake");
+        let name = look.text(name);
+        let f = FontMetrics::of(&look.family);
         requests.push(Request {
-            candidates: area_candidates(world, page, inner, &area, name, f, size, (0.05, 0.3)),
+            candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.05, 0.3)),
             id: format!("label-lake-{}", n.id),
             kind: Kind::Region,
-            text: name.to_owned(),
-            family: fonts.labels.clone(),
+            group: "lake",
+            text: name,
+            family: look.family,
             size,
             required: false,
             rank: 6,
@@ -845,13 +912,16 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
             continue;
         }
         let size = pt(sizes.state);
-        let f = FontMetrics::of(&fonts.labels_sc);
+        let look = style("state");
+        let name = look.text(&st.name);
+        let f = FontMetrics::of(&look.family);
         requests.push(Request {
-            candidates: area_candidates(world, page, inner, &area, &st.name, f, size, (0.15, 0.8)),
+            candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.15, 0.8)),
             id: format!("label-state-{}", st.id),
             kind: Kind::State,
-            text: st.name.clone(),
-            family: fonts.labels_sc.clone(),
+            group: "state",
+            text: name,
+            family: look.family,
             size,
             required: true,
             rank: 2,
@@ -875,13 +945,16 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
             continue;
         }
         let size = size_of("region", &pin.id, sizes.region);
-        let f = FontMetrics::of(&fonts.labels_sc);
+        let look = style("region");
+        let name = look.text(name);
+        let f = FontMetrics::of(&look.family);
         requests.push(Request {
-            candidates: area_candidates(world, page, inner, &area, name, f, size, (0.05, 0.5)),
+            candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.05, 0.5)),
             id: format!("label-region-{}", pin.id),
             kind: Kind::Region,
-            text: name.to_owned(),
-            family: fonts.labels_sc.clone(),
+            group: "region",
+            text: name,
+            family: look.family,
             size,
             required: true,
             rank: 2,
@@ -898,7 +971,9 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
                 continue;
             };
             let size = size_of("feature", &feat.id, sizes.place_town);
-            let f = FontMetrics::of(&fonts.labels);
+            let look = style("feature");
+            let name = look.text(&name);
+            let f = FontMetrics::of(&look.family);
             let candidates = if let Some(at) = feat.at {
                 if !in_view(at) {
                     continue;
@@ -918,8 +993,9 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
                 candidates,
                 id: format!("label-feature-{}", feat.id),
                 kind: Kind::Feature,
+                group: "feature",
                 text: name,
-                family: fonts.labels.clone(),
+                family: look.family,
                 size,
                 required: true,
                 rank: 1,
@@ -993,6 +1069,7 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
                 out.placed.push(Placed {
                     id: req.id,
                     kind: req.kind,
+                    group: req.group,
                     text: req.text,
                     family: req.family,
                     size: req.size,
@@ -1070,6 +1147,32 @@ mod tests {
         }
         let c: Config = serde_json::from_value(v).unwrap();
         (World::build(&c).unwrap(), c)
+    }
+
+    #[test]
+    fn a_label_style_gives_the_family_and_the_case_of_each_group() {
+        let (w, c) = world(4, "pangea", json!({}));
+        let page = Page::new(&c, &c.variants[0]);
+        let look = |group: &'static str| Look {
+            family: format!("Family {group}"),
+            upper: group == "city",
+        };
+        let labels = place_with(&w, &c, &c.variants[0], &page, &look);
+        let ostrey = labels
+            .placed
+            .iter()
+            .find(|l| l.id == "label-place-ostrey")
+            .unwrap();
+        assert_eq!(ostrey.group, "city");
+        assert_eq!(ostrey.text, "OSTREY");
+        assert_eq!(ostrey.family, "Family city");
+        for l in &labels.placed {
+            assert_eq!(l.family, format!("Family {}", l.group), "{}", l.id);
+        }
+        // The fonts of the config give the same places as before.
+        let plain = place(&w, &c, &c.variants[0], &page);
+        let state = plain.placed.iter().find(|l| l.group == "state").unwrap();
+        assert_eq!(state.family, c.render.fonts.labels_sc);
     }
 
     fn check_no_overlap(w: &World, c: &Config) -> Labels {
