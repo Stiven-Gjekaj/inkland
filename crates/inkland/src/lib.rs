@@ -5,6 +5,7 @@
 
 pub use inkland_core::config::Config;
 pub use inkland_core::error::{Error, ErrorCode, ExitCode, Warning, WarningCode, exit_code_of};
+pub use inkland_core::world::World;
 pub use inkland_edit::{Command, History, PinList, Script};
 pub use inkland_io::azgaar::{Import, ImportSummary};
 pub use inkland_io::config::{Override, config_hash, parse_config};
@@ -24,6 +25,12 @@ pub fn query(world_text: &str, at: &str) -> Result<Value, Error> {
     let p = inkland_io::query::parse_point(at)?;
     let (config, world) = read_world(world_text)?;
     inkland_io::query::query(&world, &config, p)
+}
+
+/// The facts about the point `p` (config units) of a world in memory. The
+/// desktop app uses this for its status bar.
+pub fn query_at(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error> {
+    inkland_io::query::query(world, config, p)
 }
 
 /// The GeoJSON export of a world file. `format` must be `geojson`. `layers`
@@ -150,6 +157,15 @@ pub struct Output {
 
 /// Generate the maps of a config: all variants, or only the variant `only`.
 pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error>> {
+    generate_with_world(config, only).map(|(_, out)| out)
+}
+
+/// Generate the maps of a config, as `generate` does, and also give the
+/// world in memory. The desktop app queries this world.
+pub fn generate_with_world(
+    config: &Config,
+    only: Option<&str>,
+) -> Result<(World, Output), Vec<Error>> {
     let errors = validate(config);
     if !errors.is_empty() {
         return Err(errors);
@@ -207,10 +223,11 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
             report,
         });
     }
-    Ok(Output {
+    let output = Output {
         world_json: inkland_io::world::world_json(&world, config),
         variants,
-    })
+    };
+    Ok((world, output))
 }
 
 /// Put the result of label placement in a report: the `labels` section, the
@@ -660,6 +677,21 @@ mod tests {
             states
                 .iter()
                 .any(|s| s["name"] == "Kingdom of Holm" && s["capital"] == "Kingsholm")
+        );
+    }
+
+    #[test]
+    fn the_world_of_generate_answers_a_query_as_the_world_file_does() {
+        let c = config(json!({ "world": { "cells": 1000 } }));
+        let (world, out) = generate_with_world(&c, None).unwrap();
+        assert_eq!(out, generate(&c, None).unwrap());
+        let a = query_at(&world, &c, [40.0, 30.0]).unwrap();
+        let b = query(&out.world_json, "40,30").unwrap();
+        assert_eq!(a, b);
+        assert!(a["height"].is_number() && a["biome"].is_string());
+        assert_eq!(
+            query_at(&world, &c, [-1.0, 30.0]).unwrap_err().code,
+            ErrorCode::ValueOutOfRange
         );
     }
 
