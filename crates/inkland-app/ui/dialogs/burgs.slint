@@ -1,40 +1,63 @@
-// The Burgs editor: the point pins. Select a pin to rename or remove it.
+// The Burgs Overview: the point pins and the places that generation adds.
+// Select a pin to edit it. "Pin" makes a generated place a point pin at its
+// position, with its name.
 
-import { Theme, Label, DialogButton, Field, Select, FormRow, Tip } from "../theme.slint";
+import { Theme, Label, DialogButton, Field, Select, Check, FormRow, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
-import { AppState, Actions, Tool } from "../globals.slint";
+import { AppState, Actions, Tool, Lists } from "../globals.slint";
 
 export component BurgsDialog inherits Dialog {
     id: "burgs";
     title: "Burgs Overview";
-    content-width: 380px;
+    content-width: 470px;
     pos-x: 400px;
-    pos-y: 60px;
-    Rectangle {
-        height: 200px;
-        background: white;
-        border-width: 1px;
-        border-color: #dddddd;
-        Flickable {
-            content-height: AppState.pins.length * 20px;
-            for pin[i] in AppState.pins: Rectangle {
-                y: i * 20px;
-                height: 20px;
-                background: pin.id == AppState.selected-id ? #ecd8d8 : transparent;
-                Label { x: 6px; dialog: true; text: pin.label; }
-                TouchArea { clicked => { Actions.select-pin(pin.id); } }
-            }
-        }
+    pos-y: 40px;
+    Table {
+        header: ["Burg", "Type", "State", "Position"];
+        widths: [128px, 84px, 96px, 72px];
+        rows: Lists.burgs;
+        selected: AppState.selected-id;
+        list-height: 240px;
+        action: "Pin";
+        select(id) => { Actions.select-pin(id); }
+        act(id) => { Actions.pin-place(id); }
+    }
+    Tip {
+        dialog: true;
+        text: "Bold rows are pins. Click a pin to edit it. Pin makes a generated burg a pin at the same place.";
     }
     FormRow {
-        label: "Name";
-        name := Field {
+        label: AppState.selected-id == "" ? "No pin selected" : "Pin " + AppState.selected-id;
+        label-width: 120px;
+        Field {
             dialog: true;
+            horizontal-stretch: 1;
             enabled: AppState.selected-id != "";
-            placeholder: "Empty: a generated name";
+            placeholder: "Name (empty: generated)";
             text <=> AppState.selected-name;
             accepted(t) => { Actions.rename-pin(AppState.selected-id, t); }
         }
+    }
+    FormRow {
+        label: "Type";
+        label-width: 120px;
+        Select {
+            dialog: true;
+            width: 110px;
+            enabled: AppState.selected-id != "";
+            model: ["village", "town", "city", "fortress", "ruin"];
+            current-index: AppState.selected-kind;
+            commit: false;
+            selected(i) => { Actions.set-pin-kind(i); }
+        }
+        Check {
+            dialog: true;
+            text: "Port";
+            enabled: AppState.selected-id != "";
+            checked: AppState.selected-port;
+            toggled(on) => { Actions.set-pin-port(on); }
+        }
+        Rectangle { horizontal-stretch: 1; }
         DialogButton {
             text: "Remove";
             enabled: AppState.selected-id != "";
@@ -42,16 +65,19 @@ export component BurgsDialog inherits Dialog {
         }
     }
     FormRow {
-        label: "New burg kind";
+        label: "Add a burg";
+        label-width: 120px;
         Select {
             dialog: true;
+            width: 110px;
             model: ["village", "town", "city", "fortress", "ruin"];
             current-index <=> AppState.new-pin-kind;
         }
         DialogButton {
-            text: "Add on the map";
+            text: AppState.tool == Tool.add-pin ? "Click on the map" : "Add on the map";
             pressed: AppState.tool == Tool.add-pin;
-            clicked => { AppState.tool = AppState.tool == Tool.add-pin ? Tool.select : Tool.add-pin; }
+            clicked => { Actions.open-tool("add-burg"); }
         }
+        Rectangle { horizontal-stretch: 1; }
     }
 }

@@ -140,8 +140,8 @@ pub fn burg_rows(c: &Config, world: Option<&World>) -> Vec<Row> {
                             kind,
                             state_name(w, g.state),
                             pt([
-                                (g.at[0] * 100.0).round() / 100.0,
-                                (g.at[1] * 100.0).round() / 100.0,
+                                (g.at[0] * 10.0).round() / 10.0,
+                                (g.at[1] * 10.0).round() / 10.0,
                             ]),
                         ],
                         false,

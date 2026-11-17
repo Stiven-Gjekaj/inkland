@@ -325,6 +325,9 @@ export component Select inherits Rectangle {
     in property <[string]> model;
     in property <[bool]> disabled;
     in-out property <int> current-index;
+    // `false`: the select does not write `current-index`, so that a one-way
+    // binding of it stays. The owner then sets the source in `selected`.
+    in property <bool> commit: true;
     in property <string> placeholder;
     in property <bool> enabled: true;
     in property <bool> dialog;
@@ -384,7 +387,7 @@ export component Select inherits Rectangle {
                     entry := TouchArea {
                         enabled: !root.disabled[i];
                         clicked => {
-                            root.current-index = i;
+                            if root.commit { root.current-index = i; }
                             root.selected(i);
                         }
                     }

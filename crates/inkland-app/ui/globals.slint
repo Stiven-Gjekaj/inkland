@@ -57,6 +57,10 @@ export global AppState {
     in property <[PinRow]> pins;
     in-out property <string> selected-id;
     in-out property <string> selected-name;
+    // The kind (index in the kind list) and the port flag of the selected
+    // pin.
+    in property <int> selected-kind;
+    in property <bool> selected-port;
     // A pin that the user drags: its position in the map view.
     in property <bool> dragging-pin;
     in property <length> drag-x;
@@ -120,6 +124,10 @@ export global Actions {
     callback new-map();
     // Remove the heightmap brush stroke with this row id.
     callback remove-brush(string);
+    // The burgs editor: pin a generated place, and edit the selected pin.
+    callback pin-place(string);
+    callback set-pin-kind(int);
+    callback set-pin-port(bool);
     callback select-pin(string);
     callback rename-pin(string, string);
     callback remove-pin(string);
@@ -151,6 +159,8 @@ export global Lists {
     in-out property <int> preset-index;
     // The rows of the editor tables.
     in property <[TableRow]> brushes;
+    // The point pins, then the places that generation adds.
+    in property <[TableRow]> burgs;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their

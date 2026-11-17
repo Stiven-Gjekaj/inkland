@@ -525,6 +525,7 @@ impl Controller {
                 } else if warnings > 0 {
                     self.message(&format!("the report has {warnings} warnings"), false);
                 }
+                self.update_lists(&self.state.borrow());
                 self.update_view();
                 self.rerender();
             }
@@ -776,6 +777,22 @@ impl Controller {
         let l = ui.global::<Lists>();
         let c = st.editor.config();
         l.set_brushes(table(rows::brush_rows(c)));
+        let world = st.shown.as_ref().map(|m| m.world.as_ref());
+        l.set_burgs(table(rows::burg_rows(c, world)));
+        let g = ui.global::<AppState>();
+        let selected = st
+            .editor
+            .selected
+            .as_ref()
+            .and_then(|id| c.pins.points.iter().find(|p| &p.id == id));
+        g.set_selected_kind(selected.map_or(-1, |p| {
+            let kind = rows::kind_text(&p.kind);
+            catalog::PLACE_KINDS
+                .iter()
+                .position(|k| *k == kind)
+                .map_or(-1, |i| i as i32)
+        }));
+        g.set_selected_port(selected.is_some_and(|p| p.port));
     }
 
     /// The fields of the Options tab and of the Style tab.
@@ -1049,6 +1066,67 @@ fn main() -> Result<(), slint::PlatformError> {
         c.set_option("seed", &seed.to_string());
     });
     let c = Rc::clone(&app);
+    a.on_pin_place(move |id| {
+        let place = {
+            let st = c.state.borrow();
+            st.shown.as_ref().and_then(|m| {
+                inkland_app::rows::generated_place(&m.world, &id).map(|p| {
+                    let kind = inkland_app::rows::kind_text(&p.kind);
+                    let kind = if catalog::PLACE_KINDS.contains(&kind.as_str()) {
+                        kind
+                    } else {
+                        "village".to_owned()
+                    };
+                    (p.at, kind, p.name.clone())
+                })
+            })
+        };
+        let r = match place {
+            Some((at, kind, name)) => c
+                .state
+                .borrow_mut()
+                .editor
+                .pin_place(at, &kind, &name)
+                .map(|_| ()),
+            None => Err("the place is not in the map".to_owned()),
+        };
+        c.edited(r, "pin the place");
+    });
+    let c = Rc::clone(&app);
+    a.on_set_pin_kind(move |i| {
+        let kind = catalog::PLACE_KINDS
+            .get(i as usize)
+            .copied()
+            .unwrap_or("village");
+        let mut st = c.state.borrow_mut();
+        let r = match st.editor.selected.clone() {
+            Some(id) => st.editor.set_pin_field(
+                inkland::PinList::Points,
+                &id,
+                "kind",
+                Some(serde_json::json!(kind)),
+            ),
+            None => Err("no burg is selected".to_owned()),
+        };
+        drop(st);
+        c.edited(r, &format!("set the kind to {kind}"));
+    });
+    let c = Rc::clone(&app);
+    a.on_set_pin_port(move |on| {
+        let mut st = c.state.borrow_mut();
+        let r = match st.editor.selected.clone() {
+            Some(id) => st.editor.set_pin_field(
+                inkland::PinList::Points,
+                &id,
+                "port",
+                Some(serde_json::json!(on)),
+            ),
+            None => Err("no burg is selected".to_owned()),
+        };
+        drop(st);
+        c.edited(r, if on { "make a port" } else { "make not a port" });
+    });
+    let c = Rc::clone(&app);
     a.on_remove_brush(move |id| {
         let r = match id.parse::<usize>() {
             Ok(i) => c.state.borrow_mut().editor.remove_brush(i),
@@ -1060,7 +1138,16 @@ fn main() -> Result<(), slint::PlatformError> {
     a.on_open_tool(move |id| c.open_tool(&id));
     let c = Rc::clone(&app);
     a.on_select_pin(move |id| {
-        c.state.borrow_mut().editor.selected = Some(id.to_string());
+        let mut st = c.state.borrow_mut();
+        let pin = st
+            .editor
+            .config()
+            .pins
+            .points
+            .iter()
+            .any(|p| p.id == id.as_str());
+        st.editor.selected = pin.then(|| id.to_string());
+        drop(st);
         c.update_editor();
     });
     let c = Rc::clone(&app);
