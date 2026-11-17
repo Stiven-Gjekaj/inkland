@@ -1,9 +1,11 @@
 //! The layers of `colour` mode, and the definitions that they use.
 
 mod base;
+mod decor;
 mod palette;
 mod text;
 
+pub use decor::boxes;
 pub use palette::Palette;
 
 use super::Ctx;
@@ -42,10 +44,10 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Temperature => {}
         Precipitation => {}
         Population => {}
-        Compass => {}
-        ScaleBar => {}
-        Vignette => {}
-        Legend => {}
+        Compass => decor::compass(s, ctx),
+        ScaleBar => decor::scale_bar(s, ctx),
+        Vignette => decor::vignette(s, ctx),
+        Legend => decor::legend(s, ctx),
         Labels => text::labels(s, ctx),
         Coast | Regions | Roads | Places => {}
     }
@@ -54,7 +56,13 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
 /// Write the extras of the variant that are not layers: the scale bar and
 /// the compass when the map does not draw them as layers.
 pub fn write_extras(s: &mut String, ctx: &Ctx) {
-    let _ = (s, ctx);
+    let e = crate::extras::merged(ctx.config, ctx.variant);
+    if e.compass == Some(true) && !ctx.has(LayerName::Compass) {
+        decor::compass(s, ctx);
+    }
+    if e.scale_bar == Some(true) && !ctx.has(LayerName::ScaleBar) {
+        decor::scale_bar(s, ctx);
+    }
 }
 
 /// The extras that go on the page outside the map group: the grid and the
@@ -113,6 +121,8 @@ pub fn defs(ctx: &Ctx, body: &str) -> String {
     if needs_features {
         base::feature_defs(&mut d, ctx);
     }
+    decor::filter_defs(&mut d, &refs);
+    decor::other_defs(&mut d, ctx, &refs);
     for (id, def) in ctx.extra_defs.borrow().iter() {
         if refs.contains(id) {
             d.push_str(def);

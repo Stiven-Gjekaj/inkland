@@ -125,6 +125,15 @@ pub fn boxes(
     let e = merged(config, variant);
     let small = pt(config.render.font_sizes_pt.other);
     let mut out = Vec::new();
+    if config.render.mode == inkland_core::config::RenderMode::Colour {
+        // The scale bar and the compass of the original program.
+        out.extend(crate::fmg::layers::boxes(config, variant, page));
+        if let Some(c) = &e.cartouche {
+            let [x, y, w, h] = cartouche_rect(config, &c.title, page);
+            out.push([x - 0.5, y - 0.5, x + w + 0.5, y + h + 0.5]);
+        }
+        return out;
+    }
     if e.scale_bar == Some(true) {
         out.push(scale_bar_box(
             config,
