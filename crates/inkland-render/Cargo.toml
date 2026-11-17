@@ -25,6 +25,8 @@ resvg = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
+# The tests of colour mode render each layer with resvg.
+resvg.workspace = true
 proptest.workspace = true
 # Only for examples/font_metrics.rs.
 skrifa = "0.49"
