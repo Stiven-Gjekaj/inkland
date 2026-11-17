@@ -14,7 +14,8 @@ machine can check that fact.
 ## What it does
 
 - Terrain from heightmap templates, a raster, or brush strokes. Climate,
-  biomes, lakes, rivers, cultures, places, states, provinces, and roads.
+  biomes, lakes, rivers, cultures, places, states, provinces, religions,
+  roads, and names for rivers, islands, and lakes.
 - Pins: a place stays at its exact position, on land. A region gets heights
   in its range. A river passes its points in order, flows downhill, and
   ends at its mouth. A road can have a target length and a tolerance.
@@ -104,6 +105,7 @@ A small config:
 - [Command line reference](docs/CLI.md)
 - [Config reference](docs/CONFIG.md), made from the JSON Schema
 - [Error codes](docs/ERRORS.md)
+- [Port review](docs/PORT.md): what inkland takes from the original program, and what it adds
 - [Specification](docs/SPEC.md) and [plan with milestone notes](docs/PLAN.md)
 - [Architecture of the original program](docs/ARCHITECTURE.md)
 - [Decisions](docs/DECISIONS.md)

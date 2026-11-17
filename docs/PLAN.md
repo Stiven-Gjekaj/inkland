@@ -491,7 +491,7 @@ and the test that closes each milestone. We stop for a review after each one.
   `regions` group, and a symbol for each place in the `places` group, with
   the id `place-<pin id>` or `place-<number>`. Names come with labels in
   Milestone 8.
-- Religions are not in this version.
+- Religions were not in Milestone 5. Section 6.12 adds them.
 
 ## 6.5 Notes from Milestone 6
 
@@ -699,6 +699,24 @@ and the test that closes each milestone. We stop for a review after each one.
 - At 50000 cells, the pinned road of `roads-book-layout` is 265 units
   against a target of 240 with a tolerance of 5 %. The report gives this as
   a failed check. A road target depends on the cell size.
+
+## 6.12 Notes from the port review
+
+`docs/PORT.md` compares inkland with the original program. These stages
+came from the review:
+
+- Names and groups (`geonames.rs`): each river gets a name from the culture
+  at its last land cell, and a type, `river` or `stream`. Land features are
+  continents, islands, or isles; lakes are freshwater or frozen. Continents,
+  islands, and lakes of 2 or more cells get names. `world.json`, `query`,
+  and `export` give them. Large generated rivers and named lakes get
+  optional labels.
+- Religions (`religions.rs`): a folk religion for each culture, and
+  `world.religions` organized religions that start at the best places and
+  spread up to a range. `world.json` and `query` give them. They have no
+  print layer.
+- Still not in this version: depression lakes, the second grid, and river
+  erosion.
 
 ## 7. Road lengths in the report
 
