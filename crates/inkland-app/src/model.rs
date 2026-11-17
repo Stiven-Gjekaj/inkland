@@ -112,8 +112,14 @@ impl Editor {
             .collect()
     }
 
-    /// A pin id that no pin of the config has: `pin-1`, `pin-2`, and so on.
-    fn free_id(&self) -> String {
+    /// The number of edits in the history.
+    pub fn undo_len(&self) -> usize {
+        self.history.script().commands.len()
+    }
+
+    /// A pin id that no pin of the config has: `pin-1`, `pin-2`, and so on
+    /// for the prefix `pin`.
+    pub(crate) fn free_id(&self, prefix: &str) -> String {
         let pins = &self.config.pins;
         let used = |id: &str| {
             pins.points.iter().any(|p| p.id == id)
@@ -122,7 +128,7 @@ impl Editor {
                 || pins.roads.iter().any(|p| p.id == id)
         };
         (1..)
-            .map(|n| format!("pin-{n}"))
+            .map(|n| format!("{prefix}-{n}"))
             .find(|id| !used(id))
             .expect("a free id exists")
     }
@@ -130,7 +136,7 @@ impl Editor {
     /// Add a point pin of the kind `kind` (for example `village`) at `at`.
     /// The new pin is selected. The result is its id.
     pub fn add_pin(&mut self, at: [f64; 2], kind: &str) -> Result<String, String> {
-        let id = self.free_id();
+        let id = self.free_id("pin");
         self.run(Command::AddPin {
             list: PinList::Points,
             pin: json!({ "id": id, "kind": kind, "at": [round2(at[0]), round2(at[1])] }),
@@ -306,6 +312,8 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pins::Shape;
+    use inkland_core::config::{Anchor, RegionRef};
 
     /// A small world with two places, a road between them, and a region.
     fn config() -> Config {
@@ -361,6 +369,48 @@ mod tests {
             ("hide layer", Box::new(|e| e.set_layer("relief", false))),
             ("show layer", Box::new(|e| e.set_layer("relief", true))),
             ("hide labels", Box::new(|e| e.set_layer("labels", false))),
+            ("layer preset", Box::new(|e| e.apply_preset("political"))),
+            ("option", Box::new(|e| e.set_option("states", "3"))),
+            ("style option", Box::new(|e| e.set_option("size-city", "9"))),
+            (
+                "add region",
+                Box::new(|e| {
+                    e.add_region("forest", &Shape::Circle([40.0, 40.0], 15.0))
+                        .map(|_| ())
+                }),
+            ),
+            (
+                "region height",
+                Box::new(|e| e.set_region_height("hills", Some([40.0, 55.0]))),
+            ),
+            (
+                "add river",
+                Box::new(|e| {
+                    e.add_river(&[
+                        Anchor::Region(RegionRef {
+                            region: "hills".into(),
+                        }),
+                        Anchor::Point([1.0, 149.0]),
+                    ])
+                    .map(|_| ())
+                }),
+            ),
+            (
+                "add road",
+                Box::new(|e| e.add_road("pin-1", "harrow", &[], "trail").map(|_| ())),
+            ),
+            (
+                "road length",
+                Box::new(|e| e.set_road_target("kings-road", Some(110.0))),
+            ),
+            (
+                "pin a place",
+                Box::new(|e| {
+                    e.pin_place([170.0, 30.0], "village", "Northend")
+                        .map(|_| ())
+                }),
+            ),
+            ("remove brush", Box::new(|e| e.remove_brush(0))),
         ]
     }
 
