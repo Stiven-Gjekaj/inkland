@@ -441,3 +441,106 @@ fn check_passes_a_generated_svg_and_fails_a_bad_one() {
     assert_eq!(report["checks"][0]["name"], "no_opacity");
     assert_eq!(report["checks"][0]["pass"], false);
 }
+
+/// A small map file in the record layout of Azgaar's Fantasy Map Generator.
+/// The import does not read the empty records.
+fn write_map(dir: &Path, version: &str) -> PathBuf {
+    let mut records = vec![String::new(); 20];
+    records[0] = format!("{version}|File can be loaded|2026-1-1|77|300|200|1");
+    records[1] = r#"{"units":{"distance":{"unit":"league","scale":0.5}}}"#.to_owned();
+    records[6] = json!({ "cellsX": 3, "cellsY": 2 }).to_string();
+    records[7] = "5,30,40,10,50,60".to_owned();
+    records[14] = json!([{ "name": "Neutrals" }, { "name": "Ostria" }]).to_string();
+    records[15] = json!([
+        0,
+        { "name": "Ostrey", "x": 150, "y": 50, "capital": 1, "state": 1 },
+        { "name": "Low Ford", "x": 250, "y": 150, "state": 1 }
+    ])
+    .to_string();
+    let path = dir.join("world.map");
+    std::fs::write(&path, records.join("\r\n")).unwrap();
+    path
+}
+
+#[test]
+fn import_writes_a_config_that_passes_the_dry_run() {
+    let dir = tempfile::tempdir().unwrap();
+    let map = write_map(dir.path(), "1.154.0");
+    let out = dir.path().join("imported.json");
+    let (code, summary) = run(&[
+        "import",
+        "--map",
+        map.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "{summary}");
+    assert_eq!(summary["version"], "1.154.0");
+    assert_eq!(summary["places"], 2);
+    assert_eq!(summary["capitals"], 1);
+    assert_eq!(summary["states"], 1);
+    assert_eq!(summary["raster"], json!([3, 2]));
+    assert_eq!(summary["config"], out.to_str().unwrap());
+
+    let config: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+    assert_eq!(config["units"]["name"], "league");
+    assert_eq!(config["frame"]["width"], 150.0);
+    assert_eq!(config["pins"]["points"][1]["id"], "low-ford");
+    assert_eq!(config["pins"]["points"][1]["at"], json!([125.0, 75.0]));
+    let (_, schema) = run(&["schema"]);
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    assert!(validator.is_valid(&config));
+    let (code, report) = run(&["generate", "--config", out.to_str().unwrap(), "--dry-run"]);
+    assert_eq!(code, 0, "{report}");
+}
+
+#[test]
+fn import_of_an_unsupported_version_is_exit_2_with_map_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let map = write_map(dir.path(), "1.90.0");
+    let out = dir.path().join("imported.json");
+    let (code, e) = run(&[
+        "import",
+        "--map",
+        map.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 2);
+    assert_eq!(e["error"]["code"], "MAP_VERSION");
+    assert_eq!(e["error"]["details"]["found"], "1.90.0");
+    assert!(!out.exists());
+}
+
+#[test]
+fn import_of_a_file_that_is_not_a_map_is_exit_2_with_map_parse() {
+    let dir = tempfile::tempdir().unwrap();
+    let map = dir.path().join("notes.map");
+    std::fs::write(&map, "not a map, only some words").unwrap();
+    let out = dir.path().join("imported.json");
+    let (code, e) = run(&[
+        "import",
+        "--map",
+        map.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 2);
+    assert_eq!(e["error"]["code"], "MAP_PARSE");
+}
+
+#[test]
+fn import_of_a_missing_file_is_exit_4_with_io_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let map = dir.path().join("missing.map");
+    let out = dir.path().join("imported.json");
+    let (code, e) = run(&[
+        "import",
+        "--map",
+        map.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 4);
+    assert_eq!(e["error"]["code"], "IO_READ");
+}

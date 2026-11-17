@@ -29,6 +29,15 @@ enum Command {
     Generate(GenerateArgs),
     /// Print the JSON Schema of the config.
     Schema,
+    /// Make a config from a map file of Azgaar's Fantasy Map Generator.
+    Import {
+        /// The `.map` file.
+        #[arg(long)]
+        map: PathBuf,
+        /// The config file to write.
+        #[arg(short = 'o', long = "out")]
+        out: PathBuf,
+    },
     /// Print facts about one point of a world.
     Query {
         #[arg(long)]
@@ -125,6 +134,7 @@ fn main() {
     let out = match cli.command {
         Command::Generate(args) => generate(args, verbose),
         Command::Schema => Ok(inkland::schema()),
+        Command::Import { map, out } => import(&map, &out, verbose),
         Command::Version { .. } => Ok(inkland::version_info()),
         Command::Query { .. } => not_yet("query", 10),
         Command::Export { .. } => not_yet("export", 10),
@@ -197,6 +207,40 @@ fn generate(args: GenerateArgs, verbose: bool) -> Result<Value, Vec<Error>> {
     }
     let out = inkland::generate(&config, args.variant.as_deref())?;
     write_output(&out, &config, &args, verbose)
+}
+
+fn import(map: &Path, out: &Path, verbose: bool) -> Result<Value, Vec<Error>> {
+    let bytes = std::fs::read(map).map_err(|e| {
+        vec![
+            Error::new(
+                ErrorCode::IoRead,
+                "",
+                format!("cannot read the map file: {e}"),
+            )
+            .with("file", map.display().to_string()),
+        ]
+    })?;
+    let import = inkland::import_map(&bytes).map_err(|e| vec![e])?;
+    let mut text =
+        serde_json::to_string_pretty(&import.config).expect("a config always converts to JSON");
+    text.push('\n');
+    std::fs::write(out, text).map_err(|e| {
+        vec![
+            Error::new(
+                ErrorCode::IoWrite,
+                "",
+                format!("cannot write the config: {e}"),
+            )
+            .with("file", out.display().to_string()),
+        ]
+    })?;
+    if verbose {
+        eprintln!("inkland: wrote {}", out.display());
+    }
+    let mut summary =
+        serde_json::to_value(&import.summary).expect("a summary always converts to JSON");
+    summary["config"] = Value::from(out.display().to_string());
+    Ok(summary)
 }
 
 /// The longer side of the PNG preview, in pixels.

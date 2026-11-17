@@ -5,6 +5,7 @@
 
 pub use inkland_core::config::Config;
 pub use inkland_core::error::{Error, ErrorCode, ExitCode, Warning, WarningCode, exit_code_of};
+pub use inkland_io::azgaar::{Import, ImportSummary};
 pub use inkland_io::config::{Override, config_hash, parse_config};
 pub use inkland_io::report::DryRunReport;
 
@@ -187,6 +188,12 @@ pub fn check_svg_with(svg: &str, min_line_width_pt: f64, fonts_allowed: Vec<Stri
         .iter()
         .map(|c| c.to_json())
         .collect()
+}
+
+/// Make a config from a map file of Azgaar's Fantasy Map Generator (a
+/// `.map` file), and give the facts of the import.
+pub fn import_map(bytes: &[u8]) -> Result<Import, Error> {
+    inkland_io::azgaar::read_map(bytes)
 }
 
 /// The version of the tool and the notices of third-party work.
