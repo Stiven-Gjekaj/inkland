@@ -11,6 +11,8 @@ import { HeightmapDialog } from "dialogs/heightmap.slint";
 import { BurgsDialog } from "dialogs/burgs.slint";
 import { PrintDialog } from "dialogs/print.slint";
 import { RegionsDialog } from "dialogs/regions.slint";
+import { RiversDialog } from "dialogs/rivers.slint";
+import { RoutesDialog } from "dialogs/routes.slint";
 
 export { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts, Theme }
 
@@ -98,6 +100,8 @@ export component AppWindow inherits Window {
         if Dialogs.burgs: BurgsDialog {}
         if Dialogs.print: PrintDialog {}
         if Dialogs.regions: RegionsDialog {}
+        if Dialogs.rivers: RiversDialog {}
+        if Dialogs.routes: RoutesDialog {}
     }
 
     public function focus-keys() {

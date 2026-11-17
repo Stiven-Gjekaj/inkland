@@ -1,0 +1,84 @@
+// The Routes Overview: the pinned roads. Draw a new road on the map from a
+// burg, through points, to a burg. Select a road to set its wanted length
+// and the tolerance.
+
+import { Theme, Label, DialogButton, Field, Select, FormRow, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Tool, Lists } from "../globals.slint";
+
+export component RoutesDialog inherits Dialog {
+    id: "routes";
+    title: "Routes Overview";
+    content-width: 500px;
+    pos-x: 460px;
+    pos-y: 100px;
+    Table {
+        header: ["Route", "Kind", "Between", "Through", "Wanted", "Length"];
+        widths: [80px, 40px, 120px, 70px, 70px, 46px];
+        rows: Lists.routes;
+        selected: Lists.selected-route;
+        list-height: 160px;
+        select(id) => {
+            Lists.selected-route = id;
+            Actions.selection-changed();
+        }
+    }
+    FormRow {
+        label: Lists.selected-route == "" ? "No route selected" : "Route " + Lists.selected-route;
+        label-width: 130px;
+        Label { dialog: true; text: "Length"; }
+        Field {
+            dialog: true;
+            width: 60px;
+            number: true;
+            align: right;
+            enabled: Lists.selected-route != "";
+            placeholder: "any";
+            text <=> Lists.route-target;
+            accepted(t) => { Actions.edit-item("routes", Lists.selected-route, "target", t); }
+        }
+        Label { dialog: true; text: "+/-"; }
+        Field {
+            dialog: true;
+            width: 40px;
+            number: true;
+            align: right;
+            enabled: Lists.selected-route != "";
+            text <=> Lists.route-tolerance;
+            accepted(t) => { Actions.edit-item("routes", Lists.selected-route, "tolerance", t); }
+        }
+        Label { dialog: true; text: "%"; }
+        Rectangle { horizontal-stretch: 1; }
+        DialogButton {
+            text: "Remove";
+            enabled: Lists.selected-route != "";
+            clicked => { Actions.remove-item("routes", Lists.selected-route); }
+        }
+    }
+    Rectangle { height: 1px; background: #dddddd; }
+    FormRow {
+        label: "New route";
+        label-width: 130px;
+        Select {
+            dialog: true;
+            width: 80px;
+            model: ["road", "trail"];
+            current-index <=> AppState.road-kind;
+        }
+        DialogButton {
+            text: AppState.tool == Tool.route ? "Stop" : "Draw";
+            pressed: AppState.tool == Tool.route;
+            clicked => { Actions.start-tool(Tool.route); }
+        }
+        if AppState.tool == Tool.route: DialogButton {
+            text: "Finish";
+            enabled: AppState.draft-points.length >= 2;
+            clicked => { Actions.finish-draft(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Tip {
+        dialog: true;
+        text: "Click a burg pin, the points that the road passes, and the end burg pin. Double-click or press Enter at the end. The wanted length is in config units.";
+    }
+}

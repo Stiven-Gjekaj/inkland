@@ -21,7 +21,7 @@ use inkland::{Config, World};
 use inkland_app::catalog;
 use inkland_app::model::{Editor, error_text};
 use inkland_app::options::option_text;
-use inkland_app::pins::{Shape, ShapeKind};
+use inkland_app::pins::{Shape, ShapeKind, anchor_at, waypoint_at};
 use inkland_app::view::{View, distance};
 use inkland_app::worker::Worker;
 use inkland_render::page::Page;
@@ -73,6 +73,10 @@ const IMPLEMENTED: &[&str] = &[
     "print",
     "regions",
     "add-region",
+    "rivers",
+    "add-river",
+    "routes",
+    "add-route",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -408,6 +412,12 @@ impl Controller {
         };
         if d.get_regions() || g.get_tool() == Tool::Region {
             push(overlay::region_paths(c, &l.get_selected_region(), f));
+        }
+        if d.get_rivers() || g.get_tool() == Tool::River {
+            push(overlay::river_paths(c, &l.get_selected_river(), f));
+        }
+        if d.get_routes() || g.get_tool() == Tool::Route {
+            push(overlay::road_paths(c, &l.get_selected_route(), f));
         }
         let draft: Vec<[f64; 2]> = st.draft.iter().map(|p| f(*p)).collect();
         let mut draft_path = String::new();
@@ -816,6 +826,27 @@ impl Controller {
                     .add_region(kind, &Shape::Polygon(draft))
                     .map(|id| format!("add the {kind} region {id}"))
             }
+            Tool::River => {
+                let tol = Self::world_len(&st, PIN_HIT_PX);
+                let c = st.editor.config();
+                let anchors: Vec<_> = draft.iter().map(|p| anchor_at(c, *p, tol)).collect();
+                st.editor
+                    .add_river(&anchors)
+                    .map(|id| format!("add the river {id}"))
+            }
+            Tool::Route => {
+                let tol = Self::world_len(&st, PIN_HIT_PX);
+                let c = st.editor.config();
+                let points: Vec<_> = draft.iter().map(|p| waypoint_at(c, *p, tol)).collect();
+                let kind = if g.get_road_kind() == 1 {
+                    "trail"
+                } else {
+                    "road"
+                };
+                st.editor
+                    .add_road_along(&points, kind)
+                    .map(|id| format!("add the {kind} {id}"))
+            }
             _ => Ok(String::new()),
         };
         drop(st);
@@ -1023,6 +1054,31 @@ impl Controller {
         let world = st.shown.as_ref().map(|m| m.world.as_ref());
         l.set_burgs(table(rows::burg_rows(c, world)));
         l.set_regions(table(rows::region_rows(c)));
+        l.set_rivers(table(rows::river_rows(c, world)));
+        let sel = l.get_selected_river();
+        match c.pins.rivers.iter().find(|r| r.id == sel.as_str()) {
+            Some(r) => l.set_river_name(s(r.name.clone().unwrap_or_default())),
+            None => {
+                l.set_selected_river(s(""));
+                l.set_river_name(s(""));
+            }
+        }
+        l.set_routes(table(rows::route_rows(c, world)));
+        let sel = l.get_selected_route();
+        match c.pins.roads.iter().find(|r| r.id == sel.as_str()) {
+            Some(r) => {
+                l.set_route_target(s(r
+                    .target_length
+                    .map(inkland_app::options::number_text)
+                    .unwrap_or_default()));
+                l.set_route_tolerance(s(inkland_app::options::number_text(r.tolerance * 100.0)));
+            }
+            None => {
+                l.set_selected_route(s(""));
+                l.set_route_target(s(""));
+                l.set_route_tolerance(s(""));
+            }
+        }
         let sel = l.get_selected_region();
         match c.pins.regions.iter().find(|r| r.id == sel.as_str()) {
             Some(r) => {
@@ -1176,6 +1232,14 @@ impl Controller {
                 ui.global::<Dialogs>().invoke_open(s("regions"));
                 self.start_tool(Tool::Region);
             }
+            "add-river" => {
+                ui.global::<Dialogs>().invoke_open(s("rivers"));
+                self.start_tool(Tool::River);
+            }
+            "add-route" => {
+                ui.global::<Dialogs>().invoke_open(s("routes"));
+                self.start_tool(Tool::Route);
+            }
             _ => ui.global::<Dialogs>().invoke_open(s(id)),
         }
         self.update_tools();
@@ -1209,6 +1273,9 @@ impl Controller {
                 }
             }
             ("regions", "edge") => num(text).and_then(|v| e.set_region_edge(id, v)),
+            ("routes", "target") if text.trim().is_empty() => e.set_road_target(id, None),
+            ("routes", "target") => num(text).and_then(|v| e.set_road_target(id, Some(v))),
+            ("routes", "tolerance") => num(text).and_then(|v| e.set_road_tolerance(id, v / 100.0)),
             _ => Err(format!("{list}: there is no field {field:?}")),
         };
         drop(st);
@@ -1241,7 +1308,9 @@ impl Controller {
                 hint: s(t.hint),
                 enabled: t.enabled && IMPLEMENTED.contains(&t.id),
                 active: (t.id == "add-burg" && tool == Tool::AddPin)
-                    || (t.id == "add-region" && tool == Tool::Region),
+                    || (t.id == "add-region" && tool == Tool::Region)
+                    || (t.id == "add-river" && tool == Tool::River)
+                    || (t.id == "add-route" && tool == Tool::Route),
             }));
         }
         let l = ui.global::<Lists>();

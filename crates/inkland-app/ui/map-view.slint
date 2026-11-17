@@ -33,7 +33,7 @@ export component MapView inherits Rectangle {
         commands: AppState.overlay-path;
         stroke: #2060c0;
         stroke-width: 1.5px;
-        fill: #2060c018;
+        fill: transparent;
     }
     if AppState.highlight-path != "": Path {
         x: 0;
@@ -47,7 +47,7 @@ export component MapView inherits Rectangle {
         commands: AppState.highlight-path;
         stroke: #d03020;
         stroke-width: 2.5px;
-        fill: #d0302020;
+        fill: transparent;
     }
     if AppState.draft-path != "": Path {
         x: 0;
@@ -61,7 +61,7 @@ export component MapView inherits Rectangle {
         commands: AppState.draft-path;
         stroke: #c71d1d;
         stroke-width: 2px;
-        fill: #c71d1d14;
+        fill: transparent;
     }
     for q in AppState.draft-points: Rectangle {
         x: q.x - 4px;

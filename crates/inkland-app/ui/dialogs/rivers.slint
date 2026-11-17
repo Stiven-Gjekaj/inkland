@@ -1,0 +1,64 @@
+// The Rivers Overview: the pinned rivers. Draw a new river on the map: the
+// first click is the source, the last click is the mouth, and the clicks
+// between are points that the river passes. A click on a burg uses the
+// burg.
+
+import { Theme, Label, DialogButton, Field, FormRow, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Tool, Lists } from "../globals.slint";
+
+export component RiversDialog inherits Dialog {
+    id: "rivers";
+    title: "Rivers Overview";
+    content-width: 470px;
+    pos-x: 440px;
+    pos-y: 80px;
+    Table {
+        header: ["River", "Source", "Points", "Mouth", "Length"];
+        widths: [110px, 100px, 44px, 100px, 50px];
+        rows: Lists.rivers;
+        selected: Lists.selected-river;
+        list-height: 160px;
+        select(id) => {
+            Lists.selected-river = id;
+            Actions.selection-changed();
+        }
+    }
+    FormRow {
+        label: Lists.selected-river == "" ? "No river selected" : "River " + Lists.selected-river;
+        label-width: 130px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            enabled: Lists.selected-river != "";
+            placeholder: "Name (empty: generated)";
+            text <=> Lists.river-name;
+            accepted(t) => { Actions.edit-item("rivers", Lists.selected-river, "name", t); }
+        }
+        DialogButton {
+            text: "Remove";
+            enabled: Lists.selected-river != "";
+            clicked => { Actions.remove-item("rivers", Lists.selected-river); }
+        }
+    }
+    Rectangle { height: 1px; background: #dddddd; }
+    FormRow {
+        label: "New river";
+        label-width: 130px;
+        DialogButton {
+            text: AppState.tool == Tool.river ? "Stop" : "Draw";
+            pressed: AppState.tool == Tool.river;
+            clicked => { Actions.start-tool(Tool.river); }
+        }
+        if AppState.tool == Tool.river: DialogButton {
+            text: "Finish at the last point";
+            enabled: AppState.draft-points.length >= 2;
+            clicked => { Actions.finish-draft(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Tip {
+        dialog: true;
+        text: "Click the source, the points that the river passes, and the mouth. Double-click or press Enter at the mouth. The mouth must be in water or at a port.";
+    }
+}

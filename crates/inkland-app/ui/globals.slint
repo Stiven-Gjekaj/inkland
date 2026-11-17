@@ -194,6 +194,14 @@ export global Lists {
     in-out property <string> region-lo;
     in-out property <string> region-hi;
     in-out property <string> region-edge;
+    in property <[TableRow]> rivers;
+    in-out property <string> selected-river;
+    in-out property <string> river-name;
+    in property <[TableRow]> routes;
+    in-out property <string> selected-route;
+    // The wanted length, and the tolerance in percent.
+    in-out property <string> route-target;
+    in-out property <string> route-tolerance;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their
@@ -247,12 +255,16 @@ export global Dialogs {
     in-out property <bool> heightmap;
     in-out property <bool> burgs;
     in-out property <bool> regions;
+    in-out property <bool> rivers;
+    in-out property <bool> routes;
     in-out property <bool> print;
 
     public function open(id: string) {
         if id == "heightmap" { self.heightmap = true; }
         if id == "burgs" { self.burgs = true; }
         if id == "regions" { self.regions = true; }
+        if id == "rivers" { self.rivers = true; }
+        if id == "routes" { self.routes = true; }
         Actions.selection-changed();
         if id == "print" { self.print = true; }
     }
@@ -261,6 +273,8 @@ export global Dialogs {
         if id == "heightmap" { self.heightmap = false; }
         if id == "burgs" { self.burgs = false; }
         if id == "regions" { self.regions = false; }
+        if id == "rivers" { self.rivers = false; }
+        if id == "routes" { self.routes = false; }
         Actions.selection-changed();
         if id == "print" { self.print = false; }
     }
@@ -269,6 +283,8 @@ export global Dialogs {
         self.heightmap = false;
         self.burgs = false;
         self.regions = false;
+        self.rivers = false;
+        self.routes = false;
         Actions.selection-changed();
         self.print = false;
     }
