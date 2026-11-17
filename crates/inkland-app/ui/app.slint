@@ -3,7 +3,7 @@
 // left, and the editors are dialogs over the map.
 
 import { Theme } from "theme.slint";
-import { AppState, Actions, Tool, Ui, Dialogs, Lists } from "globals.slint";
+import { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts } from "globals.slint";
 import { MapView } from "map-view.slint";
 import { OptionsPanel } from "options-panel.slint";
 import { StatusBar } from "status-bar.slint";
@@ -11,7 +11,7 @@ import { HeightmapDialog } from "dialogs/heightmap.slint";
 import { BurgsDialog } from "dialogs/burgs.slint";
 import { PrintDialog } from "dialogs/print.slint";
 
-export { AppState, Actions, Tool, Ui, Dialogs, Lists, Theme }
+export { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts, Theme }
 
 export component AppWindow inherits Window {
     in property <string> window-title: "inkland";

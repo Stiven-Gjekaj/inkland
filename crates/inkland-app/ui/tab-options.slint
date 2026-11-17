@@ -1,0 +1,144 @@
+// The Options tab: the generation options of FMG. Each change is an edit
+// of the config, so undo and the edit script have it, and the map is made
+// again.
+
+import { Theme, MenuButton, Heading, Label, Field, Slider, Select, Tip } from "theme.slint";
+import { Actions, Opts } from "globals.slint";
+
+// One row of the table: a label, a control, and an output.
+component Row inherits HorizontalLayout {
+    in property <string> label;
+    spacing: 6px;
+    min-height: Theme.row + 2px;
+    Label { text: root.label; width: 118px; overflow: elide; }
+    @children
+}
+
+// A slider with a number field, for a count.
+component CountRow inherits Row {
+    in property <string> key;
+    in property <string> value;
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in property <float> step: 1;
+    slider := Slider {
+        minimum: root.minimum;
+        maximum: root.maximum;
+        step: root.step;
+        value: root.value.to-float();
+        released(v) => { Actions.set-option(root.key, v); }
+    }
+    Field {
+        width: 52px;
+        number: true;
+        align: right;
+        value: slider.shown;
+        accepted(t) => { Actions.set-option(root.key, t); }
+    }
+}
+
+export component OptionsTab inherits VerticalLayout {
+    spacing: 2px;
+    Heading { text: "Map settings (each change makes the map again):"; wrap: word-wrap; }
+    Row {
+        label: "Map seed";
+        Field {
+            horizontal-stretch: 1;
+            number: true;
+            text <=> Opts.seed;
+            accepted(t) => { Actions.set-option("seed", t); }
+        }
+        MenuButton { text: "New"; width: 52px; clicked => { Actions.new-map(); } }
+    }
+    Row {
+        label: "Map size";
+        Field {
+            horizontal-stretch: 1;
+            number: true;
+            align: center;
+            text <=> Opts.width;
+            accepted(t) => { Actions.set-option("width", t); }
+        }
+        Label { text: "x"; }
+        Field {
+            horizontal-stretch: 1;
+            number: true;
+            align: center;
+            text <=> Opts.height;
+            accepted(t) => { Actions.set-option("height", t); }
+        }
+        Label { text: Opts.units; width: 52px; overflow: elide; }
+    }
+    Row {
+        label: "Points number";
+        cells := Slider {
+            minimum: 1000;
+            maximum: 100000;
+            step: 1000;
+            value: Opts.cells.to-float();
+            released(v) => { Actions.set-option("cells", v); }
+        }
+        Label {
+            width: 52px;
+            horizontal-alignment: right;
+            color: #053305;
+            text: Math.round(cells.shown / 1000) + "K";
+        }
+    }
+    Row {
+        label: "Heightmap";
+        Select {
+            horizontal-stretch: 1;
+            model: Opts.templates;
+            current-index <=> Opts.template;
+            placeholder: "Custom steps";
+            selected(i) => { Actions.choose("template", i); }
+        }
+    }
+    CountRow { label: "Sea level"; key: "sea-level"; value: Opts.sea-level; minimum: 1; maximum: 99; }
+    CountRow { label: "Cultures number"; key: "cultures"; value: Opts.cultures; minimum: 1; maximum: 32; }
+    Row {
+        label: "Cultures set";
+        Select {
+            horizontal-stretch: 1;
+            model: Opts.culture-sets;
+            current-index <=> Opts.culture-set;
+            selected(i) => { Actions.choose("culture-set", i); }
+        }
+    }
+    CountRow { label: "States number"; key: "states"; value: Opts.states; minimum: 0; maximum: 100; }
+    Row {
+        label: "Number of burgs";
+        towns := Slider {
+            minimum: 0;
+            maximum: 1000;
+            value: Opts.towns == "auto" ? 1000 : Opts.towns.to-float();
+            released(v) => { Actions.set-option("towns", v >= 1000 ? "auto" : v); }
+        }
+        Field {
+            width: 52px;
+            align: right;
+            value: towns.shown >= 1000 ? "auto" : towns.shown;
+            accepted(t) => { Actions.set-option("towns", t); }
+        }
+    }
+    CountRow { label: "Religions number"; key: "religions"; value: Opts.religions; minimum: 0; maximum: 50; }
+    Row {
+        label: "Latitude S, N";
+        Field {
+            horizontal-stretch: 1;
+            number: true;
+            align: center;
+            text <=> Opts.lat-south;
+            accepted(t) => { Actions.set-option("lat-south", t); }
+        }
+        Field {
+            horizontal-stretch: 1;
+            number: true;
+            align: center;
+            text <=> Opts.lat-north;
+            accepted(t) => { Actions.set-option("lat-north", t); }
+        }
+    }
+    Tip { text: "Map size and positions are in config units. The Units editor changes the unit."; }
+}

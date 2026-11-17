@@ -162,6 +162,13 @@ export component Label inherits Text {
 // the focus.
 export component Field inherits Rectangle {
     in-out property <string> text;
+    // A one-way value: each change of it replaces the text. Use it in
+    // place of `text` when the owner cannot bind both ways.
+    in property <string> value;
+    changed value => { root.text = root.value; }
+    init => {
+        if root.value != "" { root.text = root.value; }
+    }
     in property <string> placeholder;
     in property <bool> enabled: true;
     in property <bool> number;
@@ -207,7 +214,8 @@ export component Field inherits Rectangle {
 // A check box with a label.
 export component Check inherits Rectangle {
     in property <string> text;
-    in-out property <bool> checked;
+    // The owner sets `checked` in `toggled`. The check box never writes it.
+    in property <bool> checked;
     in property <bool> enabled: true;
     in property <bool> dialog;
     callback toggled(bool);
@@ -245,27 +253,28 @@ export component Check inherits Rectangle {
     }
     TouchArea {
         enabled: root.enabled;
-        clicked => {
-            root.checked = !root.checked;
-            root.toggled(root.checked);
-        }
+        clicked => { root.toggled(!root.checked); }
     }
 }
 
 // The FMG range slider: a thin white track and a small square thumb.
-// `changed` comes while the pointer drags, `released` when it stops.
+// `value` comes from the owner and the slider never writes it. While the
+// pointer drags, `shown` is the value under the pointer and `changed`
+// comes. `released` comes when the drag stops.
 export component Slider inherits Rectangle {
-    in-out property <float> value;
+    in property <float> value;
     in property <float> minimum: 0;
     in property <float> maximum: 100;
     in property <float> step: 1;
     in property <bool> enabled: true;
     in property <bool> dialog;
+    out property <float> shown: touch.pressed ? root.drag : root.value;
     callback changed(float);
     callback released(float);
     min-height: Theme.row;
     min-width: 60px;
     horizontal-stretch: 1;
+    property <float> drag;
     property <length> thumb: 11px;
     property <float> span: max(root.maximum - root.minimum, 0.000001);
     Rectangle {
@@ -274,7 +283,7 @@ export component Slider inherits Rectangle {
         background: root.dialog ? #d4d4d4 : #ffffff;
     }
     Rectangle {
-        x: (root.width - root.thumb) * ((root.value - root.minimum) / root.span).clamp(0, 1);
+        x: (root.width - root.thumb) * ((root.shown - root.minimum) / root.span).clamp(0, 1);
         y: (parent.height - root.thumb) / 2;
         width: root.thumb;
         height: root.thumb;
@@ -291,20 +300,20 @@ export component Slider inherits Rectangle {
         let raw = root.minimum + t * root.span;
         return (root.minimum + ((raw - root.minimum) / root.step).round() * root.step).clamp(root.minimum, root.maximum);
     }
-    TouchArea {
+    touch := TouchArea {
         enabled: root.enabled;
         pointer-event(ev) => {
             if ev.kind == PointerEventKind.down {
-                root.value = root.value-at(self.mouse-x);
-                root.changed(root.value);
+                root.drag = root.value-at(self.mouse-x);
+                root.changed(root.drag);
             } else if ev.kind == PointerEventKind.up {
-                root.released(root.value);
+                root.released(root.drag);
             }
         }
         moved => {
             if self.pressed {
-                root.value = root.value-at(self.mouse-x);
-                root.changed(root.value);
+                root.drag = root.value-at(self.mouse-x);
+                root.changed(root.drag);
             }
         }
     }

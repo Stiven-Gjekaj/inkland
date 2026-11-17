@@ -111,6 +111,13 @@ export global Actions {
     callback select-variant(int);
     callback set-layer(string, bool);
     callback apply-preset(int);
+    // An option of the Options tab or of the Style tab: the key and the
+    // text of the field (see `options::OPTIONS`).
+    callback set-option(string, string);
+    // An entry of a select of the Options tab or of the Style tab.
+    callback choose(string, int);
+    // Make a new map with a new seed.
+    callback new-map();
     callback select-pin(string);
     callback rename-pin(string, string);
     callback remove-pin(string);
@@ -140,6 +147,52 @@ export global Lists {
     in property <[string]> presets;
     in property <[bool]> presets-disabled;
     in-out property <int> preset-index;
+}
+
+// The values of the Options tab and of the Style tab, as the text of their
+// fields. The Rust code sets them from the config after each edit.
+export global Opts {
+    in-out property <string> seed;
+    in-out property <string> width;
+    in-out property <string> height;
+    in-out property <string> cells;
+    in-out property <string> cultures;
+    in-out property <string> states;
+    in-out property <string> towns;
+    in-out property <string> religions;
+    in-out property <string> sea-level;
+    in-out property <string> lat-south;
+    in-out property <string> lat-north;
+    in-out property <string> units;
+    in-out property <string> size-title;
+    in-out property <string> size-state;
+    in-out property <string> size-region;
+    in-out property <string> size-city;
+    in-out property <string> size-town;
+    in-out property <string> size-village;
+    in-out property <string> size-river;
+    in-out property <string> size-other;
+    in-out property <string> min-line;
+    in-out property <string> grid-step;
+    in-out property <string> title;
+    in property <bool> scale-bar;
+    in property <bool> compass;
+    // The selects: the entries and the index of the value.
+    in property <[string]> templates;
+    in-out property <int> template;
+    in property <[string]> culture-sets;
+    in-out property <int> culture-set;
+    in property <[string]> modes;
+    in property <[bool]> modes-disabled;
+    in-out property <int> mode;
+    in property <[string]> styles;
+    in property <[bool]> styles-disabled;
+    in-out property <int> style;
+    in property <[string]> fonts;
+    in-out property <int> font-title;
+    in-out property <int> font-labels;
+    in-out property <int> font-labels-sc;
+    in-out property <int> font-other;
 }
 
 // The open dialogs. `open` and `close` take the id of a dialog.

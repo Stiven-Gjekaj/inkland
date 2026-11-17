@@ -1,0 +1,99 @@
+// The Style tab: the style preset of FMG, the render mode, the fonts, the
+// font sizes, and the print-safe options of inkland.
+
+import { Theme, Heading, Label, Field, Select, Check, Tip } from "theme.slint";
+import { Actions, Opts } from "globals.slint";
+
+component Row inherits HorizontalLayout {
+    in property <string> label;
+    spacing: 6px;
+    min-height: Theme.row + 2px;
+    Label { text: root.label; width: 118px; overflow: elide; }
+    @children
+}
+
+component FontRow inherits Row {
+    in property <string> key;
+    in-out property <int> index;
+    Select {
+        horizontal-stretch: 1;
+        model: Opts.fonts;
+        current-index <=> root.index;
+        selected(i) => { Actions.choose(root.key, i); }
+    }
+}
+
+// Two font sizes on one row.
+component SizePair inherits HorizontalLayout {
+    in property <string> label-a;
+    in property <string> key-a;
+    in property <string> value-a;
+    in property <string> label-b;
+    in property <string> key-b;
+    in property <string> value-b;
+    spacing: 6px;
+    min-height: Theme.row + 2px;
+    Label { text: root.label-a; width: 70px; }
+    Field { width: 44px; number: true; align: right; value: root.value-a; accepted(t) => { Actions.set-option(root.key-a, t); } }
+    Rectangle { width: 10px; }
+    Label { text: root.label-b; width: 70px; }
+    Field { width: 44px; number: true; align: right; value: root.value-b; accepted(t) => { Actions.set-option(root.key-b, t); } }
+    Rectangle { horizontal-stretch: 1; }
+}
+
+export component StyleTab inherits VerticalLayout {
+    spacing: 2px;
+    Row {
+        label: "Preset:";
+        Select {
+            horizontal-stretch: 1;
+            model: Opts.styles;
+            disabled: Opts.styles-disabled;
+            current-index <=> Opts.style;
+            placeholder: "Not set";
+            selected(i) => { Actions.choose("style", i); }
+        }
+    }
+    Row {
+        label: "Render mode:";
+        Select {
+            horizontal-stretch: 1;
+            model: Opts.modes;
+            disabled: Opts.modes-disabled;
+            current-index <=> Opts.mode;
+            selected(i) => { Actions.choose("mode", i); }
+        }
+    }
+    Heading { text: "Fonts:"; }
+    FontRow { label: "Title"; key: "font-title"; index <=> Opts.font-title; }
+    FontRow { label: "Labels"; key: "font-labels"; index <=> Opts.font-labels; }
+    FontRow { label: "Small caps"; key: "font-labels-sc"; index <=> Opts.font-labels-sc; }
+    FontRow { label: "Other text"; key: "font-other"; index <=> Opts.font-other; }
+    Heading { text: "Font sizes (pt):"; }
+    SizePair { label-a: "Title"; key-a: "size-title"; value-a: Opts.size-title; label-b: "States"; key-b: "size-state"; value-b: Opts.size-state; }
+    SizePair { label-a: "Regions"; key-a: "size-region"; value-a: Opts.size-region; label-b: "Cities"; key-b: "size-city"; value-b: Opts.size-city; }
+    SizePair { label-a: "Towns"; key-a: "size-town"; value-a: Opts.size-town; label-b: "Villages"; key-b: "size-village"; value-b: Opts.size-village; }
+    SizePair { label-a: "Rivers"; key-a: "size-river"; value-a: Opts.size-river; label-b: "Other"; key-b: "size-other"; value-b: Opts.size-other; }
+    Heading { text: "Print:"; }
+    Row {
+        label: "Min. line (pt)";
+        Field { width: 60px; number: true; align: right; value: Opts.min-line; accepted(t) => { Actions.set-option("min-line", t); } }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Row {
+        label: "Extras";
+        Check { text: "Scale bar"; checked: Opts.scale-bar; toggled(on) => { Actions.set-option("scale-bar", on ? "true" : "false"); } }
+        Check { text: "Wind rose"; checked: Opts.compass; toggled(on) => { Actions.set-option("compass", on ? "true" : "false"); } }
+    }
+    Row {
+        label: "Grid step";
+        Field { width: 60px; number: true; align: right; value: Opts.grid-step; placeholder: "none"; accepted(t) => { Actions.set-option("grid-step", t); } }
+        Label { text: Opts.units; }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Row {
+        label: "Map title";
+        Field { horizontal-stretch: 1; value: Opts.title; placeholder: "No cartouche"; accepted(t) => { Actions.set-option("title", t); } }
+    }
+    Tip { text: "Print-safe mode draws black on white only. A grey preset is not in the renderer yet."; }
+}

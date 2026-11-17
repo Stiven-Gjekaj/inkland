@@ -20,6 +20,7 @@ mod ui {
 use inkland::{Config, World};
 use inkland_app::catalog;
 use inkland_app::model::{Editor, error_text};
+use inkland_app::options::option_text;
 use inkland_app::view::{View, distance};
 use inkland_app::worker::Worker;
 use inkland_render::page::Page;
@@ -33,7 +34,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 use ui::CheckRow;
-use ui::{Actions, AppState, AppWindow, Dialogs, LayerRow, Lists, Theme, ToolRow, Ui};
+use ui::{Actions, AppState, AppWindow, Dialogs, LayerRow, Lists, Opts, Theme, ToolRow, Ui};
 use ui::{PinRow, Tool};
 
 /// The color around the page in the map view.
@@ -147,6 +148,19 @@ fn post(tx: &Sender<Msg>, ui: &slint::Weak<AppWindow>, msg: Msg) {
     if tx.send(msg).is_ok() {
         let _ = ui.upgrade_in_event_loop(|ui| ui.global::<Actions>().invoke_poll());
     }
+}
+
+/// A new seed for New Map, from the clock: 1 to 999999999, as in FMG.
+fn new_seed() -> u64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    // Mix the bits, so that two clicks close in time give far seeds.
+    let mut x = nanos as u64 ^ 0x9e37_79b9_7f4a_7c15;
+    x ^= x >> 33;
+    x = x.wrapping_mul(0xff51_afd7_ed55_8ccd);
+    x ^= x >> 33;
+    x % 999_999_999 + 1
 }
 
 /// Generate the world and the variant, and parse its SVG.
@@ -360,6 +374,7 @@ impl Controller {
                 .and_then(|p| catalog::PRESETS.iter().position(|(id, _, _)| *id == p))
                 .unwrap_or(catalog::PRESETS.len()) as i32,
         );
+        self.update_options(c);
         g.set_variants(model(c.variants.iter().map(|v| s(&v.name)).collect()));
         g.set_variant_index(e.variant as i32);
         g.set_brush_radius_max((c.frame.width.max(c.frame.height) / 4.0).max(2.0) as f32);
@@ -380,6 +395,8 @@ impl Controller {
             Ok(()) => self.message(what, false),
             Err(e) => {
                 self.message(&format!("{what}: refused: {e}"), true);
+                // Show the values of the config again in the fields.
+                self.update_editor();
                 return;
             }
         }
@@ -735,6 +752,101 @@ impl Controller {
         }
     }
 
+    /// The fields of the Options tab and of the Style tab.
+    fn update_options(&self, c: &Config) {
+        let ui = self.ui();
+        let o = ui.global::<Opts>();
+        let t = |key: &str| s(option_text(c, key));
+        o.set_seed(t("seed"));
+        o.set_width(t("width"));
+        o.set_height(t("height"));
+        o.set_cells(t("cells"));
+        o.set_cultures(t("cultures"));
+        o.set_states(t("states"));
+        o.set_towns(t("towns"));
+        o.set_religions(t("religions"));
+        o.set_sea_level(t("sea-level"));
+        o.set_lat_south(t("lat-south"));
+        o.set_lat_north(t("lat-north"));
+        o.set_units(t("units"));
+        o.set_size_title(t("size-title"));
+        o.set_size_state(t("size-state"));
+        o.set_size_region(t("size-region"));
+        o.set_size_city(t("size-city"));
+        o.set_size_town(t("size-town"));
+        o.set_size_village(t("size-village"));
+        o.set_size_river(t("size-river"));
+        o.set_size_other(t("size-other"));
+        o.set_min_line(t("min-line"));
+        o.set_grid_step(t("grid-step"));
+        o.set_title(t("title"));
+        o.set_scale_bar(option_text(c, "scale-bar") == "true");
+        o.set_compass(option_text(c, "compass") == "true");
+        let index = |ids: &[&str], key: &str| {
+            let v = option_text(c, key);
+            ids.iter().position(|i| *i == v).map_or(-1, |i| i as i32)
+        };
+        let templates: Vec<&str> = catalog::TEMPLATES.iter().map(|t| t.0).collect();
+        o.set_templates(model(catalog::TEMPLATES.iter().map(|t| s(t.1)).collect()));
+        o.set_template(index(&templates, "template"));
+        let sets = catalog::culture_sets();
+        let set_ids: Vec<&str> = sets.iter().map(|t| t.0).collect();
+        o.set_culture_sets(model(sets.iter().map(|t| s(&t.1)).collect()));
+        o.set_culture_set(index(&set_ids, "culture-set"));
+        let modes: Vec<&str> = catalog::RENDER_MODES.iter().map(|t| t.0).collect();
+        o.set_modes(model(
+            catalog::RENDER_MODES.iter().map(|t| s(t.1)).collect(),
+        ));
+        o.set_modes_disabled(model(
+            modes
+                .iter()
+                .map(|m| !catalog::mode_available(c, m))
+                .collect(),
+        ));
+        o.set_mode(index(&modes, "mode"));
+        let styles: Vec<&str> = catalog::STYLE_PRESETS.iter().map(|t| t.0).collect();
+        o.set_styles(model(
+            catalog::STYLE_PRESETS.iter().map(|t| s(t.1)).collect(),
+        ));
+        o.set_styles_disabled(model(
+            styles
+                .iter()
+                .map(|m| !catalog::style_available(c, m))
+                .collect(),
+        ));
+        o.set_style(index(&styles, "style"));
+        let fonts: Vec<&str> = c.render.fonts_allowed.iter().map(String::as_str).collect();
+        o.set_fonts(model(fonts.iter().map(s).collect()));
+        o.set_font_title(index(&fonts, "font-title"));
+        o.set_font_labels(index(&fonts, "font-labels"));
+        o.set_font_labels_sc(index(&fonts, "font-labels-sc"));
+        o.set_font_other(index(&fonts, "font-other"));
+    }
+
+    /// Set an option from the text of its field.
+    fn set_option(self: &Rc<Self>, key: &str, text: &str) {
+        let r = self.state.borrow_mut().editor.set_option(key, text);
+        self.edited(r, &format!("set {key} to {text}"));
+    }
+
+    /// An entry of a select of the Options tab or of the Style tab.
+    fn choose(self: &Rc<Self>, key: &str, i: usize) {
+        let id = {
+            let st = self.state.borrow();
+            let c = st.editor.config();
+            match key {
+                "template" => catalog::TEMPLATES.get(i).map(|t| t.0.to_owned()),
+                "culture-set" => catalog::culture_sets().get(i).map(|t| t.0.to_owned()),
+                "mode" => catalog::RENDER_MODES.get(i).map(|t| t.0.to_owned()),
+                "style" => catalog::STYLE_PRESETS.get(i).map(|t| t.0.to_owned()),
+                _ => c.render.fonts_allowed.get(i).cloned(),
+            }
+        };
+        if let Some(id) = id {
+            self.set_option(key, &id);
+        }
+    }
+
     /// A button of the Tools tab: open a dialog, or start a tool that adds
     /// items on the map.
     fn open_tool(self: &Rc<Self>, id: &str) {
@@ -900,6 +1012,15 @@ fn main() -> Result<(), slint::PlatformError> {
         };
         let r = c.state.borrow_mut().editor.apply_preset(id);
         c.edited(r, &format!("show the layers of the preset {label}"));
+    });
+    let c = Rc::clone(&app);
+    a.on_set_option(move |key, text| c.set_option(&key, &text));
+    let c = Rc::clone(&app);
+    a.on_choose(move |key, i| c.choose(&key, usize::try_from(i).unwrap_or(0)));
+    let c = Rc::clone(&app);
+    a.on_new_map(move || {
+        let seed = new_seed();
+        c.set_option("seed", &seed.to_string());
     });
     let c = Rc::clone(&app);
     a.on_open_tool(move |id| c.open_tool(&id));

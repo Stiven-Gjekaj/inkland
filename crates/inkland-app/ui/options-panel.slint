@@ -7,6 +7,8 @@ import { AppState, Actions, Ui } from "globals.slint";
 import { LayersTab } from "tab-layers.slint";
 import { ToolsTab } from "tab-tools.slint";
 import { AboutTab } from "tab-about.slint";
+import { StyleTab } from "tab-style.slint";
+import { OptionsTab } from "tab-options.slint";
 
 component StickedButton inherits Rectangle {
     in property <string> text;
@@ -18,7 +20,7 @@ component StickedButton inherits Rectangle {
     label := Text {
         text: root.text;
         font-family: Theme.mono;
-        font-size: Theme.font-size;
+        font-size: Theme.font-size - 1px;
         font-weight: 700;
         color: touch.has-hover && root.enabled ? white : Theme.text;
         horizontal-alignment: center;
@@ -34,7 +36,7 @@ export component OptionsPanel inherits Rectangle {
     // The panel moves with a drag on its top edge.
     in-out property <length> pos-x: 10px;
     in-out property <length> pos-y: 10px;
-    property <length> panel-width: 330px;
+    property <length> panel-width: 370px;
     x: root.pos-x;
     y: root.pos-y;
     width: Ui.panel-open ? root.panel-width : trigger.width;
@@ -118,6 +120,8 @@ export component OptionsPanel inherits Rectangle {
                 padding-top: 4px;
                 padding-bottom: 4px;
                 if Ui.tab == 0: LayersTab {}
+                if Ui.tab == 1: StyleTab {}
+                if Ui.tab == 2: OptionsTab {}
                 if Ui.tab == 3: ToolsTab {}
                 if Ui.tab == 4: AboutTab {}
             }
@@ -126,7 +130,8 @@ export component OptionsPanel inherits Rectangle {
                 padding-left: 6px;
                 padding-right: 6px;
                 padding-bottom: 3px;
-                alignment: space-around;
+                alignment: space-between;
+                StickedButton { text: "New Map"; clicked => { Actions.new-map(); } }
                 StickedButton { text: "Open"; clicked => { Actions.open(); } }
                 StickedButton { text: "Save"; clicked => { Actions.save(); } }
                 StickedButton { text: "Save As"; clicked => { Actions.save-as(); } }
