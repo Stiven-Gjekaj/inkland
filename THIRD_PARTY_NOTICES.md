@@ -31,6 +31,21 @@ Some data tables come from it. This file keeps its license notice.
   - The 43 name bases, from `src/data/name-bases.ts`, and the culture names
     of five culture sets, from `src/model/society/cultures-generator.ts`. In
     inkland: `crates/inkland-core/src/names/data.rs`.
+  - The step sizes of the square, hexagon, diamond, and triangle lattices,
+    from `src/model/graph/lattice.ts`. In inkland: `LatticeInfo::plan` in
+    `crates/inkland-core/src/grid.rs`.
+  - The whole-world chances and the size draws of the templates, from
+    `src/model/physical/coordinates.ts`. In inkland:
+    `crates/inkland-core/src/coordinates.rs`.
+  - The river constants (the least flux of a river, the width factors, the
+    length progression, and the cut limit) and the lake evaporation
+    formula, from `src/model/physical/river-generator.ts` and
+    `src/model/physical/lakes.ts`. In inkland:
+    `crates/inkland-core/src/rivers.rs`.
+  - The river types and their weights, and the list of adjectives for
+    feature names, from `src/model/physical/river-generator.ts` and
+    `src/model/physical/features-generator.ts`. In inkland:
+    `crates/inkland-core/src/geonames.rs`.
 - Test data copied into inkland:
   - The test maps `tests/fixtures/1.112.1.map` and `1.154.0.map`, with gzip
     and no other change. In inkland: `fixtures/azgaar/*.map.gz`. They come
