@@ -380,6 +380,17 @@ impl<'a> Heightmap<'a> {
         }
     }
 
+    /// Set the height of each cell to the raster value at the cell site.
+    /// The raster covers the full grid. The raster must have `cols` x `rows`
+    /// values. A value above 100 becomes 100.
+    pub fn apply_raster(&mut self, raster: &crate::config::Raster) {
+        let (w, h) = (self.grid.width, self.grid.height);
+        for (c, height) in self.heights.iter_mut().enumerate() {
+            let [x, y] = self.grid.points[c];
+            *height = store(f64::from(raster.sample(x, y, w, h)));
+        }
+    }
+
     pub fn run(&mut self, steps: &[Step], rng: &mut Rand) {
         for step in steps {
             self.step(step, rng);
@@ -875,6 +886,39 @@ mod tests {
         let h = run(&g, templates::steps(TemplateName::Continents));
         let land = h.iter().filter(|&&v| v >= 20.0).count() as f64 / h.len() as f64;
         assert!((0.1..0.9).contains(&land), "land fraction {land}");
+    }
+
+    #[test]
+    fn a_raster_sets_each_cell_from_the_value_at_its_site() {
+        let g = grid();
+        // The west half is 10, the east half is 60, and the last row is 100.
+        let (cols, rows) = (4u32, 3u32);
+        let mut values = Vec::new();
+        for row in 0..rows {
+            for col in 0..cols {
+                values.push(if row == rows - 1 {
+                    100
+                } else if col < 2 {
+                    10
+                } else {
+                    60
+                });
+            }
+        }
+        let raster = crate::config::Raster { cols, rows, values };
+        let mut hm = Heightmap::new(&g, 20.0);
+        hm.apply_raster(&raster);
+        for (c, &h) in hm.heights.iter().enumerate() {
+            let [x, y] = g.points[c];
+            let want = if y >= 200.0 {
+                100.0
+            } else if x < 200.0 {
+                10.0
+            } else {
+                60.0
+            };
+            assert_eq!(h, want, "cell {c} at [{x}, {y}]");
+        }
     }
 
     #[test]

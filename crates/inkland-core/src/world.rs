@@ -63,6 +63,7 @@ pub fn template_steps(config: &Config) -> Result<Vec<crate::heightmap::Step>, St
     match &config.world.template {
         Template::Named(name) => parse_steps(templates::steps(*name).lines()),
         Template::Steps { steps } => parse_steps(steps.iter().map(String::as_str)),
+        Template::Raster { .. } => Ok(Vec::new()),
     }
 }
 
@@ -104,6 +105,17 @@ impl World {
             .map_err(|e| Error::new(ErrorCode::TemplateInvalid, "/world/template", e))?;
         let mut height_rng = Rand::new(tree.part_rng(Layer::Terrain, "heightmap"));
         let mut hm = Heightmap::new(&grid, sea_level);
+        if let Template::Raster { raster } = &config.world.template {
+            let size = u64::from(raster.cols) * u64::from(raster.rows);
+            if raster.cols < 2 || raster.rows < 2 || raster.values.len() as u64 != size {
+                return Err(Error::new(
+                    ErrorCode::TemplateInvalid,
+                    "/world/template/raster",
+                    "the raster needs 2 or more columns and rows, and cols x rows values",
+                ));
+            }
+            hm.apply_raster(raster);
+        }
         hm.run(&steps, &mut height_rng);
         let mut heights = hm.heights;
 
@@ -309,6 +321,51 @@ mod tests {
         let a = World::build(&config(42, "continents", 3000)).unwrap();
         let b = World::build(&config(43, "continents", 3000)).unwrap();
         assert_ne!(a.heights, b.heights);
+    }
+
+    #[test]
+    fn a_raster_template_gives_its_heights_and_pins_still_apply() {
+        // Sea in the west column, land in the east columns.
+        let (cols, rows) = (8u32, 6u32);
+        let values: Vec<u8> = (0..rows * cols)
+            .map(|i| if i % cols == 0 { 5 } else { 40 })
+            .collect();
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 9,
+            "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 2000, "template": { "raster": {
+                "cols": cols, "rows": rows, "values": values } } },
+            "pins": { "points": [{ "id": "port", "kind": "town", "at": [52.5, 150.0], "port": true }] }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        for (cell, &h) in w.heights.iter().enumerate() {
+            assert_eq!(h.fract(), 0.0);
+            let [x, _] = w.grid.points[cell];
+            if x < 45.0 {
+                assert!(h < w.sea_level, "cell {cell} at x {x} is land");
+            } else if x > 70.0 {
+                assert_eq!(h, 40.0, "cell {cell} at x {x}");
+            }
+        }
+        let port = w.pin_cells[0];
+        assert_eq!(w.grid.points[port], [52.5, 150.0]);
+        assert!(w.features.is_land(port));
+        assert!(w.grid.neighbors(port).any(|m| !w.features.is_land(m)));
+        assert_eq!(World::build(&c).unwrap(), w);
+    }
+
+    #[test]
+    fn a_raster_with_the_wrong_size_is_refused() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 9,
+            "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 2000, "template": { "raster": {
+                "cols": 3, "rows": 3, "values": [1, 2, 3] } } }
+        }))
+        .unwrap();
+        let e = World::build(&c).unwrap_err();
+        assert_eq!(e.code, ErrorCode::TemplateInvalid);
     }
 
     #[test]

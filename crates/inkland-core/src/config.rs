@@ -188,6 +188,51 @@ pub enum Template {
         /// The steps, in order.
         steps: Vec<String>,
     },
+    /// A raster of heights, for example from an imported map.
+    Raster {
+        /// The raster. Each cell gets the height of the raster value nearest
+        /// to its site.
+        raster: Raster,
+    },
+}
+
+/// A raster of heights that covers the full frame.
+///
+/// The raster divides the frame into `cols` x `rows` equal rectangles. Each
+/// value is the height of one rectangle.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Raster {
+    /// Number of columns, from the low x edge to the high x edge. 2 or more.
+    #[schemars(range(min = 2))]
+    pub cols: u32,
+    /// Number of rows, from the low y edge to the high y edge. 2 or more.
+    #[schemars(range(min = 2))]
+    pub rows: u32,
+    /// The heights on the scale 0 to 100, row by row. The first row is at
+    /// the low y edge of the frame. In each row, the first value is at the
+    /// low x edge. The list has `cols` x `rows` values.
+    pub values: Vec<u8>,
+}
+
+impl Raster {
+    /// The value of the rectangle that contains the position `[x, y]` of a
+    /// frame of `width` x `height` units. A position outside the frame
+    /// gets the value of the nearest edge rectangle. The raster must have
+    /// `cols` x `rows` values.
+    pub fn sample(&self, x: f64, y: f64, width: f64, height: f64) -> u8 {
+        let index = |v: f64, size: f64, n: u32| -> usize {
+            let i = (v / size * f64::from(n)).floor();
+            if i.is_nan() || i < 0.0 {
+                0
+            } else {
+                (i as usize).min(n as usize - 1)
+            }
+        };
+        let col = index(x, width, self.cols);
+        let row = index(y, height, self.rows);
+        self.values[row * self.cols as usize + col]
+    }
 }
 
 impl Default for Template {
@@ -955,6 +1000,40 @@ mod tests {
                 assert!(lo >= 20.0, "{k:?}");
             }
         }
+    }
+
+    #[test]
+    fn template_accepts_a_raster() {
+        let mut v = minimal();
+        v["world"] = json!({ "template": { "raster": {
+            "cols": 2, "rows": 2, "values": [0, 10, 20, 30]
+        }}});
+        let c: Config = serde_json::from_value(v).unwrap();
+        let Template::Raster { raster } = &c.world.template else {
+            panic!("not a raster: {:?}", c.world.template);
+        };
+        assert_eq!((raster.cols, raster.rows), (2, 2));
+        let again: Config = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
+        assert_eq!(c, again);
+    }
+
+    #[test]
+    fn raster_sample_takes_the_rectangle_of_the_position() {
+        let r = Raster {
+            cols: 3,
+            rows: 2,
+            values: vec![1, 2, 3, 4, 5, 6],
+        };
+        // Frame 300 x 100: each rectangle is 100 x 50.
+        assert_eq!(r.sample(0.0, 0.0, 300.0, 100.0), 1);
+        assert_eq!(r.sample(99.9, 49.9, 300.0, 100.0), 1);
+        assert_eq!(r.sample(100.0, 0.0, 300.0, 100.0), 2);
+        assert_eq!(r.sample(250.0, 10.0, 300.0, 100.0), 3);
+        assert_eq!(r.sample(10.0, 50.0, 300.0, 100.0), 4);
+        assert_eq!(r.sample(300.0, 100.0, 300.0, 100.0), 6);
+        // Outside the frame: the nearest edge rectangle.
+        assert_eq!(r.sample(-5.0, -5.0, 300.0, 100.0), 1);
+        assert_eq!(r.sample(900.0, 900.0, 300.0, 100.0), 6);
     }
 
     #[test]
