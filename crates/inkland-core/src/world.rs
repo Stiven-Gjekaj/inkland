@@ -10,7 +10,9 @@ use crate::fit::{FitPoint, FitRegion, apply_points, apply_regions};
 use crate::grid::Grid;
 use crate::heightmap::{Heightmap, parse_steps, templates};
 use crate::rand::Rand;
+use crate::rivers::{Course, Drainage, River, drain, river_threshold, trace};
 use crate::seed::{Layer, SeedTree};
+use std::collections::BTreeMap;
 
 /// The terrain of one config.
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +29,18 @@ pub struct World {
     /// The cell of each point pin, in config order. The site of the cell is
     /// the exact position of the pin.
     pub pin_cells: Vec<usize>,
+    /// The temperature of each cell, in degrees C.
+    pub temperature: Vec<f64>,
+    /// The precipitation of each cell.
+    pub precipitation: Vec<f64>,
+    /// Where the water of each cell goes.
+    pub drainage: Drainage,
+    /// The course of each pinned river, in config order.
+    pub courses: Vec<Course>,
+    /// All rivers. A pinned river has `course: Some(index)`.
+    pub rivers: Vec<River>,
+    /// The biome of each cell (see `biomes::NAMES`).
+    pub biomes: Vec<u8>,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -57,10 +71,30 @@ impl World {
         let sea_level = f64::from(config.world.sea_level);
         let pins = &config.pins;
 
-        let sites: Vec<[f64; 2]> = pins.points.iter().map(|p| p.at).collect();
+        // Exact sites: each place, then each point of each pinned river. A
+        // position that comes twice is one site.
+        let mut sites: Vec<[f64; 2]> = Vec::new();
+        let mut site_index: BTreeMap<(u64, u64), usize> = BTreeMap::new();
+        let mut add_site = |p: [f64; 2]| -> usize {
+            *site_index
+                .entry((p[0].to_bits(), p[1].to_bits()))
+                .or_insert_with(|| {
+                    sites.push(p);
+                    sites.len() - 1
+                })
+        };
+        let place_sites: Vec<usize> = pins.points.iter().map(|p| add_site(p.at)).collect();
+        for p in crate::courses::river_points(config) {
+            add_site(p);
+        }
         let mut grid_rng = Rand::new(tree.part_rng(Layer::Terrain, "grid"));
-        let (grid, pin_cells) =
+        let (grid, site_cells) =
             Grid::with_sites(w, h, cell_count(config) as u32, &sites, &mut grid_rng);
+        let pin_cells: Vec<usize> = place_sites.iter().map(|&i| site_cells[i]).collect();
+        let site_cells: BTreeMap<(u64, u64), usize> = site_index
+            .into_iter()
+            .map(|(k, i)| (k, site_cells[i]))
+            .collect();
 
         let steps = template_steps(config)
             .map_err(|e| Error::new(ErrorCode::TemplateInvalid, "/world/template", e))?;
@@ -83,6 +117,16 @@ impl World {
             .collect();
         apply_points(&grid, &mut heights, &points, &regions, sea_level)?;
 
+        let plan = crate::courses::Plan {
+            grid: &grid,
+            config,
+            regions: &regions,
+            sea_level,
+            place_cells: &pin_cells,
+            site_cells: &site_cells,
+        };
+        let courses = crate::courses::plan_courses(&plan, &mut heights)?;
+
         let features = Features::mark(&grid, &heights, sea_level);
         for r in &regions {
             if r.pin.kind != RegionKind::Sea || r.pin.landlocked {
@@ -103,6 +147,35 @@ impl World {
             }
         }
         let coastlines = coastlines(&grid, &features);
+
+        let temperature = crate::climate::temperatures(&grid, &heights, config);
+        let mut rain_rng = Rand::new(tree.part_rng(Layer::Climate, "rain"));
+        let precipitation =
+            crate::climate::precipitation(&grid, &heights, &temperature, config, &mut rain_rng);
+        let drainage = drain(&grid, &heights, &features, &precipitation, &courses);
+        let rivers = trace(
+            &grid,
+            &features,
+            &drainage,
+            &courses,
+            river_threshold(grid.len()),
+        );
+        let mut river_cells = vec![false; grid.len()];
+        for r in &rivers {
+            for &c in &r.cells {
+                river_cells[c] = true;
+            }
+        }
+        let biomes = crate::biomes::biomes(
+            &grid,
+            &heights,
+            sea_level,
+            &temperature,
+            &precipitation,
+            &river_cells,
+            &drainage.flux,
+            &regions,
+        );
         Ok(World {
             seed: config.seed,
             width: w,
@@ -113,6 +186,12 @@ impl World {
             features,
             coastlines,
             pin_cells,
+            temperature,
+            precipitation,
+            drainage,
+            courses,
+            rivers,
+            biomes,
         })
     }
 
@@ -362,5 +441,177 @@ mod pin_tests {
             w.features.get(w.features.of_cell[water]).kind,
             FeatureKind::Ocean
         );
+    }
+}
+
+#[cfg(test)]
+mod river_tests {
+    use super::*;
+    use crate::config::Anchor;
+    use crate::rivers::{Mouth, NONE};
+    use proptest::prelude::*;
+    use serde_json::json;
+
+    fn book(seed: u64, template: &str) -> Config {
+        serde_json::from_value(json!({
+            "version": 1, "seed": seed,
+            "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 4000, "template": template },
+            "pins": {
+                "points": [
+                    { "id": "kingsholm", "kind": "city", "at": [150, 120] },
+                    { "id": "harbour", "kind": "city", "at": [22, 180], "port": true },
+                    { "id": "ford", "kind": "village", "at": [130, 200] }
+                ],
+                "regions": [
+                    { "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300] },
+                    { "id": "grey-teeth", "kind": "mountains", "polygon": [[200, 40], [270, 50], [260, 130], [210, 120]] },
+                    { "id": "wolds", "kind": "hills", "circle": { "at": [240, 220], "r": 30 }, "height": [35, 50] },
+                    { "id": "low-fen", "kind": "marsh", "polygon": [[60, 230], [100, 225], [105, 260], [65, 265]] }
+                ],
+                "rivers": [
+                    { "id": "dunn", "source": { "region": "grey-teeth" },
+                      "through": [{ "place": "kingsholm" }], "mouth": [10, 120] },
+                    { "id": "brann", "source": { "region": "wolds" },
+                      "through": [{ "place": "ford" }], "mouth": { "region": "low-fen" } },
+                    { "id": "corrin", "source": [120, 150], "mouth": { "place": "harbour" } },
+                    { "id": "tey", "source": [110, 260], "mouth": { "place": "harbour" } }
+                ]
+            }
+        }))
+        .unwrap()
+    }
+
+    fn check(c: &Config, w: &World) -> Result<(), TestCaseError> {
+        let d = &w.drainage;
+        prop_assert_eq!(w.courses.len(), c.pins.rivers.len());
+        for (k, pin) in c.pins.rivers.iter().enumerate() {
+            let river = w.rivers.iter().find(|r| r.course == Some(k));
+            prop_assert!(river.is_some(), "{} has no river", pin.id.clone());
+            let river = river.unwrap();
+            // Strictly downhill on the drainage elevation, to the end.
+            for pair in river.cells.windows(2) {
+                prop_assert!(
+                    d.elevation[pair[1]] < d.elevation[pair[0]],
+                    "{} goes up",
+                    pin.id.clone()
+                );
+            }
+            let last = *river.cells.last().unwrap();
+            if d.receiver[last] != NONE {
+                prop_assert!(d.elevation[d.receiver[last]] < d.elevation[last]);
+            }
+            // Each anchor cell is on the course, in order.
+            let mut at = 0;
+            for a in &pin.through {
+                let cell = match a {
+                    Anchor::Place(r) => {
+                        w.pin_cells[c.pins.points.iter().position(|p| p.id == r.place).unwrap()]
+                    }
+                    Anchor::Point(p) => w.grid.find_cell(p[0], p[1]),
+                    Anchor::Region(_) => continue,
+                };
+                let pos = river.cells[at..].iter().position(|&x| x == cell);
+                prop_assert!(pos.is_some(), "{} misses a through point", pin.id.clone());
+                at += pos.unwrap();
+            }
+            // Each course cell is land; no other river uses it.
+            for &cell in &river.cells {
+                prop_assert!(w.features.is_land(cell));
+                for other in w.rivers.iter().filter(|o| o.id != river.id) {
+                    prop_assert!(
+                        !other.cells.contains(&cell),
+                        "{} crosses river {}",
+                        pin.id.clone(),
+                        other.id
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(16))]
+
+        #[test]
+        fn pinned_rivers_hold_when_the_world_builds(seed in 0u64..1_000_000, t in 0usize..3) {
+            let c = book(seed, ["continents", "pangea", "old-world"][t]);
+            match World::build(&c) {
+                Ok(w) => check(&c, &w)?,
+                // Some terrains cannot hold the pins. The error must name a pin.
+                Err(e) => prop_assert!(e.path.starts_with("/pins"), "{e:?}"),
+            }
+        }
+    }
+
+    /// The book rivers build on each of 60 terrains and keep all of their
+    /// rules. The property test above checks only the terrains that build.
+    #[test]
+    fn the_book_rivers_build_on_many_terrains() {
+        let mut failed = Vec::new();
+        for seed in 0..60u64 {
+            let c = book(
+                seed * 7919,
+                ["continents", "pangea", "old-world"][(seed % 3) as usize],
+            );
+            match World::build(&c) {
+                Ok(w) => {
+                    if let Err(e) = check(&c, &w) {
+                        failed.push(format!("seed {}: {e}", seed * 7919));
+                    }
+                }
+                Err(e) => failed.push(format!("seed {}: {} {}", seed * 7919, e.path, e.message)),
+            }
+        }
+        assert!(failed.is_empty(), "{failed:#?}");
+    }
+
+    #[test]
+    fn the_book_rivers_build_on_a_land_template() {
+        let c = book(7, "pangea");
+        let w = World::build(&c).unwrap();
+        check(&c, &w).unwrap();
+        let by_id = |id: &str| {
+            let k = c.pins.rivers.iter().position(|r| r.id == id).unwrap();
+            w.rivers.iter().find(|r| r.course == Some(k)).unwrap()
+        };
+        // The Dunn ends at its mouth point in the sea.
+        let dunn = by_id("dunn");
+        assert_eq!(*dunn.points.last().unwrap(), [10.0, 120.0]);
+        assert!(matches!(dunn.mouth, Mouth::Water(_)));
+        // The Brann ends in the Low Fen and keeps its water there.
+        let brann = by_id("brann");
+        assert_eq!(brann.mouth, Mouth::Sink);
+        // The Corrin reaches the sea at Harbour; the Tey joins it or reaches
+        // the same water.
+        let corrin = by_id("corrin");
+        let harbour = w.pin_cells[1];
+        assert_eq!(*corrin.cells.last().unwrap(), harbour);
+        let tey = by_id("tey");
+        match tey.mouth {
+            Mouth::Join(j) => assert!(corrin.cells.contains(&j)),
+            Mouth::Water(_) => assert_eq!(*tey.cells.last().unwrap(), harbour),
+            Mouth::Sink => panic!("the Tey ends in a sink"),
+        }
+    }
+
+    #[test]
+    fn a_river_from_marsh_up_to_mountains_is_infeasible() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 3, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 2000, "template": { "steps": ["Add 30 all"] } },
+            "pins": {
+                "regions": [
+                    { "id": "sea", "kind": "sea", "box": [0, 0, 20, 300] },
+                    { "id": "fen", "kind": "marsh", "box": [40, 100, 80, 160] },
+                    { "id": "peaks", "kind": "mountains", "box": [300, 100, 380, 200] }
+                ],
+                "rivers": [{ "id": "up", "source": { "region": "fen" }, "through": [[340, 150]], "mouth": [10, 150] }]
+            }
+        }))
+        .unwrap();
+        let e = World::build(&c).unwrap_err();
+        assert_eq!(e.code, ErrorCode::RiverNotDownhill);
     }
 }

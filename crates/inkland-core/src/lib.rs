@@ -6,6 +6,7 @@
 pub mod biomes;
 pub mod climate;
 pub mod config;
+pub mod courses;
 pub mod error;
 pub mod features;
 pub mod fit;
