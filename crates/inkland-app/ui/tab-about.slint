@@ -1,0 +1,27 @@
+// The About tab: what inkland is, the licenses, and the AboutSlint widget
+// that the Slint Royalty-free License requires.
+
+import { AboutSlint } from "std-widgets.slint";
+import { Theme, Heading, Label } from "theme.slint";
+
+export component AboutTab inherits VerticalLayout {
+    spacing: 6px;
+    Heading { text: "inkland"; font-size: Theme.font-size * 1.4; }
+    Label {
+        text: "inkland makes fantasy maps that are ready to print. It uses the algorithms of Azgaar's Fantasy Map Generator (FMG, MIT). Hard pins put places, regions, rivers, and roads at exact coordinates.";
+        wrap: word-wrap;
+    }
+    Label {
+        text: "Each edit is a command. Undo and redo use the commands. Save Edit Script writes them to a file that the CLI replays.";
+        wrap: word-wrap;
+    }
+    Label {
+        text: "The inkland code is MIT OR Apache-2.0. The app uses Slint under the Slint Royalty-free License 2.0.";
+        wrap: word-wrap;
+    }
+    Rectangle {
+        background: #ffffffc0;
+        height: about.preferred-height;
+        about := AboutSlint {}
+    }
+}

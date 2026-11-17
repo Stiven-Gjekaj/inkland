@@ -1,22 +1,17 @@
-// The main window of the inkland desktop app.
+// The main window of the inkland desktop app. It has the look of Azgaar's
+// Fantasy Map Generator: the map fills the window, the menu is at the top
+// left, and the editors are dialogs over the map.
 
-import { AboutSlint, Button, TabWidget, VerticalBox } from "std-widgets.slint";
-import { AppState, Actions, Tool } from "globals.slint";
+import { Theme } from "theme.slint";
+import { AppState, Actions, Tool, Ui, Dialogs, Lists } from "globals.slint";
 import { MapView } from "map-view.slint";
-import { LayersPanel } from "layers-panel.slint";
-import { BrushTool } from "brush-tool.slint";
-import { PinEditor } from "pin-editor.slint";
-import { PrintPreview } from "print-preview.slint";
+import { OptionsPanel } from "options-panel.slint";
 import { StatusBar } from "status-bar.slint";
+import { HeightmapDialog } from "dialogs/heightmap.slint";
+import { BurgsDialog } from "dialogs/burgs.slint";
+import { PrintDialog } from "dialogs/print.slint";
 
-export { AppState, Actions, Tool }
-
-component ToolButton inherits Button {
-    in property <Tool> tool;
-    checkable: true;
-    checked: AppState.tool == root.tool;
-    clicked => { AppState.tool = root.tool; }
-}
+export { AppState, Actions, Tool, Ui, Dialogs, Lists, Theme }
 
 export component AppWindow inherits Window {
     in property <string> window-title: "inkland";
@@ -25,7 +20,8 @@ export component AppWindow inherits Window {
     preferred-height: 820px;
     min-width: 800px;
     min-height: 520px;
-    property <bool> show-about;
+    default-font-family: Theme.sans;
+    default-font-size: Theme.font-size;
 
     MenuBar {
         Menu {
@@ -45,10 +41,11 @@ export component AppWindow inherits Window {
         Menu {
             title: "View";
             MenuItem { title: "Show the Full Page"; activated => { Actions.fit(); } }
+            MenuItem { title: "Show or Hide the Menu"; activated => { Ui.panel-open = !Ui.panel-open; } }
         }
         Menu {
             title: "Help";
-            MenuItem { title: "About inkland"; activated => { root.show-about = true; } }
+            MenuItem { title: "About inkland"; activated => { Ui.panel-open = true; Ui.tab = 4; } }
         }
     }
 
@@ -64,75 +61,32 @@ export component AppWindow inherits Window {
             }
             if event.text == Key.Escape {
                 AppState.tool = Tool.select;
+                Dialogs.close-all();
+                Ui.panel-open = false;
+                return accept;
+            }
+            if event.text == Key.Tab {
+                Ui.panel-open = !Ui.panel-open;
                 return accept;
             }
             reject
         }
 
-        VerticalLayout {
-            HorizontalLayout {
-                vertical-stretch: 1;
-                // The tools and the layers.
-                VerticalBox {
-                    width: 230px;
-                    alignment: start;
-                    Text { text: "Tools"; font-weight: 600; }
-                    ToolButton { text: "Select and move pins"; tool: Tool.select; }
-                    ToolButton { text: "Add point pin"; tool: Tool.add-pin; }
-                    ToolButton { text: "Heightmap brush"; tool: Tool.brush; }
-                    HorizontalLayout {
-                        spacing: 4px;
-                        Button { text: "Undo"; enabled: AppState.can-undo; clicked => { Actions.undo(); } }
-                        Button { text: "Redo"; enabled: AppState.can-redo; clicked => { Actions.redo(); } }
-                    }
-                    if AppState.tool == Tool.brush: BrushTool {}
-                    LayersPanel {}
-                }
-                MapView {
-                    horizontal-stretch: 1;
-                }
-                // The context editors.
-                TabWidget {
-                    width: 290px;
-                    Tab {
-                        title: "Pins";
-                        VerticalBox { PinEditor {} }
-                    }
-                    Tab {
-                        title: "Print preview";
-                        VerticalBox { PrintPreview {} }
-                    }
-                }
-            }
-            StatusBar {}
+        MapView {
+            x: 0;
+            y: 0;
+            width: root.width;
+            height: root.height;
         }
-    }
-
-    if root.show-about: Rectangle {
-        background: #00000080;
-        TouchArea { clicked => { root.show-about = false; } }
-        Rectangle {
-            width: 420px;
-            height: about-box.preferred-height;
-            background: white;
-            border-radius: 6px;
-            about-box := VerticalBox {
-                Text {
-                    text: "inkland";
-                    font-size: 20px;
-                    font-weight: 700;
-                    color: #202020;
-                }
-                Text {
-                    text: "A print-ready fantasy map generator. MIT OR Apache-2.0.\nIt re-implements the algorithms of Azgaar's Fantasy Map Generator (MIT).";
-                    wrap: word-wrap;
-                    color: #202020;
-                }
-                // The Slint Royalty-free License requires this widget.
-                AboutSlint {}
-                Button { text: "Close"; clicked => { root.show-about = false; } }
-            }
+        StatusBar {
+            x: 0;
+            y: root.height - self.height;
+            width: root.width;
         }
+        OptionsPanel {}
+        if Dialogs.heightmap: HeightmapDialog {}
+        if Dialogs.burgs: BurgsDialog {}
+        if Dialogs.print: PrintDialog {}
     }
 
     public function focus-keys() {

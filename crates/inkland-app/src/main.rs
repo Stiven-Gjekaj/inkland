@@ -4,7 +4,9 @@
 //!
 //! With the environment variable `INKLAND_APP_SNAPSHOT=FILE.png`, the app
 //! writes an image of its window to the file when the first map shows, and
-//! stops. This is a check that the app starts and draws a map.
+//! stops. This is a check that the app starts and draws a map. With
+//! `INKLAND_APP_SNAPSHOT_OPEN=TAB/TOOL,...` the image shows a tab of the
+//! menu and some dialogs (see `inkland_app::snapshot`).
 //!
 //! The app edits a config with the commands of `inkland::History`, makes the
 //! world again on a worker thread, and shows the SVG of the selected
@@ -16,10 +18,10 @@ mod ui {
 }
 
 use inkland::{Config, World};
+use inkland_app::catalog;
 use inkland_app::model::{Editor, error_text};
 use inkland_app::view::{View, distance};
 use inkland_app::worker::Worker;
-use inkland_core::config::LayerName;
 use inkland_render::page::Page;
 use inkland_render::png::{FontDb, Scene};
 use serde_json::Value;
@@ -31,7 +33,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 use ui::CheckRow;
-use ui::{Actions, AppState, AppWindow, LayerRow};
+use ui::{Actions, AppState, AppWindow, Dialogs, LayerRow, Lists, Theme, ToolRow, Ui};
 use ui::{PinRow, Tool};
 
 /// The color around the page in the map view.
@@ -40,6 +42,8 @@ const DESK: [u8; 3] = [0x8a, 0x8f, 0x94];
 const PIN_HIT_PX: f64 = 9.0;
 /// The kinds of the "New pin kind" list, in its order.
 const PIN_KINDS: [&str; 5] = ["village", "town", "city", "fortress", "ruin"];
+/// The tools of the Tools tab that the app has now.
+const IMPLEMENTED: &[&str] = &["burgs", "heightmap", "add-burg", "print"];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
   "world": { "cells": 8000, "template": "continents" } }"#;
@@ -214,22 +218,6 @@ fn rasterize(job: &RasterJob) -> Result<SharedPixelBuffer<Rgba8Pixel>, String> {
     Ok(SharedPixelBuffer::clone_from_slice(&rgba, w, h))
 }
 
-fn layer_names() -> Vec<(LayerName, String)> {
-    use LayerName::*;
-    [
-        Coast, Relief, Rivers, Regions, Roads, Features, Places, Labels,
-    ]
-    .into_iter()
-    .map(|l| {
-        let name = serde_json::to_value(l)
-            .ok()
-            .and_then(|v| v.as_str().map(str::to_owned))
-            .unwrap_or_default();
-        (l, name)
-    })
-    .collect()
-}
-
 impl Controller {
     fn ui(&self) -> AppWindow {
         self.ui.upgrade().expect("the window exists")
@@ -346,11 +334,14 @@ impl Controller {
         g.set_selected_id(s(&selected));
         g.set_selected_name(s(name));
         g.set_layers(model(
-            layer_names()
-                .into_iter()
-                .map(|(l, name)| LayerRow {
-                    name: s(name),
-                    on: c.render.layers.contains(&l),
+            catalog::LAYERS
+                .iter()
+                .map(|l| LayerRow {
+                    id: s(l.id),
+                    label: s(l.label),
+                    key: s(l.key.map(String::from).unwrap_or_default()),
+                    on: catalog::is_on(c, l),
+                    available: catalog::available(l),
                 })
                 .collect(),
         ));
@@ -729,6 +720,48 @@ impl Controller {
         }
     }
 
+    /// A button of the Tools tab: open a dialog, or start a tool that adds
+    /// items on the map.
+    fn open_tool(self: &Rc<Self>, id: &str) {
+        let ui = self.ui();
+        let g = ui.global::<AppState>();
+        match id {
+            "add-burg" => {
+                ui.global::<Dialogs>().invoke_open(s("burgs"));
+                g.set_tool(if g.get_tool() == Tool::AddPin {
+                    Tool::Select
+                } else {
+                    Tool::AddPin
+                });
+            }
+            _ => ui.global::<Dialogs>().invoke_open(s(id)),
+        }
+        self.update_tools();
+    }
+
+    /// The buttons of the Tools tab, by group.
+    fn update_tools(&self) {
+        let ui = self.ui();
+        let tool = ui.global::<AppState>().get_tool();
+        let mut rows = Vec::new();
+        let mut counts = Vec::new();
+        for group in ["Edit", "Add", "Show"] {
+            let list: Vec<&catalog::ToolDef> =
+                catalog::TOOLS.iter().filter(|t| t.group == group).collect();
+            counts.push(list.len() as i32);
+            rows.extend(list.into_iter().map(|t| ToolRow {
+                id: s(t.id),
+                label: s(t.label),
+                hint: s(t.hint),
+                enabled: t.enabled && IMPLEMENTED.contains(&t.id),
+                active: t.id == "add-burg" && tool == Tool::AddPin,
+            }));
+        }
+        let l = ui.global::<Lists>();
+        l.set_tools(model(rows));
+        l.set_tool_counts(model(counts));
+    }
+
     fn save_as(self: &Rc<Self>) {
         let dialog = rfd::FileDialog::new()
             .add_filter("inkland config", &["json"])
@@ -839,17 +872,14 @@ fn main() -> Result<(), slint::PlatformError> {
         c.regenerate();
     });
     let c = Rc::clone(&app);
-    a.on_set_layer(move |name, on| {
-        let layer = layer_names()
-            .into_iter()
-            .find(|(_, n)| n.as_str() == name.as_str())
-            .map(|(l, _)| l);
-        if let Some(layer) = layer {
-            let r = c.state.borrow_mut().editor.set_layer(layer, on);
-            let what = if on { "show" } else { "hide" };
-            c.edited(r, &format!("{what} the layer {name}"));
-        }
+    a.on_set_layer(move |id, on| {
+        let r = c.state.borrow_mut().editor.set_layer(&id, on);
+        let what = if on { "show" } else { "hide" };
+        let label = catalog::layer_def(&id).map_or("?", |l| l.label);
+        c.edited(r, &format!("{what} the layer {label}"));
     });
+    let c = Rc::clone(&app);
+    a.on_open_tool(move |id| c.open_tool(&id));
     let c = Rc::clone(&app);
     a.on_select_pin(move |id| {
         c.state.borrow_mut().editor.selected = Some(id.to_string());
@@ -920,12 +950,37 @@ fn main() -> Result<(), slint::PlatformError> {
     let c = Rc::clone(&app);
     a.on_brush_changed(move || c.update_view());
 
+    let theme = ui.global::<Theme>();
+    if cfg!(target_os = "macos") {
+        theme.set_mono(s("Menlo"));
+        theme.set_sans(s("Helvetica"));
+    } else if cfg!(target_os = "windows") {
+        theme.set_mono(s("Consolas"));
+        theme.set_sans(s("Arial"));
+    } else {
+        theme.set_mono(s("DejaVu Sans Mono"));
+        theme.set_sans(s("DejaVu Sans"));
+    }
+    app.update_tools();
     app.update_editor();
     match std::env::args_os().nth(1) {
         Some(path) => app.open_path(Path::new(&path)),
         None => {
             app.regenerate();
-            app.message("a new map; use File > Open to open a config", false);
+            app.message("a new map; use Open to open a config", false);
+        }
+    }
+    if let Some(text) = std::env::var_os("INKLAND_APP_SNAPSHOT_OPEN") {
+        match inkland_app::snapshot::plan(&text.to_string_lossy()) {
+            Ok(plan) => {
+                let u = ui.global::<Ui>();
+                u.set_panel_open(plan.tab.is_some());
+                u.set_tab(plan.tab.unwrap_or(0) as i32);
+                for tool in &plan.tools {
+                    app.open_tool(tool);
+                }
+            }
+            Err(e) => eprintln!("inkland-app: INKLAND_APP_SNAPSHOT_OPEN: {e}"),
         }
     }
     ui.run()

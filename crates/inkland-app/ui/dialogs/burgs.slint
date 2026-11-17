@@ -1,0 +1,57 @@
+// The Burgs editor: the point pins. Select a pin to rename or remove it.
+
+import { Theme, Label, DialogButton, Field, Select, FormRow, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Tool } from "../globals.slint";
+
+export component BurgsDialog inherits Dialog {
+    id: "burgs";
+    title: "Burgs Overview";
+    content-width: 380px;
+    pos-x: 380px;
+    pos-y: 60px;
+    Rectangle {
+        height: 200px;
+        background: white;
+        border-width: 1px;
+        border-color: #dddddd;
+        Flickable {
+            content-height: AppState.pins.length * 20px;
+            for pin[i] in AppState.pins: Rectangle {
+                y: i * 20px;
+                height: 20px;
+                background: pin.id == AppState.selected-id ? #ecd8d8 : transparent;
+                Label { x: 6px; dialog: true; text: pin.label; }
+                TouchArea { clicked => { Actions.select-pin(pin.id); } }
+            }
+        }
+    }
+    FormRow {
+        label: "Name";
+        name := Field {
+            dialog: true;
+            enabled: AppState.selected-id != "";
+            placeholder: "Empty: a generated name";
+            text <=> AppState.selected-name;
+            accepted(t) => { Actions.rename-pin(AppState.selected-id, t); }
+        }
+        DialogButton {
+            text: "Remove";
+            enabled: AppState.selected-id != "";
+            clicked => { Actions.remove-pin(AppState.selected-id); }
+        }
+    }
+    FormRow {
+        label: "New burg kind";
+        Select {
+            dialog: true;
+            model: ["village", "town", "city", "fortress", "ruin"];
+            current-index <=> AppState.new-pin-kind;
+        }
+        DialogButton {
+            text: "Add on the map";
+            pressed: AppState.tool == Tool.add-pin;
+            clicked => { AppState.tool = AppState.tool == Tool.add-pin ? Tool.select : Tool.add-pin; }
+        }
+    }
+}

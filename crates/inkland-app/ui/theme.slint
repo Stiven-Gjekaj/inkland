@@ -1,0 +1,503 @@
+// The look of Azgaar's Fantasy Map Generator (FMG): the colours of its
+// default theme (#997787, 5 percent transparency), its fonts, and its small
+// controls. FMG is MIT. The colours come from `changeDialogsTheme` of FMG.
+
+export global Theme {
+    // The panel colours.
+    out property <color> main: #997787f2;
+    out property <color> lighter: #9d7d8cf2;
+    out property <color> light: #a48b97f2;
+    out property <color> light-solid: #a58594;
+    out property <color> dark-solid: #614954;
+    out property <color> header: #926e7f;
+    out property <color> header-active: #816170;
+    out property <color> disabled: #a9959e;
+    out property <color> dialogs: #fafafaf2;
+    out property <color> border: #5e4fa2;
+    out property <color> text: #000000;
+    out property <color> dim-text: #444444aa;
+    out property <color> dialog-text: #333333;
+    out property <color> field: #ffffff;
+    out property <color> field-border: #abadb3;
+    // FMG uses a monospace font in the menu and a sans-serif font in the
+    // dialogs. The Rust code sets the family names of the platform.
+    in-out property <string> mono: "Menlo";
+    in-out property <string> sans: "Helvetica";
+    out property <length> font-size: 12px;
+    out property <length> row: 20px;
+}
+
+// A button of the menu tabs: bold, the active tab in the header colour.
+export component TabButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked();
+    background: root.active ? Theme.header : (touch.has-hover ? Theme.header-active : Theme.main);
+    animate background { duration: 150ms; }
+    min-width: label.preferred-width + 10px;
+    label := Text {
+        text: root.text;
+        font-family: Theme.mono;
+        font-size: Theme.font-size;
+        font-weight: 700;
+        color: root.active || touch.has-hover ? white : Theme.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// A button of the menu content (`.tabcontent button` of FMG).
+export component MenuButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> pressed;
+    in property <bool> enabled: true;
+    in property <bool> off;
+    in property <string> tip;
+    in property <bool> bold;
+    in property <length> font-size: Theme.font-size;
+    callback clicked();
+    min-height: Theme.row + 2px;
+    min-width: label.min-width + 8px;
+    preferred-width: label.preferred-width + 16px;
+    background: !root.enabled ? Theme.disabled
+        : root.pressed || touch.pressed ? Theme.header
+        : touch.has-hover ? Theme.header-active
+        : root.off ? Theme.disabled : Theme.lighter;
+    opacity: root.enabled ? 1 : 0.4;
+    label := Text {
+        x: 4px;
+        width: parent.width - 8px;
+        text: root.text;
+        font-family: Theme.mono;
+        font-size: root.font-size;
+        font-italic: root.pressed;
+        font-weight: root.bold ? 700 : 400;
+        color: root.off || !root.enabled ? Theme.dim-text : Theme.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+// A button of a dialog: the plain grey button of the browser.
+export component DialogButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> pressed;
+    in property <bool> primary;
+    callback clicked();
+    min-height: 22px;
+    min-width: label.preferred-width + 14px;
+    preferred-width: label.preferred-width + 14px;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: root.pressed ? #a6a6da : (touch.has-hover && root.enabled ? #7a7a7a : #9b9b9b);
+    background: root.pressed ? #ecd8d8 : (touch.pressed ? #d8d8d8 : (root.primary ? #f2e6ea : #efefef));
+    opacity: root.enabled ? 1 : 0.4;
+    label := Text {
+        text: root.text;
+        font-family: Theme.sans;
+        font-size: Theme.font-size;
+        color: Theme.dialog-text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+// The bold italic group title with a line on each side (`.separator`).
+export component Separator inherits HorizontalLayout {
+    in property <string> text;
+    spacing: 4px;
+    padding-top: 8px;
+    padding-bottom: 2px;
+    Rectangle {
+        horizontal-stretch: 1;
+        Rectangle { y: parent.height / 2; height: 1px; background: #333333; }
+    }
+    Text {
+        text: root.text;
+        font-family: Theme.mono;
+        font-size: Theme.font-size;
+        font-weight: 700;
+        font-italic: true;
+        color: #222222;
+        horizontal-stretch: 0;
+    }
+    Rectangle {
+        horizontal-stretch: 1;
+        Rectangle { y: parent.height / 2; height: 1px; background: #333333; }
+    }
+}
+
+// The bold italic heading of a menu section (`#options p`).
+export component Heading inherits Text {
+    font-family: Theme.mono;
+    font-size: Theme.font-size;
+    font-weight: 700;
+    font-italic: true;
+    color: Theme.text;
+}
+
+// Plain text of the menu or of a dialog.
+export component Label inherits Text {
+    in property <bool> dialog;
+    font-family: root.dialog ? Theme.sans : Theme.mono;
+    font-size: Theme.font-size;
+    color: root.dialog ? Theme.dialog-text : Theme.text;
+    vertical-alignment: center;
+}
+
+// A one-line text field. It reports the text on Enter and when it loses
+// the focus.
+export component Field inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder;
+    in property <bool> enabled: true;
+    in property <bool> number;
+    in property <bool> dialog;
+    in property <TextHorizontalAlignment> align: left;
+    callback accepted(string);
+    min-height: Theme.row;
+    min-width: 40px;
+    preferred-width: 80px;
+    background: root.enabled ? Theme.field : #eeeeee;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.border : Theme.field-border;
+    clip: true;
+    input := TextInput {
+        x: 3px;
+        width: parent.width - 6px;
+        height: parent.height;
+        text <=> root.text;
+        enabled: root.enabled;
+        single-line: true;
+        vertical-alignment: center;
+        horizontal-alignment: root.align;
+        font-family: root.dialog ? Theme.sans : Theme.mono;
+        font-size: Theme.font-size;
+        color: #000000;
+        input-type: root.number ? InputType.decimal : InputType.text;
+        accepted => { root.accepted(self.text); }
+        changed has-focus => {
+            if !self.has-focus { root.accepted(self.text); }
+        }
+    }
+    if root.text == "" && !input.has-focus: Text {
+        x: 3px;
+        height: parent.height;
+        text: root.placeholder;
+        color: #999999;
+        font-family: root.dialog ? Theme.sans : Theme.mono;
+        font-size: Theme.font-size;
+        vertical-alignment: center;
+    }
+}
+
+// A check box with a label.
+export component Check inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked;
+    in property <bool> enabled: true;
+    in property <bool> dialog;
+    callback toggled(bool);
+    min-height: Theme.row;
+    min-width: label.preferred-width + 22px;
+    preferred-width: label.preferred-width + 22px;
+    opacity: root.enabled ? 1 : 0.5;
+    box := Rectangle {
+        x: 0;
+        y: (parent.height - 13px) / 2;
+        width: 13px;
+        height: 13px;
+        border-width: 1px;
+        border-color: Theme.dark-solid;
+        background: root.checked ? Theme.header : Theme.field;
+        if root.checked: Path {
+            x: 2px;
+            y: 2px;
+            width: 9px;
+            height: 9px;
+            viewbox-width: 10;
+            viewbox-height: 10;
+            commands: "M 1 5 L 4 8 L 9 1";
+            stroke: white;
+            stroke-width: 1.6px;
+        }
+    }
+    label := Text {
+        x: 19px;
+        text: root.text;
+        font-family: root.dialog ? Theme.sans : Theme.mono;
+        font-size: Theme.font-size;
+        color: root.dialog ? Theme.dialog-text : Theme.text;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+// The FMG range slider: a thin white track and a small square thumb.
+// `changed` comes while the pointer drags, `released` when it stops.
+export component Slider inherits Rectangle {
+    in-out property <float> value;
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in property <float> step: 1;
+    in property <bool> enabled: true;
+    in property <bool> dialog;
+    callback changed(float);
+    callback released(float);
+    min-height: Theme.row;
+    min-width: 60px;
+    horizontal-stretch: 1;
+    property <length> thumb: 11px;
+    property <float> span: max(root.maximum - root.minimum, 0.000001);
+    Rectangle {
+        y: (parent.height - 2px) / 2;
+        height: 2px;
+        background: root.dialog ? #d4d4d4 : #ffffff;
+    }
+    Rectangle {
+        x: (root.width - root.thumb) * ((root.value - root.minimum) / root.span).clamp(0, 1);
+        y: (parent.height - root.thumb) / 2;
+        width: root.thumb;
+        height: root.thumb;
+        border-radius: 2px;
+        border-width: 1px;
+        border-color: root.dialog ? #9b9b9b : Theme.dark-solid;
+        background: root.dialog ? #e9e9e9 : Theme.light-solid;
+        drop-shadow-offset-x: 0.5px;
+        drop-shadow-offset-y: 0.5px;
+        drop-shadow-color: Theme.dark-solid;
+    }
+    function value-at(x: length) -> float {
+        let t = ((x - root.thumb / 2) / max(root.width - root.thumb, 1px)).clamp(0, 1);
+        let raw = root.minimum + t * root.span;
+        return (root.minimum + ((raw - root.minimum) / root.step).round() * root.step).clamp(root.minimum, root.maximum);
+    }
+    TouchArea {
+        enabled: root.enabled;
+        pointer-event(ev) => {
+            if ev.kind == PointerEventKind.down {
+                root.value = root.value-at(self.mouse-x);
+                root.changed(root.value);
+            } else if ev.kind == PointerEventKind.up {
+                root.released(root.value);
+            }
+        }
+        moved => {
+            if self.pressed {
+                root.value = root.value-at(self.mouse-x);
+                root.changed(root.value);
+            }
+        }
+    }
+}
+
+// A select box like the HTML select of FMG. Entries with `true` in
+// `disabled` cannot be chosen.
+export component Select inherits Rectangle {
+    in property <[string]> model;
+    in property <[bool]> disabled;
+    in-out property <int> current-index;
+    in property <string> placeholder;
+    in property <bool> enabled: true;
+    in property <bool> dialog;
+    callback selected(int);
+    min-height: Theme.row;
+    min-width: 60px;
+    preferred-width: 120px;
+    background: root.enabled ? Theme.field : #eeeeee;
+    border-width: 1px;
+    border-color: Theme.field-border;
+    Text {
+        x: 4px;
+        width: parent.width - 20px;
+        text: root.current-index >= 0 && root.current-index < root.model.length
+            ? root.model[root.current-index] : root.placeholder;
+        font-family: root.dialog ? Theme.sans : Theme.mono;
+        font-size: Theme.font-size;
+        color: #000000;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Text {
+        x: parent.width - 14px;
+        text: "▾";
+        color: #666666;
+        font-size: Theme.font-size;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        enabled: root.enabled;
+        clicked => { popup.show(); }
+    }
+    popup := PopupWindow {
+        x: 0;
+        y: root.height;
+        width: max(root.width, 140px);
+        Rectangle {
+            background: Theme.field;
+            border-width: 1px;
+            border-color: Theme.field-border;
+            drop-shadow-blur: 6px;
+            drop-shadow-color: #00000060;
+            VerticalLayout {
+                padding: 1px;
+                for item[i] in root.model: Rectangle {
+                    height: Theme.row;
+                    background: entry.has-hover && !root.disabled[i] ? Theme.header-active
+                        : i == root.current-index ? #e8dde2 : transparent;
+                    Text {
+                        x: 5px;
+                        text: item;
+                        font-family: root.dialog ? Theme.sans : Theme.mono;
+                        font-size: Theme.font-size;
+                        color: root.disabled[i] ? #aaaaaa : (entry.has-hover ? white : #000000);
+                        vertical-alignment: center;
+                    }
+                    entry := TouchArea {
+                        enabled: !root.disabled[i];
+                        clicked => {
+                            root.current-index = i;
+                            root.selected(i);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// A row of a table: an id, the cell texts, and a mark.
+export struct TableRow {
+    id: string,
+    cells: [string],
+    // `true`: the row is a pin (it can be edited).
+    pinned: bool,
+}
+
+// A table like the FMG overview dialogs: a header and rows. `widths` is the
+// width of each column. A row with an action shows the action button.
+export component Table inherits VerticalLayout {
+    in property <[string]> header;
+    in property <[length]> widths;
+    in property <[TableRow]> rows;
+    in property <string> selected;
+    in property <string> action;
+    in property <string> pinned-action;
+    in property <length> list-height: 220px;
+    callback select(string);
+    callback act(string);
+    spacing: 0;
+    Rectangle {
+        height: 20px;
+        background: #e0d7db;
+        HorizontalLayout {
+            padding-left: 4px;
+            spacing: 4px;
+            for h[j] in root.header: Text {
+                width: root.widths[j];
+                text: h;
+                font-family: Theme.sans;
+                font-size: Theme.font-size - 1px;
+                font-weight: 700;
+                color: Theme.dialog-text;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+    }
+    Rectangle {
+        height: root.list-height;
+        border-width: 1px;
+        border-color: #dddddd;
+        background: #ffffff;
+        Flickable {
+            content-height: root.rows.length * 20px;
+            for row[i] in root.rows: Rectangle {
+                y: i * 20px;
+                height: 20px;
+                width: parent.width;
+                background: row.id == root.selected ? #ecd8d8 : (hover.has-hover ? #f4eef1 : (Math.mod(i, 2) == 0 ? #ffffff : #faf7f8));
+                hover := TouchArea {
+                    clicked => { root.select(row.id); }
+                }
+                HorizontalLayout {
+                    padding-left: 4px;
+                    padding-right: 2px;
+                    spacing: 4px;
+                    for cell[j] in row.cells: Text {
+                        width: root.widths[j];
+                        text: cell;
+                        font-family: Theme.sans;
+                        font-size: Theme.font-size;
+                        font-weight: row.pinned && j == 0 ? 700 : 400;
+                        color: Theme.dialog-text;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    if (row.pinned ? root.pinned-action : root.action) != "": DialogButton {
+                        height: 18px;
+                        min-height: 18px;
+                        text: row.pinned ? root.pinned-action : root.action;
+                        clicked => { root.act(row.id); }
+                    }
+                }
+            }
+        }
+        if root.rows.length == 0: Text {
+            text: "No items.";
+            color: #999999;
+            font-family: Theme.sans;
+            font-size: Theme.font-size;
+        }
+    }
+}
+
+// A label and a control on one line, in a dialog or in the menu.
+export component FormRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <length> label-width: 110px;
+    in property <bool> dialog: true;
+    spacing: 6px;
+    min-height: Theme.row;
+    Text {
+        width: root.label-width;
+        text: root.label;
+        font-family: root.dialog ? Theme.sans : Theme.mono;
+        font-size: Theme.font-size;
+        color: root.dialog ? Theme.dialog-text : Theme.text;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    @children
+}
+
+// A small grey note in a dialog or in the menu (`.tip` of FMG).
+export component Tip inherits Text {
+    in property <bool> dialog;
+    font-family: Theme.sans;
+    font-size: Theme.font-size - 1px;
+    font-italic: true;
+    color: root.dialog ? #777777 : #444444;
+    wrap: word-wrap;
+}

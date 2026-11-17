@@ -1,0 +1,52 @@
+// The Heightmap editor: the brush that raises or lowers the land.
+
+import { Theme, Label, Slider, Check, FormRow, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Tool } from "../globals.slint";
+
+export component HeightmapDialog inherits Dialog {
+    id: "heightmap";
+    title: "Heightmap Editor";
+    content-width: 330px;
+    pos-x: 380px;
+    pos-y: 40px;
+    FormRow {
+        label: "Brush";
+        Check {
+            text: "Use the brush on the map";
+            dialog: true;
+            checked: AppState.tool == Tool.brush;
+            toggled(on) => { AppState.tool = on ? Tool.brush : Tool.select; }
+        }
+    }
+    FormRow {
+        label: "Radius";
+        Slider {
+            dialog: true;
+            minimum: 1;
+            maximum: AppState.brush-radius-max;
+            value <=> AppState.brush-radius;
+            changed(v) => { Actions.brush-changed(); }
+        }
+        Label { dialog: true; width: 50px; text: Math.round(AppState.brush-radius * 10) / 10; }
+    }
+    FormRow {
+        label: "Strength";
+        Slider {
+            dialog: true;
+            minimum: 1;
+            maximum: 50;
+            value <=> AppState.brush-strength;
+        }
+        Label { dialog: true; width: 50px; text: Math.round(AppState.brush-strength); }
+    }
+    FormRow {
+        label: "Change";
+        Check { dialog: true; text: "Raise"; checked: AppState.brush-raise; toggled => { AppState.brush-raise = true; } }
+        Check { dialog: true; text: "Lower"; checked: !AppState.brush-raise; toggled => { AppState.brush-raise = false; } }
+    }
+    Tip {
+        dialog: true;
+        text: "Click or drag on the map. Each stroke is an edit that you can undo.";
+    }
+}

@@ -1,0 +1,47 @@
+// The print preview: the checks of the report of the shown variant.
+
+import { Theme, Label, DialogButton } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions } from "../globals.slint";
+
+export component PrintDialog inherits Dialog {
+    id: "print";
+    title: "Print Preview";
+    content-width: 360px;
+    pos-x: 420px;
+    pos-y: 120px;
+    Label {
+        dialog: true;
+        text: AppState.checks-summary;
+        wrap: word-wrap;
+        font-weight: 700;
+    }
+    Rectangle {
+        height: 230px;
+        background: white;
+        border-width: 1px;
+        border-color: #dddddd;
+        Flickable {
+            content-height: AppState.checks.length * 20px;
+            for check[i] in AppState.checks: HorizontalLayout {
+                width: parent.width;
+                y: i * 20px;
+                height: 20px;
+                padding-left: 4px;
+                spacing: 6px;
+                Label {
+                    dialog: true;
+                    width: 38px;
+                    text: check.pass ? "PASS" : "FAIL";
+                    color: check.pass ? #208040 : #c02020;
+                    font-weight: 700;
+                }
+                Label { dialog: true; text: check.name + check.detail; }
+            }
+        }
+    }
+    HorizontalLayout {
+        alignment: end;
+        DialogButton { text: "Show the full page"; clicked => { Actions.fit(); } }
+    }
+}

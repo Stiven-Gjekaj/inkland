@@ -1,0 +1,35 @@
+// The Tools tab: the buttons that open the editors and the tools that add
+// items on the map, in the groups of FMG.
+
+import { Theme, MenuButton, Separator } from "theme.slint";
+import { AppState, Actions, ToolRow, Lists } from "globals.slint";
+
+component ToolGrid inherits Rectangle {
+    in property <string> group;
+    property <[ToolRow]> tools: Lists.tools;
+    property <length> cell-w: (self.width - 2 * 3px) / 3;
+    property <int> count: Lists.tool-counts[root.group == "Edit" ? 0 : root.group == "Add" ? 1 : 2];
+    property <int> first: root.group == "Edit" ? 0 : root.group == "Add" ? Lists.tool-counts[0] : Lists.tool-counts[0] + Lists.tool-counts[1];
+    height: Math.ceil(root.count / 3) * (Theme.row + 5px);
+    for t[i] in root.tools: MenuButton {
+        visible: i >= root.first && i < root.first + root.count;
+        x: Math.mod(i - root.first, 3) * (root.cell-w + 3px);
+        y: Math.floor((i - root.first) / 3) * (Theme.row + 5px);
+        width: root.cell-w;
+        height: Theme.row + 2px;
+        text: t.label;
+        enabled: t.enabled;
+        pressed: t.active;
+        clicked => { Actions.open-tool(t.id); }
+    }
+}
+
+export component ToolsTab inherits VerticalLayout {
+    spacing: 2px;
+    Separator { text: "Edit"; }
+    ToolGrid { group: "Edit"; }
+    Separator { text: "Add"; }
+    ToolGrid { group: "Add"; }
+    Separator { text: "Show"; }
+    ToolGrid { group: "Show"; }
+}

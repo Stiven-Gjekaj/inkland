@@ -1,6 +1,10 @@
 // The state that the Rust code gives to the user interface, and the
 // actions that the user interface sends to the Rust code.
 
+import { TableRow } from "theme.slint";
+
+export { TableRow }
+
 export enum Tool { select, add-pin, brush }
 
 // A point pin. `x` and `y` are its position in the map view.
@@ -11,9 +15,22 @@ export struct PinRow {
     y: length,
 }
 
+// A layer button: the FMG id, the text, the hotkey, and its state.
 export struct LayerRow {
-    name: string,
+    id: string,
+    label: string,
+    key: string,
     on: bool,
+    available: bool,
+}
+
+// A button of the Tools tab.
+export struct ToolRow {
+    id: string,
+    label: string,
+    hint: string,
+    enabled: bool,
+    active: bool,
 }
 
 export struct CheckRow {
@@ -39,7 +56,7 @@ export global AppState {
     in-out property <Tool> tool: Tool.select;
     in property <[PinRow]> pins;
     in-out property <string> selected-id;
-    in property <string> selected-name;
+    in-out property <string> selected-name;
     // A pin that the user drags: its position in the map view.
     in property <bool> dragging-pin;
     in property <length> drag-x;
@@ -67,6 +84,16 @@ export global AppState {
     in property <string> status-cell;
     in property <string> message;
     in property <bool> message-is-error;
+    in property <string> file-name;
+}
+
+// The menu: open or closed, and the open tab.
+export global Ui {
+    in-out property <bool> panel-open: true;
+    // 0 Layers, 1 Style, 2 Options, 3 Tools, 4 About.
+    in-out property <int> tab: 0;
+    // The top of the stack of the dialogs.
+    in-out property <int> dialog-top: 10;
 }
 
 export global Actions {
@@ -94,8 +121,43 @@ export global Actions {
     callback save-as();
     callback save-script();
     callback quit();
+    // A button of the Tools tab.
+    callback open-tool(string);
 
     // The Rust code calls this from the event loop when a worker thread
     // has a result.
     callback poll();
+}
+
+// The lists that the menu shows.
+export global Lists {
+    // The tools of the groups Edit, Add, and Show, in this order.
+    in property <[ToolRow]> tools;
+    // The number of tools in each group.
+    in property <[int]> tool-counts: [0, 0, 0];
+}
+
+// The open dialogs. `open` and `close` take the id of a dialog.
+export global Dialogs {
+    in-out property <bool> heightmap;
+    in-out property <bool> burgs;
+    in-out property <bool> print;
+
+    public function open(id: string) {
+        if id == "heightmap" { self.heightmap = true; }
+        if id == "burgs" { self.burgs = true; }
+        if id == "print" { self.print = true; }
+    }
+
+    public function close(id: string) {
+        if id == "heightmap" { self.heightmap = false; }
+        if id == "burgs" { self.burgs = false; }
+        if id == "print" { self.print = false; }
+    }
+
+    public function close-all() {
+        self.heightmap = false;
+        self.burgs = false;
+        self.print = false;
+    }
 }

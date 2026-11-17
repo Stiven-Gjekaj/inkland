@@ -1,33 +1,43 @@
-// The status bar: the pointer position in config units, the height and the
-// biome under the pointer, and the last message.
+// The status bar at the bottom of the map: the pointer position in config
+// units, the facts of the cell under the pointer, and the last message.
 
+import { Theme } from "theme.slint";
 import { AppState } from "globals.slint";
 
 export component StatusBar inherits Rectangle {
-    height: 26px;
-    background: #e4e4e4;
+    height: 22px;
+    background: #fafafae0;
+    Rectangle { height: 1px; y: 0; background: Theme.border; }
     HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        spacing: 16px;
+        spacing: 14px;
         Text {
             text: AppState.status-position;
             vertical-alignment: center;
+            font-family: Theme.mono;
+            font-size: Theme.font-size - 1px;
             color: #202020;
-            min-width: 170px;
+            min-width: 190px;
         }
         Text {
             text: AppState.status-cell;
             vertical-alignment: center;
+            font-family: Theme.sans;
+            font-size: Theme.font-size - 1px;
             color: #202020;
-            min-width: 260px;
+            horizontal-stretch: 2;
+            overflow: elide;
         }
         Text {
             text: AppState.message;
             vertical-alignment: center;
+            horizontal-alignment: right;
+            font-family: Theme.sans;
+            font-size: Theme.font-size - 1px;
             horizontal-stretch: 1;
             overflow: elide;
-            color: AppState.message-is-error ? #b01010 : #202020;
+            color: AppState.message-is-error ? #b01010 : #404040;
         }
     }
 }

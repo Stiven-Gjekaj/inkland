@@ -1,0 +1,36 @@
+// The Layers tab: the variant, and a button for each map layer. A layer
+// that the renderer does not have is grey and cannot be clicked.
+
+import { Theme, MenuButton, Heading, Select, Tip } from "theme.slint";
+import { AppState, Actions } from "globals.slint";
+
+export component LayersTab inherits VerticalLayout {
+    spacing: 4px;
+    property <length> cell-w: (self.width - 2 * 5px) / 3;
+    HorizontalLayout {
+        spacing: 6px;
+        Heading { text: "Variant:"; width: 90px; vertical-alignment: center; }
+        Select {
+            horizontal-stretch: 1;
+            model: AppState.variants;
+            current-index <=> AppState.variant-index;
+            selected(i) => { Actions.select-variant(i); }
+        }
+    }
+    Rectangle {
+        height: Math.ceil(AppState.layers.length / 3) * (Theme.row + 6px);
+        for layer[i] in AppState.layers: MenuButton {
+            x: Math.mod(i, 3) * (root.cell-w + 5px);
+            y: Math.floor(i / 3) * (Theme.row + 6px);
+            width: root.cell-w;
+            height: Theme.row + 2px;
+            text: layer.label;
+            off: !layer.on;
+            enabled: layer.available;
+            clicked => { Actions.set-layer(layer.id, !layer.on); }
+        }
+    }
+    Tip {
+        text: "Click to show or hide a layer. A grey layer is not in the renderer yet.";
+    }
+}

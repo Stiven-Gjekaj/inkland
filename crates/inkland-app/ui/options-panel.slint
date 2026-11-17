@@ -1,0 +1,140 @@
+// The menu of FMG: a button with an arrow when it is closed, and a panel
+// with the tabs Layers, Style, Options, Tools, and About when it is open.
+// The buttons at the bottom make, save, and open maps.
+
+import { Theme, TabButton } from "theme.slint";
+import { AppState, Actions, Ui } from "globals.slint";
+import { LayersTab } from "tab-layers.slint";
+import { ToolsTab } from "tab-tools.slint";
+import { AboutTab } from "tab-about.slint";
+
+component StickedButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    min-width: label.preferred-width + 6px;
+    height: 20px;
+    opacity: root.enabled ? 1 : 0.45;
+    label := Text {
+        text: root.text;
+        font-family: Theme.mono;
+        font-size: Theme.font-size;
+        font-weight: 700;
+        color: touch.has-hover && root.enabled ? white : Theme.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component OptionsPanel inherits Rectangle {
+    // The panel moves with a drag on its top edge.
+    in-out property <length> pos-x: 10px;
+    in-out property <length> pos-y: 10px;
+    property <length> panel-width: 330px;
+    x: root.pos-x;
+    y: root.pos-y;
+    width: Ui.panel-open ? root.panel-width : trigger.width;
+    height: Ui.panel-open ? panel.preferred-height : trigger.height;
+
+    // The closed menu: the arrow button.
+    trigger := Rectangle {
+        x: 0;
+        y: 0;
+        visible: !Ui.panel-open;
+        width: 26px;
+        height: 30px;
+        background: touch.has-hover ? Theme.header-active : Theme.main;
+        border-width: 1px;
+        border-color: Theme.border;
+        Text {
+            text: "►";
+            font-size: 13px;
+            color: touch.has-hover ? white : Theme.text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        touch := TouchArea {
+            clicked => { Ui.panel-open = true; }
+        }
+    }
+
+    Rectangle {
+        visible: Ui.panel-open;
+        background: Theme.light;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 4px;
+        drop-shadow-color: #00000040;
+        // Stop the clicks and the wheel here, so that the map does not
+        // get them.
+        TouchArea {
+            scroll-event(ev) => { accept }
+        }
+        panel := VerticalLayout {
+            padding: 1px;
+            spacing: 0;
+            // The drag handle.
+            Rectangle {
+                height: 5px;
+                background: Theme.main;
+                TouchArea {
+                    mouse-cursor: MouseCursor.move;
+                    moved => {
+                        if self.pressed {
+                            root.pos-x += self.mouse-x - self.pressed-x;
+                            root.pos-y += self.mouse-y - self.pressed-y;
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                height: 26px;
+                HorizontalLayout {
+                    spacing: 0;
+                    TabButton {
+                        text: "◄";
+                        width: 26px;
+                        clicked => { Ui.panel-open = false; }
+                    }
+                    TabButton { text: "Layers"; active: Ui.tab == 0; clicked => { Ui.tab = 0; } }
+                    TabButton { text: "Style"; active: Ui.tab == 1; clicked => { Ui.tab = 1; } }
+                    TabButton { text: "Options"; active: Ui.tab == 2; clicked => { Ui.tab = 2; } }
+                    TabButton { text: "Tools"; active: Ui.tab == 3; clicked => { Ui.tab = 3; } }
+                    TabButton { text: "About"; active: Ui.tab == 4; clicked => { Ui.tab = 4; } }
+                }
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.dark-solid;
+                }
+            }
+            VerticalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                if Ui.tab == 0: LayersTab {}
+                if Ui.tab == 3: ToolsTab {}
+                if Ui.tab == 4: AboutTab {}
+            }
+            // The buttons that FMG keeps under each tab.
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 6px;
+                padding-bottom: 3px;
+                alignment: space-around;
+                StickedButton { text: "Open"; clicked => { Actions.open(); } }
+                StickedButton { text: "Save"; clicked => { Actions.save(); } }
+                StickedButton { text: "Save As"; clicked => { Actions.save-as(); } }
+                StickedButton { text: "Script"; clicked => { Actions.save-script(); } }
+                StickedButton { text: "Undo"; enabled: AppState.can-undo; clicked => { Actions.undo(); } }
+                StickedButton { text: "Redo"; enabled: AppState.can-redo; clicked => { Actions.redo(); } }
+                StickedButton { text: "Zoom out"; clicked => { Actions.fit(); } }
+            }
+        }
+    }
+}

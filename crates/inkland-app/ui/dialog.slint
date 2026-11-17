@@ -1,0 +1,108 @@
+// The dialog window of the app.
+
+import { Theme } from "theme.slint";
+import { Ui, Dialogs } from "globals.slint";
+
+// A movable and closable window inside the main window, like the jQuery
+// dialogs of FMG. The title bar moves the dialog. A click in the dialog
+// puts it on top of the other dialogs.
+export component Dialog inherits Rectangle {
+    // The id of the dialog in `Dialogs`.
+    in property <string> id;
+    in property <string> title;
+    in property <length> content-width: 340px;
+    in-out property <length> pos-x: 400px;
+    in-out property <length> pos-y: 60px;
+    // The place in the stack of the dialogs. `DialogStack.top` is the top.
+    in-out property <int> stack;
+    init => { root.raise(); }
+    function raise() {
+        Ui.dialog-top += 1;
+        root.stack = Ui.dialog-top;
+    }
+    x: root.pos-x;
+    y: root.pos-y;
+    z: root.stack;
+    width: root.content-width;
+    height: frame.preferred-height;
+    background: Theme.dialogs;
+    border-width: 1px;
+    border-color: Theme.border;
+    drop-shadow-blur: 8px;
+    drop-shadow-color: #00000050;
+    // Stop the clicks and the wheel here, so that the map does not get them.
+    TouchArea {
+        pointer-event(ev) => {
+            if ev.kind == PointerEventKind.down { root.raise(); }
+        }
+        scroll-event(ev) => { accept }
+    }
+    frame := VerticalLayout {
+        spacing: 0;
+        Rectangle {
+            height: 26px;
+            background: Theme.header;
+            border-width: 0;
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.dark-solid;
+            }
+            drag := TouchArea {
+                mouse-cursor: MouseCursor.move;
+                pointer-event(ev) => {
+                    if ev.kind == PointerEventKind.down { root.raise(); }
+                }
+                moved => {
+                    if self.pressed {
+                        root.pos-x += self.mouse-x - self.pressed-x;
+                        root.pos-y += self.mouse-y - self.pressed-y;
+                    }
+                }
+            }
+            Text {
+                x: 10px;
+                width: parent.width - 44px;
+                text: root.title;
+                color: white;
+                font-family: Theme.sans;
+                font-size: Theme.font-size * 1.2;
+                font-weight: 700;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Rectangle {
+                x: parent.width - 30px;
+                y: 4px;
+                width: 22px;
+                height: 18px;
+                border-width: 1px;
+                border-color: close-touch.pressed ? #5d4651 : #c5c5c5;
+                background: close-touch.has-hover ? Theme.header-active : transparent;
+                Path {
+                    x: (parent.width - 8px) / 2;
+                    y: (parent.height - 8px) / 2;
+                    width: 8px;
+                    height: 8px;
+                    viewbox-width: 8;
+                    viewbox-height: 8;
+                    commands: "M 0 0 L 8 8 M 8 0 L 0 8";
+                    stroke: white;
+                    stroke-width: 1.5px;
+                }
+                close-touch := TouchArea {
+                    clicked => { Dialogs.close(root.id); }
+                }
+            }
+        }
+        VerticalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-top: 8px;
+            padding-bottom: 10px;
+            spacing: 6px;
+            @children
+        }
+    }
+}
+

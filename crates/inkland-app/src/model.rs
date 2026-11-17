@@ -5,9 +5,9 @@
 //! edit script come from `inkland::History`. This module does not use Slint,
 //! so the tests can run without a window.
 
+use crate::catalog::{self, Target};
 use inkland::{Command, Config, Error, History, PinList};
-use inkland_core::config::LayerName;
-use serde_json::json;
+use serde_json::{Value, json};
 
 /// An error as one line of text: the code and the message.
 pub fn error_text(e: &Error) -> String {
@@ -181,29 +181,64 @@ impl Editor {
         })
     }
 
-    /// Show or hide a layer. This sets `/render/layers`. A layer that comes
-    /// back goes before the first shown layer that is later in the default
-    /// order.
-    pub fn set_layer(&mut self, layer: LayerName, on: bool) -> Result<(), String> {
-        let mut layers = self.config.render.layers.clone();
-        let present = layers.contains(&layer);
-        if on == present {
+    /// Set the value at a JSON Pointer of the config. Nothing happens if
+    /// the value is already there, so that the history gets no empty edit.
+    pub fn set(&mut self, path: &str, value: Value) -> Result<(), String> {
+        if catalog::value_at(&self.config, path).as_ref() == Some(&value) {
             return Ok(());
         }
-        if on {
-            let at = layers
-                .iter()
-                .position(|l| *l > layer)
-                .unwrap_or(layers.len());
-            layers.insert(at, layer);
-        } else {
-            layers.retain(|l| *l != layer);
-        }
-        let value = serde_json::to_value(&layers).map_err(|e| e.to_string())?;
         self.run(Command::Set {
-            path: "/render/layers".to_owned(),
+            path: path.to_owned(),
             value,
         })
+    }
+
+    /// Remove the value at a JSON Pointer, so that the default applies.
+    /// Nothing happens if there is no value.
+    pub fn unset(&mut self, path: &str) -> Result<(), String> {
+        if catalog::value_at(&self.config, path).is_none() {
+            return Ok(());
+        }
+        self.run(Command::Unset {
+            path: path.to_owned(),
+        })
+    }
+
+    /// Show or hide the layer with the FMG id `id` (see
+    /// `catalog::LAYERS`). A map layer is in `/render/layers`. A layer that
+    /// comes back goes to its place in the draw order. The scale bar, the
+    /// wind rose, and the grid are in `/render/extras`.
+    pub fn set_layer(&mut self, id: &str, on: bool) -> Result<(), String> {
+        let def = catalog::layer_def(id).ok_or_else(|| format!("there is no layer {id:?}"))?;
+        if !catalog::available(def) {
+            return Err(format!("the renderer has no layer {:?}", def.label));
+        }
+        if catalog::is_on(&self.config, def) == on {
+            return Ok(());
+        }
+        match def.target {
+            Target::Layer(name) => {
+                let mut layers = catalog::config_layers(&self.config);
+                if on {
+                    let k = catalog::order_of(name);
+                    let at = layers
+                        .iter()
+                        .position(|l| catalog::order_of(l) > k)
+                        .unwrap_or(layers.len());
+                    layers.insert(at, name.to_owned());
+                } else {
+                    layers.retain(|l| l != name);
+                }
+                self.set("/render/layers", json!(layers))
+            }
+            Target::Extra("grid") if on => {
+                let step = catalog::grid_step(&self.config);
+                self.set("/render/extras/grid", json!({ "step": step }))
+            }
+            Target::Extra("grid") => self.unset("/render/extras/grid"),
+            Target::Extra(field) => self.set(&format!("/render/extras/{field}"), json!(on)),
+            Target::None => Err(format!("the renderer has no layer {:?}", def.label)),
+        }
     }
 
     /// Undo the last edit. `false` if there is nothing to undo.
@@ -315,18 +350,9 @@ mod tests {
             ),
             ("remove pin", Box::new(|e| e.remove_pin("mill"))),
             ("clear name", Box::new(|e| e.rename_pin("ostrey", " "))),
-            (
-                "hide layer",
-                Box::new(|e| e.set_layer(LayerName::Relief, false)),
-            ),
-            (
-                "show layer",
-                Box::new(|e| e.set_layer(LayerName::Relief, true)),
-            ),
-            (
-                "hide labels",
-                Box::new(|e| e.set_layer(LayerName::Labels, false)),
-            ),
+            ("hide layer", Box::new(|e| e.set_layer("relief", false))),
+            ("show layer", Box::new(|e| e.set_layer("relief", true))),
+            ("hide labels", Box::new(|e| e.set_layer("labels", false))),
         ]
     }
 
@@ -416,11 +442,29 @@ mod tests {
     fn a_layer_that_comes_back_takes_its_place_in_the_order() {
         let mut e = Editor::new(config());
         let all = e.config().render.layers.clone();
-        e.set_layer(LayerName::Rivers, false).unwrap();
-        assert!(!e.config().render.layers.contains(&LayerName::Rivers));
-        e.set_layer(LayerName::Rivers, false).unwrap();
+        e.set_layer("rivers", false).unwrap();
+        assert!(!catalog::config_layers(e.config()).contains(&"rivers".to_owned()));
+        e.set_layer("rivers", false).unwrap();
         assert_eq!(e.history.script().commands.len(), 1, "no change, no edit");
-        e.set_layer(LayerName::Rivers, true).unwrap();
+        e.set_layer("rivers", true).unwrap();
         assert_eq!(e.config().render.layers, all);
+    }
+
+    #[test]
+    fn the_scale_bar_and_the_grid_are_extras() {
+        let mut e = Editor::new(config());
+        e.set_layer("scaleBar", true).unwrap();
+        assert_eq!(e.config().render.extras.scale_bar, Some(true));
+        e.set_layer("grid", true).unwrap();
+        assert!(e.config().render.extras.grid.is_some());
+        e.set_layer("grid", false).unwrap();
+        assert!(e.config().render.extras.grid.is_none());
+        assert!(
+            e.set_layer("rulers", true).is_err(),
+            "no such renderer layer"
+        );
+        assert!(e.set_layer("nothing", true).is_err());
+        while e.undo().unwrap() {}
+        assert_eq!(e.config(), e.original());
     }
 }
