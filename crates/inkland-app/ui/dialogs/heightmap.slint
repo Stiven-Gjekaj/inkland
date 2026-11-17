@@ -1,15 +1,37 @@
 // The Heightmap editor: the brush that raises or lowers the land.
 
-import { Theme, Label, Slider, Check, FormRow, Tip } from "../theme.slint";
+import { Theme, Label, Slider, Check, FormRow, Tip, Select, Table, Heading } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
-import { AppState, Actions, Tool } from "../globals.slint";
+import { AppState, Actions, Tool, Opts, Lists } from "../globals.slint";
 
 export component HeightmapDialog inherits Dialog {
     id: "heightmap";
     title: "Heightmap Editor";
-    content-width: 330px;
-    pos-x: 380px;
+    content-width: 360px;
+    pos-x: 400px;
     pos-y: 40px;
+    FormRow {
+        label: "Template";
+        Select {
+            dialog: true;
+            horizontal-stretch: 1;
+            model: Opts.templates;
+            current-index <=> Opts.template;
+            placeholder: "Custom steps";
+            selected(i) => { Actions.choose("template", i); }
+        }
+    }
+    FormRow {
+        label: "Sea level";
+        sea := Slider {
+            dialog: true;
+            minimum: 1;
+            maximum: 99;
+            value: Opts.sea-level.to-float();
+            released(v) => { Actions.set-option("sea-level", v); }
+        }
+        Label { dialog: true; width: 50px; text: Math.round(sea.shown); }
+    }
     FormRow {
         label: "Brush";
         Check {
@@ -51,6 +73,14 @@ export component HeightmapDialog inherits Dialog {
     }
     Tip {
         dialog: true;
-        text: "Click or drag on the map. Each stroke is an edit that you can undo.";
+        text: "Click or drag on the map. Each stroke is an edit that you can undo. The strokes apply after the template.";
+    }
+    Table {
+        header: ["#", "Centre", "Radius", "Change"];
+        widths: [26px, 110px, 54px, 54px];
+        rows: Lists.brushes;
+        list-height: 120px;
+        pinned-action: "Remove";
+        act(id) => { Actions.remove-brush(id); }
     }
 }

@@ -34,7 +34,9 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 use ui::CheckRow;
-use ui::{Actions, AppState, AppWindow, Dialogs, LayerRow, Lists, Opts, Theme, ToolRow, Ui};
+use ui::{
+    Actions, AppState, AppWindow, Dialogs, LayerRow, Lists, Opts, TableRow, Theme, ToolRow, Ui,
+};
 use ui::{PinRow, Tool};
 
 /// The color around the page in the map view.
@@ -141,6 +143,19 @@ fn s(text: impl AsRef<str>) -> SharedString {
 
 fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
     ModelRc::new(VecModel::from(items))
+}
+
+/// The rows of an editor table.
+fn table(rows: Vec<inkland_app::rows::Row>) -> ModelRc<TableRow> {
+    model(
+        rows.into_iter()
+            .map(|r| TableRow {
+                id: s(r.id),
+                cells: model(r.cells.into_iter().map(s).collect()),
+                pinned: r.pinned,
+            })
+            .collect(),
+    )
 }
 
 /// Send a result to the event loop and ask it to read the results.
@@ -375,6 +390,7 @@ impl Controller {
                 .unwrap_or(catalog::PRESETS.len()) as i32,
         );
         self.update_options(c);
+        self.update_lists(&st);
         g.set_variants(model(c.variants.iter().map(|v| s(&v.name)).collect()));
         g.set_variant_index(e.variant as i32);
         g.set_brush_radius_max((c.frame.width.max(c.frame.height) / 4.0).max(2.0) as f32);
@@ -752,6 +768,16 @@ impl Controller {
         }
     }
 
+    /// The rows of the editor tables, from the config and from the shown
+    /// world.
+    fn update_lists(&self, st: &State) {
+        use inkland_app::rows;
+        let ui = self.ui();
+        let l = ui.global::<Lists>();
+        let c = st.editor.config();
+        l.set_brushes(table(rows::brush_rows(c)));
+    }
+
     /// The fields of the Options tab and of the Style tab.
     fn update_options(&self, c: &Config) {
         let ui = self.ui();
@@ -1021,6 +1047,14 @@ fn main() -> Result<(), slint::PlatformError> {
     a.on_new_map(move || {
         let seed = new_seed();
         c.set_option("seed", &seed.to_string());
+    });
+    let c = Rc::clone(&app);
+    a.on_remove_brush(move |id| {
+        let r = match id.parse::<usize>() {
+            Ok(i) => c.state.borrow_mut().editor.remove_brush(i),
+            Err(_) => Err(format!("{id:?} is not a brush")),
+        };
+        c.edited(r, &format!("remove the brush stroke {id}"));
     });
     let c = Rc::clone(&app);
     a.on_open_tool(move |id| c.open_tool(&id));

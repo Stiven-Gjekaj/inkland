@@ -118,6 +118,8 @@ export global Actions {
     callback choose(string, int);
     // Make a new map with a new seed.
     callback new-map();
+    // Remove the heightmap brush stroke with this row id.
+    callback remove-brush(string);
     callback select-pin(string);
     callback rename-pin(string, string);
     callback remove-pin(string);
@@ -147,6 +149,8 @@ export global Lists {
     in property <[string]> presets;
     in property <[bool]> presets-disabled;
     in-out property <int> preset-index;
+    // The rows of the editor tables.
+    in property <[TableRow]> brushes;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their

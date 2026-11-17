@@ -466,7 +466,6 @@ export component Table inherits VerticalLayout {
                     Rectangle { horizontal-stretch: 1; }
                     if (row.pinned ? root.pinned-action : root.action) != "": DialogButton {
                         height: 18px;
-                        min-height: 18px;
                         text: row.pinned ? root.pinned-action : root.action;
                         clicked => { root.act(row.id); }
                     }
