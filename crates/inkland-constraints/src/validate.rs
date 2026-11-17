@@ -137,6 +137,39 @@ impl<'a> Validator<'a> {
                 );
             }
         }
+        match inkland_core::names::data::culture_set(&w.culture_set) {
+            None => {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    "/world/culture_set",
+                    format!(
+                        "there is no culture set {:?}; use one of {:?}",
+                        w.culture_set,
+                        inkland_core::names::data::CULTURE_SETS
+                    ),
+                );
+            }
+            Some(set) if w.cultures == 0 || w.cultures as usize > set.len() => {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    "/world/cultures",
+                    format!(
+                        "the culture set {:?} has {} cultures; cultures must be 1 to {}",
+                        w.culture_set,
+                        set.len(),
+                        set.len()
+                    ),
+                );
+            }
+            Some(_) => {}
+        }
+        if w.states == 0 {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/states",
+                "states must be 1 or more",
+            );
+        }
         let [south, north] = w.climate.latitude_range;
         if !(-90.0..=90.0).contains(&south) || !(-90.0..=90.0).contains(&north) || south >= north {
             self.err(

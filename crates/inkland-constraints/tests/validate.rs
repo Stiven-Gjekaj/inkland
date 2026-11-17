@@ -330,3 +330,21 @@ fn height_range_without_a_whole_number_is_refused() {
     ]}}));
     one(&c, ErrorCode::ValueOutOfRange, "/pins/regions/0/height");
 }
+
+#[test]
+fn unknown_culture_set_is_refused() {
+    one(
+        &with(json!({ "world": { "culture_set": "martian" } })),
+        ErrorCode::ValueOutOfRange,
+        "/world/culture_set",
+    );
+}
+
+#[test]
+fn more_cultures_than_the_set_has_are_refused() {
+    one(
+        &with(json!({ "world": { "culture_set": "oriental", "cultures": 14 } })),
+        ErrorCode::ValueOutOfRange,
+        "/world/cultures",
+    );
+}
