@@ -63,8 +63,8 @@ With more than one error, the exit code comes from the most basic fault:
 | `RIVER_NOT_DOWNHILL` | 3 | 0.1.0 | The heights of the regions on a river course do not permit downhill flow, or no path joins the points of the river. |
 | `RIVER_CROSSES_RIVER` | 3 | 0.1.0 | A pinned river cannot reach its next point without crossing another pinned river, in each order of planning. |
 | `ROAD_TARGET_TOO_SHORT` | 3 | 0.1.0 | The road target, with its tolerance, is shorter than the straight lines through its points. `details`: `straight_length`. |
-| `ROAD_NO_PATH` | 3 | 0.1.0 | No land path joins the ends of a road. (Milestone 6.) |
-| `ROAD_LENGTH_OUT_OF_TOLERANCE` | 1 | 0.1.0 | A road is written, but its length is outside the tolerance. (Milestone 6.) |
+| `ROAD_NO_PATH` | 3 | 0.1.0 | No land path joins the points of a pinned road. |
+| `ROAD_LENGTH_OUT_OF_TOLERANCE` | 1 | 0.1.0 | A road is written, but its length is outside the tolerance. The report gives this as the failed check `pinned_road_length`. |
 | `IO_READ` | 4 | 0.1.0 | A file cannot be read. `details`: `file`. |
 | `IO_WRITE` | 4 | 0.1.0 | A file cannot be written. |
 | `NOT_IMPLEMENTED` | 70 | 0.1.0 | The command, or a config feature that `generate` must apply, is not in this version. The message names the milestone that adds it. Nothing is written. |

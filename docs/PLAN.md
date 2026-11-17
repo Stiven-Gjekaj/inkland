@@ -493,6 +493,32 @@ and the test that closes each milestone. We stop for a review after each one.
   Milestone 8.
 - Religions are not in this version.
 
+## 6.5 Notes from Milestone 6
+
+- A road is a least-cost path of land cells. A step costs its distance,
+  more on slopes, in wetland, and into a river (a bridge or a ford). A cell
+  that a road uses costs less, so roads share their paths.
+- A pinned road goes from its start place, through its `via` points in
+  order, to its end place. A later leg does not go back over an earlier leg.
+- Target length: if the road is too long with terrain costs, the router
+  uses the shortest path by distance. If the road is too short, it gets a
+  detour: a waypoint to one side of the middle of its longest leg. A scan of
+  the offset on both sides, and halving where the length passes the target,
+  finds an offset that gives a length in the tolerance. A road cannot be
+  shorter than its shortest path: then the report gives
+  `within_tolerance: false`, the check `pinned_road_length` fails, the
+  files are written, and the exit code is 1.
+- Crossings: a run of road cells on one river, where the road comes from
+  one side of the river and leaves on the other side. The kind is `bridge`
+  on a road, `ford` on a trail over a small river.
+- The generated network joins the capitals of each landmass (shortest tree)
+  with roads, and each town to the nearest place on the network with a
+  trail.
+- The SVG draws pinned roads with the id `road-<id>`, and the network as
+  `road-net-<n>` and `trail-net-<n>`.
+- Known limits: a region box or polygon in open water makes a block-shaped
+  coast. A pinned river course across a lake fills a thin strip of land.
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
