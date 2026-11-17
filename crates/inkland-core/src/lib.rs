@@ -4,6 +4,7 @@
 //! environment.
 
 pub mod biomes;
+pub mod borders;
 pub mod climate;
 pub mod config;
 pub mod courses;

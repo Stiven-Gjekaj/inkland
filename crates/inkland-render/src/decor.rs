@@ -83,7 +83,7 @@ pub fn water_lines(world: &World) -> Vec<Vec<u32>> {
             }
         }
     }
-    crate::svg::chain_edges(&edges)
+    inkland_core::borders::chain_edges(&edges)
 }
 
 /// Placed symbols in square buckets of the page, for a fast distance test.

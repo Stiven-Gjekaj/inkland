@@ -295,81 +295,7 @@ fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Varian
     s.push_str("</g>\n");
 }
 
-/// Join edges that share a vertex into lines. The result is the same for
-/// the same edges: lines start at the lowest free end, and closed loops at
-/// their lowest vertex.
-pub fn chain_edges(edges: &[(u32, u32)]) -> Vec<Vec<u32>> {
-    use std::collections::BTreeMap;
-    let mut adj: BTreeMap<u32, Vec<(u32, usize)>> = BTreeMap::new();
-    for (i, &(a, b)) in edges.iter().enumerate() {
-        adj.entry(a).or_default().push((b, i));
-        adj.entry(b).or_default().push((a, i));
-    }
-    let mut used = vec![false; edges.len()];
-    let mut lines = Vec::new();
-    let walk = |start: u32, used: &mut Vec<bool>| -> Vec<u32> {
-        let mut line = vec![start];
-        let mut cur = start;
-        while let Some(&(next, e)) = adj[&cur].iter().filter(|(_, e)| !used[*e]).min() {
-            used[e] = true;
-            line.push(next);
-            cur = next;
-            if adj[&cur].len() != 2 {
-                break;
-            }
-        }
-        line
-    };
-    // Open lines first: from each vertex that is not on exactly two edges.
-    let ends: Vec<u32> = adj
-        .iter()
-        .filter(|(_, v)| v.len() != 2)
-        .map(|(&k, _)| k)
-        .collect();
-    for v in ends {
-        while adj[&v].iter().any(|(_, e)| !used[*e]) {
-            lines.push(walk(v, &mut used));
-        }
-    }
-    // Then closed loops.
-    let all: Vec<u32> = adj.keys().copied().collect();
-    for v in all {
-        if adj[&v].iter().any(|(_, e)| !used[*e]) {
-            lines.push(walk(v, &mut used));
-        }
-    }
-    lines
-}
-
-/// The polygon edges between land cells whose owners differ by `key`.
-fn owner_edges(world: &World, key: &dyn Fn(usize) -> (u32, u32)) -> Vec<(u32, u32)> {
-    let g = &world.grid;
-    let mut edges = Vec::new();
-    for c in 0..g.len() {
-        if !world.features.is_land(c) {
-            continue;
-        }
-        let poly = &g.polygons[c];
-        for (k, &other) in g.edge_cells[c].iter().enumerate() {
-            if other == inkland_core::grid::OUTSIDE {
-                continue;
-            }
-            let o = other as usize;
-            if o < c || !world.features.is_land(o) {
-                continue;
-            }
-            let (a, b) = (key(c), key(o));
-            // Different owners; a missing second owner (0) is not a border.
-            if a != b && (a.0 != b.0 || (a.1 != 0 && b.1 != 0)) {
-                edges.push((poly[k], poly[(k + 1) % poly.len()]));
-            }
-        }
-    }
-    edges
-}
-
 fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
-    let soc = &world.society;
     let min = config.render.min_line_width_pt;
     let line = |verts: &[u32]| -> String {
         let pts: Vec<[f64; 2]> = verts
@@ -378,12 +304,7 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
             .collect();
         path_data(page, &pts, false)
     };
-    let state_edges = owner_edges(world, &|c| (soc.cell_state[c], 0));
-    let province_edges: Vec<(u32, u32)> =
-        owner_edges(world, &|c| (soc.cell_state[c], soc.cell_province[c]))
-            .into_iter()
-            .filter(|e| !state_edges.contains(e))
-            .collect();
+    let (state_edges, province_edges) = inkland_core::borders::state_and_province_edges(world);
     let _ = writeln!(
         s,
         "<g id=\"regions\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
@@ -393,7 +314,10 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
         "<g id=\"borders-provinces\" stroke-width=\"{}\" stroke-dasharray=\"0.3 0.9\">",
         n(line_mm(PROVINCE_BORDER_PT.max(min)))
     );
-    for (i, l) in chain_edges(&province_edges).iter().enumerate() {
+    for (i, l) in inkland_core::borders::chain_edges(&province_edges)
+        .iter()
+        .enumerate()
+    {
         let d = line(l);
         if !d.is_empty() {
             let _ = writeln!(s, "<path id=\"border-province-{}\" d=\"{d}\"/>", i + 1);
@@ -405,7 +329,10 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
         "<g id=\"borders-states\" stroke-width=\"{}\" stroke-dasharray=\"2 0.8 0.4 0.8\">",
         n(line_mm(STATE_BORDER_PT.max(min)))
     );
-    for (i, l) in chain_edges(&state_edges).iter().enumerate() {
+    for (i, l) in inkland_core::borders::chain_edges(&state_edges)
+        .iter()
+        .enumerate()
+    {
         let d = line(l);
         if !d.is_empty() {
             let _ = writeln!(s, "<path id=\"border-state-{}\" d=\"{d}\"/>", i + 1);
@@ -485,7 +412,7 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
             RoadKind::Road => "road-net",
             RoadKind::Trail => "trail-net",
         };
-        for (i, line) in chain_edges(&list).iter().enumerate() {
+        for (i, line) in inkland_core::borders::chain_edges(&list).iter().enumerate() {
             let pts: Vec<[f64; 2]> = line
                 .iter()
                 .map(|&c| world.grid.points[c as usize])
@@ -755,13 +682,6 @@ mod tests {
         assert!(river_width_pt(0.0, 50.0, 0.5) >= 0.5);
         assert!(river_width_pt(1e9, 50.0, 0.5) <= RIVER_MAX_PT);
         assert!(river_width_pt(400.0, 50.0, 0.5) > river_width_pt(60.0, 50.0, 0.5));
-    }
-
-    #[test]
-    fn chain_edges_joins_a_line_and_a_loop() {
-        let edges = [(1, 2), (3, 2), (3, 4), (10, 11), (11, 12), (12, 10)];
-        let lines = chain_edges(&edges);
-        assert_eq!(lines, vec![vec![1, 2, 3, 4], vec![10, 11, 12, 10]]);
     }
 
     #[test]
