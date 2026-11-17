@@ -1,0 +1,36 @@
+// The print preview: the checks of the report of the shown variant.
+
+import { Button, ListView } from "std-widgets.slint";
+import { AppState, Actions } from "globals.slint";
+
+export component PrintPreview inherits VerticalLayout {
+    spacing: 6px;
+    Text {
+        text: AppState.checks-summary;
+        wrap: word-wrap;
+        font-weight: 600;
+    }
+    ListView {
+        vertical-stretch: 1;
+        for check in AppState.checks: HorizontalLayout {
+            spacing: 6px;
+            padding-left: 4px;
+            height: 22px;
+            Text {
+                text: check.pass ? "PASS" : "FAIL";
+                color: check.pass ? #208040 : #c02020;
+                font-weight: 700;
+                width: 40px;
+                vertical-alignment: center;
+            }
+            Text {
+                text: check.name + check.detail;
+                vertical-alignment: center;
+            }
+        }
+    }
+    Button {
+        text: "Show the full page";
+        clicked => { Actions.fit(); }
+    }
+}

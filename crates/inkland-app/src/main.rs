@@ -18,6 +18,7 @@ use inkland_app::worker::Worker;
 use inkland_core::config::LayerName;
 use inkland_render::page::Page;
 use inkland_render::png::{FontDb, Scene};
+use serde_json::Value;
 use slint::{ComponentHandle, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -25,6 +26,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
+use ui::CheckRow;
 use ui::{Actions, AppState, AppWindow, LayerRow};
 use ui::{PinRow, Tool};
 
@@ -44,6 +46,7 @@ struct Generated {
     world: World,
     config: Config,
     scene: Scene,
+    checks: Vec<(String, bool, String)>,
     warnings: usize,
 }
 
@@ -160,11 +163,30 @@ fn generate(job: &GenJob, fonts: &mut Option<(Vec<String>, FontDb)>) -> Result<G
         .map(|(_, f)| *f)
         .collect();
     let scene = Scene::parse(&v.svg, db, &families)?;
+    let checks = v.report["checks"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .map(|c| {
+                    let detail = match &c["count"] {
+                        Value::Number(n) if c["pass"] == false => format!(" ({n})"),
+                        _ => String::new(),
+                    };
+                    (
+                        c["name"].as_str().unwrap_or("?").to_owned(),
+                        c["pass"] == true,
+                        detail,
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     let warnings = v.report["warnings"].as_array().map_or(0, Vec::len);
     Ok(Generated {
         world,
         config: job.config.clone(),
         scene,
+        checks,
         warnings,
     })
 }
@@ -401,6 +423,7 @@ impl Controller {
                     world,
                     config,
                     scene,
+                    checks,
                     warnings,
                 } = *made;
                 let page = config
@@ -409,6 +432,25 @@ impl Controller {
                     .find(|v| v.name == st.editor.variant_name())
                     .map(|v| Page::new(&config, v));
                 let px_per_mm = page.map_or(1.0, |p| f64::from(scene.size()[0]) / p.w_mm);
+                let failed = checks.iter().filter(|c| !c.1).count();
+                g.set_checks(model(
+                    checks
+                        .into_iter()
+                        .map(|(name, pass, detail)| CheckRow {
+                            name: s(name),
+                            pass,
+                            detail: s(detail),
+                        })
+                        .collect(),
+                ));
+                g.set_checks_summary(s(if failed == 0 {
+                    format!("Variant {:?}: all checks pass.", st.editor.variant_name())
+                } else {
+                    format!(
+                        "Variant {:?}: {failed} checks fail.",
+                        st.editor.variant_name()
+                    )
+                }));
                 let missing = scene.missing_fonts.clone();
                 st.shown = Some(Shown {
                     world: Arc::new(world),

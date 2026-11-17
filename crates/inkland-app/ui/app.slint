@@ -6,6 +6,7 @@ import { MapView } from "map-view.slint";
 import { LayersPanel } from "layers-panel.slint";
 import { BrushTool } from "brush-tool.slint";
 import { PinEditor } from "pin-editor.slint";
+import { PrintPreview } from "print-preview.slint";
 import { StatusBar } from "status-bar.slint";
 
 export { AppState, Actions, Tool }
@@ -96,6 +97,10 @@ export component AppWindow inherits Window {
                     Tab {
                         title: "Pins";
                         VerticalBox { PinEditor {} }
+                    }
+                    Tab {
+                        title: "Print preview";
+                        VerticalBox { PrintPreview {} }
                     }
                 }
             }
