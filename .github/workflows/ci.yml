@@ -57,6 +57,15 @@ jobs:
           bin=target/x86_64-unknown-linux-musl/release/inkland
           "$bin" version --json
           "$bin" generate --config fixtures/configs/full.json --dry-run > /dev/null
+      - name: A 20000-cell world with one variant takes less than 2 s
+        run: |
+          bin=target/x86_64-unknown-linux-musl/release/inkland
+          start=$(date +%s%N)
+          "$bin" generate --config fixtures/configs/full.json --cells 20000 --variant ostrey-then --out-dir perf-out > /dev/null
+          end=$(date +%s%N)
+          ms=$(( (end - start) / 1000000 ))
+          echo "generate took ${ms} ms"
+          test "$ms" -lt 2000
       - uses: actions/upload-artifact@v4
         with:
           name: inkland-x86_64-unknown-linux-musl
