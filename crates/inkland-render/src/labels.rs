@@ -28,6 +28,9 @@ const PAD: f64 = 0.3;
 pub const HALO_MM: f64 = 0.6;
 /// Extra cost of a label for each river that it crosses.
 const RIVER_COST: f64 = 0.5;
+/// The cost of each symbol of a generated place that a required label
+/// hides.
+const HIDE_COST: f64 = 1.0;
 /// Size of the buckets of the spatial index.
 const BUCKET: f64 = 5.0;
 
@@ -196,7 +199,8 @@ pub struct Placed {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unplaced {
     pub id: String,
-    /// `collision` or `outside`.
+    /// `collision`, `outside`, or `hidden` (a required label covers the
+    /// symbol of the place).
     pub reason: &'static str,
     /// `true` for the labels of pins, capitals, and states.
     pub required: bool,
@@ -207,6 +211,9 @@ pub struct Unplaced {
 pub struct Labels {
     pub placed: Vec<Placed>,
     pub unplaced: Vec<Unplaced>,
+    /// The generated places (not pinned, not capitals) whose symbols a
+    /// required label covers. Their symbols and labels are left out.
+    pub hidden_places: Vec<u32>,
 }
 
 impl Labels {
@@ -238,6 +245,8 @@ struct Candidate {
 
 struct Request {
     id: String,
+    /// The place of a place label.
+    place: Option<u32>,
     kind: Kind,
     group: &'static str,
     text: String,
@@ -656,29 +665,40 @@ pub fn feature_points(config: &Config, variant: &Variant, page: &Page) -> Vec<[f
         .unwrap_or_default()
 }
 
-/// The boxes that labels must not touch: place symbols and extras.
-fn fixed_obstacles(world: &World, config: &Config, variant: &Variant, page: &Page) -> Vec<Obb> {
+/// The boxes that labels must not touch: place symbols and extras. The
+/// second list gives the place of each box that a required label can hide:
+/// the symbol of a generated place that is not a capital.
+fn fixed_obstacles(
+    world: &World,
+    config: &Config,
+    variant: &Variant,
+    page: &Page,
+) -> (Vec<Obb>, Vec<Option<u32>>) {
     let symbols = symbol_points(world, page);
     let [x0, y0, x1, y1] = page.view;
-    let mut out: Vec<Obb> = world
+    let mut out: Vec<Obb> = Vec::new();
+    let mut hideable: Vec<Option<u32>> = Vec::new();
+    for p in world
         .society
         .places
         .iter()
         .filter(|p| p.at[0] >= x0 && p.at[0] <= x1 && p.at[1] >= y0 && p.at[1] <= y1)
-        .map(|p| {
-            let [x, y] = page.to_page(p.at);
-            let r = symbol_radius(p.kind, p.capital);
-            Obb::rect(x - r, y - r, x + r, y + r)
-        })
-        .collect();
+    {
+        let [x, y] = page.to_page(p.at);
+        let r = symbol_radius(p.kind, p.capital);
+        out.push(Obb::rect(x - r, y - r, x + r, y + r));
+        hideable.push((p.pin.is_none() && !p.capital).then_some(p.id));
+    }
     for [x, y] in feature_points(config, variant, page) {
         let r = FEATURE_RADIUS;
         out.push(Obb::rect(x - r, y - r, x + r, y + r));
+        hideable.push(None);
     }
     for [a, b, c, d] in crate::extras::boxes(config, variant, page, &symbols) {
         out.push(Obb::rect(a, b, c, d));
+        hideable.push(None);
     }
-    out
+    (out, hideable)
 }
 
 /// The look of a label group: its font family and its letter case.
@@ -804,6 +824,7 @@ pub fn place_with(
             _ => 4,
         };
         requests.push(Request {
+            place: Some(p.id),
             candidates: point_candidates(
                 page.to_page(p.at),
                 symbol_radius(p.kind, p.capital),
@@ -858,6 +879,7 @@ pub fn place_with(
         let f = FontMetrics::of(&look.family);
         let spacing = 0.1 * size;
         requests.push(Request {
+            place: None,
             candidates: river_candidates(&river_lines[i], inner, i, &name, f, size, spacing),
             id: format!("label-river-{key}"),
             kind: Kind::River,
@@ -888,6 +910,7 @@ pub fn place_with(
         let name = look.text(name);
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
+            place: None,
             candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.05, 0.3)),
             id: format!("label-lake-{}", n.id),
             kind: Kind::Region,
@@ -920,6 +943,7 @@ pub fn place_with(
             let name = look.text(name);
             let f = FontMetrics::of(&look.family);
             requests.push(Request {
+                place: None,
                 candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.1, 0.6)),
                 id: format!("label-water-{}", n.id),
                 kind: Kind::Region,
@@ -950,6 +974,7 @@ pub fn place_with(
         let name = look.text(&st.name);
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
+            place: None,
             candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.15, 0.8)),
             id: format!("label-state-{}", st.id),
             kind: Kind::State,
@@ -983,6 +1008,7 @@ pub fn place_with(
         let name = look.text(name);
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
+            place: None,
             candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.05, 0.5)),
             id: format!("label-region-{}", pin.id),
             kind: Kind::Region,
@@ -1024,6 +1050,7 @@ pub fn place_with(
                 continue;
             };
             requests.push(Request {
+                place: None,
                 candidates,
                 id: format!("label-feature-{}", feat.id),
                 kind: Kind::Feature,
@@ -1055,50 +1082,91 @@ pub fn place_with(
         }
     }
 
-    let mut obstacles = fixed_obstacles(world, config, variant, page);
+    let (mut obstacles, mut hideable) = fixed_obstacles(world, config, variant, page);
     let mut index = Index::default();
     for (i, o) in obstacles.iter().enumerate() {
         index.insert(i, o.bounds());
     }
+    let mut gone = vec![false; obstacles.len()];
 
     let mut out = Labels::default();
     for req in requests {
-        let mut best: Option<(f64, usize)> = None;
-        let mut any_inside = false;
-        for (k, cand) in req.candidates.iter().enumerate() {
-            if !cand.boxes.iter().all(|b| b.inside(inner)) {
-                continue;
-            }
-            any_inside = true;
-            let hit = cand.boxes.iter().any(|b| {
-                index
-                    .near(b.bounds())
-                    .into_iter()
-                    .any(|i| obstacles[i].overlaps(b))
+        if req.place.is_some_and(|p| out.hidden_places.contains(&p)) {
+            out.unplaced.push(Unplaced {
+                id: req.id,
+                reason: "hidden",
+                required: req.required,
             });
-            if hit {
-                continue;
-            }
-            let mut crossed: Vec<usize> = Vec::new();
-            for b in &cand.boxes {
-                for s in seg_index.near(b.bounds()) {
-                    let (river, p, q) = segments[s];
-                    if Some(river) != cand.river && !crossed.contains(&river) && b.crosses(p, q) {
-                        crossed.push(river);
+            continue;
+        }
+        // A required label that finds no free place can cover the symbols
+        // of generated places. Each covered symbol costs more.
+        let passes: &[bool] = if req.required {
+            &[false, true]
+        } else {
+            &[false]
+        };
+        let mut best: Option<(f64, usize, Vec<usize>)> = None;
+        let mut any_inside = false;
+        for &hide in passes {
+            for (k, cand) in req.candidates.iter().enumerate() {
+                if !cand.boxes.iter().all(|b| b.inside(inner)) {
+                    continue;
+                }
+                any_inside = true;
+                let mut covered: Vec<usize> = Vec::new();
+                let hit = cand.boxes.iter().any(|b| {
+                    index.near(b.bounds()).into_iter().any(|i| {
+                        if gone[i] || !obstacles[i].overlaps(b) {
+                            return false;
+                        }
+                        if hide && hideable[i].is_some() {
+                            if !covered.contains(&i) {
+                                covered.push(i);
+                            }
+                            return false;
+                        }
+                        true
+                    })
+                });
+                if hit {
+                    continue;
+                }
+                let mut crossed: Vec<usize> = Vec::new();
+                for b in &cand.boxes {
+                    for s in seg_index.near(b.bounds()) {
+                        let (river, p, q) = segments[s];
+                        if Some(river) != cand.river && !crossed.contains(&river) && b.crosses(p, q)
+                        {
+                            crossed.push(river);
+                        }
                     }
                 }
+                let cost = cand.cost
+                    + RIVER_COST * crossed.len() as f64
+                    + HIDE_COST * covered.len() as f64;
+                if best.as_ref().is_none_or(|(c, _, _)| cost < *c) {
+                    best = Some((cost, k, covered));
+                }
             }
-            let cost = cand.cost + RIVER_COST * crossed.len() as f64;
-            if best.is_none_or(|(c, _)| cost < c) {
-                best = Some((cost, k));
+            if best.is_some() {
+                break;
             }
         }
         match best {
-            Some((_, k)) => {
+            Some((_, k, covered)) => {
+                for i in covered {
+                    gone[i] = true;
+                    if let Some(p) = hideable[i].take() {
+                        out.hidden_places.push(p);
+                    }
+                }
                 let cand = req.candidates.into_iter().nth(k).expect("candidate");
                 for b in &cand.boxes {
                     index.insert(obstacles.len(), b.bounds());
                     obstacles.push(*b);
+                    hideable.push(None);
+                    gone.push(false);
                 }
                 out.placed.push(Placed {
                     id: req.id,
@@ -1213,7 +1281,14 @@ mod tests {
         let page = Page::new(c, &c.variants[0]);
         let labels = place(w, c, &c.variants[0], &page);
         let [mx, my, mw, mh] = page.map_rect();
-        let fixed = fixed_obstacles(w, c, &c.variants[0], &page);
+        let (fixed, hideable) = fixed_obstacles(w, c, &c.variants[0], &page);
+        // The symbols that a required label hides are not drawn.
+        let fixed: Vec<Obb> = fixed
+            .into_iter()
+            .zip(hideable)
+            .filter(|(_, h)| h.is_none_or(|p| !labels.hidden_places.contains(&p)))
+            .map(|(o, _)| o)
+            .collect();
         for (i, a) in labels.placed.iter().enumerate() {
             for b in &a.boxes {
                 let [x0, y0, x1, y1] = b.bounds();

@@ -106,7 +106,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
                 "borders" => write_borders(&mut s, world, config, &page),
                 "roads" => write_roads(&mut s, world, config, &page),
                 "features" => write_features(&mut s, config, variant, &page),
-                "places" => write_places(&mut s, world, config, &page),
+                "places" => write_places(&mut s, world, config, &page, &labels),
                 "labels" => write_labels(&mut s, &labels),
                 "cells" => crate::print_layers::cells(&mut s, world, &page, min),
                 "grid" => crate::print_layers::grid(&mut s, config, &page, min),
@@ -598,7 +598,13 @@ fn place_symbol(
     out
 }
 
-fn write_places(s: &mut String, world: &World, config: &Config, page: &Page) {
+fn write_places(
+    s: &mut String,
+    world: &World,
+    config: &Config,
+    page: &Page,
+    labels: &crate::labels::Labels,
+) {
     let w = n(line_mm(PLACE_LINE_PT.max(config.render.min_line_width_pt)));
     let [x0, y0, x1, y1] = page.view;
     let mut items: Vec<(String, String)> = world
@@ -606,6 +612,7 @@ fn write_places(s: &mut String, world: &World, config: &Config, page: &Page) {
         .places
         .iter()
         .filter(|p| p.at[0] >= x0 && p.at[0] <= x1 && p.at[1] >= y0 && p.at[1] <= y1)
+        .filter(|p| !labels.hidden_places.contains(&p.id))
         .map(|p| {
             let id = match &p.pin {
                 Some(pin) => format!("place-{pin}"),
