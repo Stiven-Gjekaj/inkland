@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "seed": 2105,
+  "frame": {
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "cells": 3000,
+    "template": "continents"
+  },
+  "render": {
+    "mode": "colour",
+    "style": "ancient",
+    "layers": ["coast", "biomes", "cultures", "religions", "temperature", "precipitation", "cells", "grid", "relief", "rivers", "places", "labels", "legend"]
+  },
+  "variants": [
+    {
+      "name": "full",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 125
+      }
+    }
+  ]
+}

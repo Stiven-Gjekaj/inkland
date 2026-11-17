@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "seed": 2102,
+  "frame": {
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "cells": 4000,
+    "template": "pangea",
+    "states": 6
+  },
+  "render": {
+    "mode": "colour",
+    "style": "atlas",
+    "layers": ["coast", "relief", "rivers", "states", "provinces", "borders", "routes", "places", "labels", "scale-bar", "vignette", "legend"],
+    "style_overrides": {
+      "ocean.groups.base.attrs.fill": "#a9d5ef"
+    }
+  },
+  "variants": [
+    {
+      "name": "full",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 125
+      }
+    },
+    {
+      "name": "crop",
+      "crop": [100, 75, 300, 225],
+      "page": {
+        "w_mm": 167,
+        "h_mm": 125
+      }
+    }
+  ]
+}

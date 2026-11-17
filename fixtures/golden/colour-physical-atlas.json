@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "seed": 2103,
+  "frame": {
+    "origin": "bottom-left",
+    "y_axis": "north",
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "cells": 4000,
+    "template": "archipelago"
+  },
+  "render": {
+    "mode": "colour",
+    "style": "atlas",
+    "layers": [
+      "ocean",
+      "landmass",
+      "heightmap",
+      "lakes",
+      "coordinates",
+      "compass",
+      "rivers",
+      "relief",
+      "coastline",
+      "labels",
+      "scale-bar",
+      "vignette"
+    ]
+  },
+  "variants": [
+    {
+      "name": "full",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 125
+      }
+    }
+  ]
+}

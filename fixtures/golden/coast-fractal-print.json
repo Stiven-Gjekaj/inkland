@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "seed": 2104,
+  "frame": {
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "cells": 3000,
+    "template": "archipelago"
+  },
+  "render": {
+    "coastline": "fractal",
+    "layers": ["coast", "cells", "relief", "rivers", "regions", "roads", "places", "labels", "coordinates"]
+  },
+  "variants": [
+    {
+      "name": "full",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 125
+      }
+    }
+  ]
+}

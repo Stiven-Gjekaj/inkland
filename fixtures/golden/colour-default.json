@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "seed": 2101,
+  "frame": {
+    "width": 400,
+    "height": 300
+  },
+  "world": {
+    "cells": 4000,
+    "template": "continents"
+  },
+  "render": {
+    "mode": "colour",
+    "extras": {
+      "scale_bar": true,
+      "compass": true
+    }
+  },
+  "variants": [
+    {
+      "name": "full",
+      "page": {
+        "w_mm": 167,
+        "h_mm": 125
+      }
+    }
+  ]
+}
