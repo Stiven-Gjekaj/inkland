@@ -26,6 +26,11 @@ pub const NAMES: [&str; 13] = [
     "wetland",
 ];
 
+/// How well people can live in each biome, from 0 to 100.
+pub const HABITABILITY: [f64; 13] = [
+    0.0, 4.0, 10.0, 22.0, 30.0, 50.0, 100.0, 80.0, 90.0, 12.0, 4.0, 0.0, 12.0,
+];
+
 pub const MARINE: u8 = 0;
 pub const HOT_DESERT: u8 = 1;
 pub const COLD_DESERT: u8 = 2;

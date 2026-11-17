@@ -41,6 +41,8 @@ pub struct World {
     pub rivers: Vec<River>,
     /// The biome of each cell (see `biomes::NAMES`).
     pub biomes: Vec<u8>,
+    /// Cultures, places, states, and provinces.
+    pub society: crate::society::Society,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -176,6 +178,17 @@ impl World {
             &drainage.flux,
             &regions,
         );
+        let society = crate::society::build(&crate::society::Input {
+            config,
+            grid: &grid,
+            heights: &heights,
+            sea_level,
+            features: &features,
+            biomes: &biomes,
+            flux: &drainage.flux,
+            river_threshold: river_threshold(grid.len()),
+            pin_cells: &pin_cells,
+        });
         Ok(World {
             seed: config.seed,
             width: w,
@@ -192,6 +205,7 @@ impl World {
             courses,
             rivers,
             biomes,
+            society,
         })
     }
 
