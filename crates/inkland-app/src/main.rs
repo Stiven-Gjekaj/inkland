@@ -345,6 +345,21 @@ impl Controller {
                 })
                 .collect(),
         ));
+        let l = ui.global::<Lists>();
+        let mut presets: Vec<SharedString> = catalog::PRESETS
+            .iter()
+            .map(|(_, label, _)| s(label))
+            .collect();
+        presets.push(s(catalog::CUSTOM_PRESET));
+        let mut disabled = vec![false; catalog::PRESETS.len()];
+        disabled.push(true);
+        l.set_presets(model(presets));
+        l.set_presets_disabled(model(disabled));
+        l.set_preset_index(
+            catalog::current_preset(c)
+                .and_then(|p| catalog::PRESETS.iter().position(|(id, _, _)| *id == p))
+                .unwrap_or(catalog::PRESETS.len()) as i32,
+        );
         g.set_variants(model(c.variants.iter().map(|v| s(&v.name)).collect()));
         g.set_variant_index(e.variant as i32);
         g.set_brush_radius_max((c.frame.width.max(c.frame.height) / 4.0).max(2.0) as f32);
@@ -877,6 +892,14 @@ fn main() -> Result<(), slint::PlatformError> {
         let what = if on { "show" } else { "hide" };
         let label = catalog::layer_def(&id).map_or("?", |l| l.label);
         c.edited(r, &format!("{what} the layer {label}"));
+    });
+    let c = Rc::clone(&app);
+    a.on_apply_preset(move |i| {
+        let Some((id, label, _)) = catalog::PRESETS.get(i as usize) else {
+            return;
+        };
+        let r = c.state.borrow_mut().editor.apply_preset(id);
+        c.edited(r, &format!("show the layers of the preset {label}"));
     });
     let c = Rc::clone(&app);
     a.on_open_tool(move |id| c.open_tool(&id));

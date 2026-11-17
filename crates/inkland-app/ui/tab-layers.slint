@@ -2,14 +2,25 @@
 // that the renderer does not have is grey and cannot be clicked.
 
 import { Theme, MenuButton, Heading, Select, Tip } from "theme.slint";
-import { AppState, Actions } from "globals.slint";
+import { AppState, Actions, Lists } from "globals.slint";
 
 export component LayersTab inherits VerticalLayout {
     spacing: 4px;
     property <length> cell-w: (self.width - 2 * 5px) / 3;
     HorizontalLayout {
         spacing: 6px;
-        Heading { text: "Variant:"; width: 90px; vertical-alignment: center; }
+        Heading { text: "Layers preset:"; width: 120px; vertical-alignment: center; }
+        Select {
+            horizontal-stretch: 1;
+            model: Lists.presets;
+            disabled: Lists.presets-disabled;
+            current-index <=> Lists.preset-index;
+            selected(i) => { Actions.apply-preset(i); }
+        }
+    }
+    HorizontalLayout {
+        spacing: 6px;
+        Heading { text: "Variant:"; width: 120px; vertical-alignment: center; }
         Select {
             horizontal-stretch: 1;
             model: AppState.variants;

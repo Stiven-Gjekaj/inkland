@@ -110,6 +110,7 @@ export global Actions {
 
     callback select-variant(int);
     callback set-layer(string, bool);
+    callback apply-preset(int);
     callback select-pin(string);
     callback rename-pin(string, string);
     callback remove-pin(string);
@@ -135,6 +136,10 @@ export global Lists {
     in property <[ToolRow]> tools;
     // The number of tools in each group.
     in property <[int]> tool-counts: [0, 0, 0];
+    // The layer presets. The last entry is "Custom (not saved)".
+    in property <[string]> presets;
+    in property <[bool]> presets-disabled;
+    in-out property <int> preset-index;
 }
 
 // The open dialogs. `open` and `close` take the id of a dialog.

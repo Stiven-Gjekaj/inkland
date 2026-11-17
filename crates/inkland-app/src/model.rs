@@ -241,6 +241,14 @@ impl Editor {
         }
     }
 
+    /// Show the layers of an FMG layer preset (see `catalog::PRESETS`). It
+    /// is one edit of `/render`.
+    pub fn apply_preset(&mut self, id: &str) -> Result<(), String> {
+        let render = catalog::render_with_preset(&self.config, id)
+            .ok_or_else(|| format!("there is no layer preset {id:?}"))?;
+        self.set("/render", render)
+    }
+
     /// Undo the last edit. `false` if there is nothing to undo.
     pub fn undo(&mut self) -> Result<bool, String> {
         match self.history.undo(&self.config) {
@@ -448,6 +456,20 @@ mod tests {
         assert_eq!(e.history.script().commands.len(), 1, "no change, no edit");
         e.set_layer("rivers", true).unwrap();
         assert_eq!(e.config().render.layers, all);
+    }
+
+    #[test]
+    fn a_layer_preset_is_one_edit() {
+        let mut e = Editor::new(config());
+        e.apply_preset("landmass").unwrap();
+        assert_eq!(e.history.script().commands.len(), 1);
+        assert_eq!(catalog::current_preset(e.config()), Some("landmass"));
+        assert!(!catalog::config_layers(e.config()).contains(&"labels".to_owned()));
+        e.apply_preset("landmass").unwrap();
+        assert_eq!(e.history.script().commands.len(), 1, "no change, no edit");
+        assert!(e.apply_preset("nothing").is_err());
+        e.undo().unwrap();
+        assert_eq!(e.config(), e.original());
     }
 
     #[test]
