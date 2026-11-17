@@ -427,6 +427,42 @@ and the test that closes each milestone. We stop for a review after each one.
   error, height, land, and for a port whether it touches water. For each
   region pin: cell count, range, lowest and highest height, and `in_range`.
 
+## 6.3 Notes from Milestone 4
+
+- Climate: temperature from latitude and height, precipitation from winds
+  along the lattice rows and columns, as in the original. `wind` is the
+  direction to which the wind blows.
+- Drainage: a priority flood from the ocean gives each cell a drainage
+  elevation (`elevation` in `world.json`). It is the height, or a little
+  more where the land is flat or in a hollow. Water flows to the lowest
+  neighbor, so it always goes strictly down to the ocean or to a sink.
+  "Downhill" in the report and in the tests means this elevation.
+- No lakes form in hollows in this version: a hollow fills and drains. The
+  lakes are the water that the terrain makes. No erosion.
+- Rivers: a land cell with enough water is a river cell. At a confluence the
+  river with more water keeps its name. Rivers of fewer than 3 cells are
+  dropped, unless pinned.
+- Pinned rivers: the course goes from the source through each `through`
+  anchor to the mouth, by least cost. Going up costs more, and crossing
+  water costs much more: a pinned river is a hard constraint, so a water
+  cell on its course becomes land, except in a forced water region. The
+  course never goes into a cell whose range starts above the lowest range
+  before it, so a downhill course always exists if the path search finds
+  one. The heights of the course are carved so that none goes up. The
+  drainage then gives the course strictly falling elevations, and the
+  course cells always drain along the course: another river can join a
+  pinned river but never cross it.
+- A course does not use the anchor cells of another river. Rivers with the
+  same mouth can join. If an earlier course blocks a later river, the
+  planner plans the blocked river first and tries again.
+- Mouths: a point in water ends at the shore of that water body, at the
+  shore cell nearest the point; the line ends at the point. A port place:
+  the river drains into a water cell next to the place. A marsh region: the
+  river ends at the first course cell in the marsh, and the water stays
+  there. A source region: the highest free land cell in the region.
+- The report gives, for each pinned river: source, mouth kind and point,
+  `through_ok`, `max_deviation`, `downhill`, length in units, and cells.
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
