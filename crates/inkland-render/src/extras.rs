@@ -143,6 +143,15 @@ pub fn boxes(
     out
 }
 
+/// The parts of the extras to write.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Parts {
+    pub scale_bar: bool,
+    pub compass: bool,
+    pub cartouche: bool,
+    pub grid: bool,
+}
+
 /// Write the extras of a variant into the SVG. `symbols` are the place
 /// symbols on the page, in mm.
 pub fn write(
@@ -152,7 +161,37 @@ pub fn write(
     page: &Page,
     symbols: &[[f64; 2]],
 ) {
-    let e = merged(config, variant);
+    let all = Parts {
+        scale_bar: true,
+        compass: true,
+        cartouche: true,
+        grid: true,
+    };
+    write_only(s, config, variant, page, symbols, all);
+}
+
+/// Write the given parts of the extras of a variant into the SVG.
+pub fn write_only(
+    s: &mut String,
+    config: &Config,
+    variant: &Variant,
+    page: &Page,
+    symbols: &[[f64; 2]],
+    parts: Parts,
+) {
+    let mut e = merged(config, variant);
+    if !parts.scale_bar {
+        e.scale_bar = None;
+    }
+    if !parts.compass {
+        e.compass = None;
+    }
+    if !parts.cartouche {
+        e.cartouche = None;
+    }
+    if !parts.grid {
+        e.grid = None;
+    }
     let min = config.render.min_line_width_pt;
     let line = n(line_mm(0.5f64.max(min)));
     let font = xml(&config.render.fonts.other);

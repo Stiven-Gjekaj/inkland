@@ -41,6 +41,11 @@ pub struct Rendered {
 /// Write the SVG of one variant.
 pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
     let page = Page::new(config, variant);
+    if config.render.mode == inkland_core::config::RenderMode::Colour {
+        let labels = crate::fmg::place_labels(world, config, variant, &page);
+        let svg = crate::fmg::render(world, config, variant, &page, &labels);
+        return Rendered { svg, labels };
+    }
     let labels = crate::labels::place(world, config, variant, &page);
     let min = config.render.min_line_width_pt;
     let coast_w = line_mm(COAST_WIDTH_PT.max(min));
