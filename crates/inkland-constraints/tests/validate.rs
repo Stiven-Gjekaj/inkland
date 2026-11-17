@@ -427,17 +427,13 @@ fn a_style_override_with_a_list_value_is_refused() {
 }
 
 #[test]
-fn a_colour_layer_in_print_safe_mode_is_refused() {
-    one(
-        &with(json!({ "render": { "layers": ["coast", "biomes"] } })),
-        ErrorCode::ValueOutOfRange,
-        "/render/layers/1",
-    );
-    let c = with(json!({ "render": { "mode": "colour", "layers": ["coast", "biomes"] } }));
-    assert_eq!(codes(&c), vec![]);
-    let c = with(
-        json!({ "render": { "layers": ["coastline", "borders", "routes", "burg-icons",
-        "cells", "grid", "coordinates", "compass", "scale-bar", "ocean", "texture"] } }),
-    );
-    assert_eq!(codes(&c), vec![]);
+fn each_layer_is_valid_in_each_mode() {
+    for mode in ["print-safe", "colour"] {
+        let c = with(
+            json!({ "render": { "mode": mode, "layers": ["coast", "biomes", "lakes",
+            "coastline", "borders", "routes", "burg-icons", "cells", "grid", "coordinates",
+            "compass", "scale-bar", "ocean", "texture", "legend"] } }),
+        );
+        assert_eq!(codes(&c), vec![], "{mode}");
+    }
 }

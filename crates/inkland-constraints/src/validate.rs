@@ -6,8 +6,8 @@
 
 use crate::geom::{Shape, dist, polygon_self_intersects};
 use inkland_core::config::{
-    Anchor, Config, Feature, Origin, Point, PointPin, RegionKind, RegionPin, RenderMode, RoadPin,
-    Waypoint, YAxis,
+    Anchor, Config, Feature, Origin, Point, PointPin, RegionKind, RegionPin, RoadPin, Waypoint,
+    YAxis,
 };
 use inkland_core::error::{Error, ErrorCode};
 use std::collections::{BTreeMap, BTreeSet};
@@ -682,7 +682,7 @@ impl<'a> Validator<'a> {
         }
     }
 
-    /// The style overrides and the layers of the render mode.
+    /// The style overrides.
     fn render_style(&mut self) {
         let r = &self.c.render;
         for (key, value) in &r.style_overrides {
@@ -703,18 +703,6 @@ impl<'a> Validator<'a> {
                     pointer,
                     "a style value must be a string, a number, a boolean, or null",
                 );
-            }
-        }
-        if r.mode == RenderMode::PrintSafe {
-            for (i, layer) in r.layers.iter().enumerate() {
-                if !layer.is_print_safe() {
-                    let name = layer.name();
-                    self.err(
-                        ErrorCode::ValueOutOfRange,
-                        format!("/render/layers/{i}"),
-                        format!("the layer {name:?} needs render.mode \"colour\""),
-                    );
-                }
             }
         }
     }

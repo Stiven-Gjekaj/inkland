@@ -826,8 +826,8 @@ pub struct Render {
     pub extras: Extras,
     /// Layers to draw. In `print-safe` mode the layers are drawn in this
     /// order, from bottom to top. In `colour` mode the renderer draws them in
-    /// the layer order of Azgaar's Fantasy Map Generator. Some layers are
-    /// only for `colour` mode.
+    /// the layer order of Azgaar's Fantasy Map Generator. A layer that is
+    /// only for `colour` mode draws nothing in `print-safe` mode.
     #[serde(default = "default_layers")]
     pub layers: Vec<LayerName>,
 }
@@ -1167,7 +1167,8 @@ impl LayerName {
             .unwrap_or_default()
     }
 
-    /// `true` if the layer has a `print-safe` drawing.
+    /// `true` if the layer has a `print-safe` drawing. Other layers draw
+    /// nothing in `print-safe` mode.
     pub fn is_print_safe(self) -> bool {
         use LayerName::*;
         matches!(
