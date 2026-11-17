@@ -120,6 +120,8 @@ pub struct Province {
 pub struct Society {
     /// The cell data of FMG, with suitability and rural population.
     pub cells: crate::population::Cells,
+    /// The development of each cell, 0 to 100. 0: nobody lives there.
+    pub development: Vec<u8>,
     pub cultures: Vec<Culture>,
     pub cell_culture: Vec<u32>,
     pub places: Vec<Place>,
@@ -375,8 +377,23 @@ pub fn build(input: &Input) -> Society {
         p.province = cell_province[p.cell];
     }
 
+    let mut burg_cell = vec![false; n];
+    for p in &places {
+        burg_cell[p.cell] = true;
+    }
+    let development = crate::development::generate(
+        grid,
+        &cells,
+        biomes,
+        &cultures,
+        &cell_culture,
+        &burg_cell,
+        config.seed,
+    );
+
     Society {
         cells,
+        development,
         cultures,
         cell_culture,
         places,
