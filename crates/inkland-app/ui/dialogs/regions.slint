@@ -12,7 +12,7 @@ export component RegionsDialog inherits Dialog {
     content-width: 470px;
     pos-x: 420px;
     pos-y: 60px;
-    property <[string]> kinds: ["sea", "lake", "mountains", "hills", "plains", "marsh", "forest", "desert"];
+    property <[string]> kinds: Lists.region-kinds;
     Table {
         header: ["Area", "Kind", "Shape", "Height"];
         widths: [110px, 70px, 170px, 50px];

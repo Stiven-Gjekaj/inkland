@@ -184,6 +184,9 @@ export global Lists {
     in property <[ToolRow]> tools;
     // The number of tools in each group.
     in property <[int]> tool-counts: [0, 0, 0];
+    // The kinds of point pins and of region pins (see `catalog`).
+    in property <[string]> place-kinds;
+    in property <[string]> region-kinds;
     // The layer presets. The last entry is "Custom (not saved)".
     in property <[string]> presets;
     in property <[bool]> presets-disabled;

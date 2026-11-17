@@ -45,8 +45,6 @@ use ui::{PinRow, Tool};
 const DESK: [u8; 3] = [0x8a, 0x8f, 0x94];
 /// A click this near to a pin (in screen pixels) selects the pin.
 const PIN_HIT_PX: f64 = 9.0;
-/// The kinds of the "New pin kind" list, in its order.
-const PIN_KINDS: [&str; 5] = ["village", "town", "city", "fortress", "ruin"];
 /// The pin list of an editor id.
 fn pin_list(list: &str) -> Option<inkland::PinList> {
     match list {
@@ -763,7 +761,7 @@ impl Controller {
                     self.message("a pin must be inside the frame", true);
                     return;
                 };
-                let kind = PIN_KINDS
+                let kind = catalog::PLACE_KINDS
                     .get(self.ui().global::<AppState>().get_new_pin_kind() as usize)
                     .copied()
                     .unwrap_or("village");
@@ -1915,6 +1913,9 @@ fn main() -> Result<(), slint::PlatformError> {
         theme.set_mono(s("DejaVu Sans Mono"));
         theme.set_sans(s("DejaVu Sans"));
     }
+    let l = ui.global::<Lists>();
+    l.set_place_kinds(model(catalog::PLACE_KINDS.iter().map(s).collect()));
+    l.set_region_kinds(model(catalog::REGION_KINDS.iter().map(s).collect()));
     app.update_tools();
     app.update_editor();
     match std::env::args_os().nth(1) {

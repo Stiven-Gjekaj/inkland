@@ -45,7 +45,7 @@ export component BurgsDialog inherits Dialog {
             dialog: true;
             width: 110px;
             enabled: AppState.selected-id != "";
-            model: ["village", "town", "city", "fortress", "ruin"];
+            model: Lists.place-kinds;
             current-index: AppState.selected-kind;
             commit: false;
             selected(i) => { Actions.set-pin-kind(i); }
@@ -70,7 +70,7 @@ export component BurgsDialog inherits Dialog {
         Select {
             dialog: true;
             width: 110px;
-            model: ["village", "town", "city", "fortress", "ruin"];
+            model: Lists.place-kinds;
             current-index <=> AppState.new-pin-kind;
         }
         DialogButton {
