@@ -44,6 +44,7 @@ enum Command {
     },
     /// Print facts about one point of a world.
     Query {
+        /// The `world.json` of a generated world.
         #[arg(long)]
         world: PathBuf,
         /// The point `x,y`, in config units.
@@ -52,6 +53,7 @@ enum Command {
     },
     /// Export a world as GeoJSON, to stdout.
     Export {
+        /// The `world.json` of a generated world.
         #[arg(long)]
         world: PathBuf,
         /// The format. Only `geojson`.
@@ -80,6 +82,7 @@ enum Command {
     },
     /// Run the print checks on an SVG file.
     Check {
+        /// The SVG file.
         #[arg(long)]
         svg: PathBuf,
         /// The smallest permitted line width, in points.
