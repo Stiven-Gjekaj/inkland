@@ -463,6 +463,36 @@ and the test that closes each milestone. We stop for a review after each one.
 - The report gives, for each pinned river: source, mouth kind and point,
   `through_ok`, `max_deviation`, `downhill`, length in units, and cells.
 
+## 6.4 Notes from Milestone 5
+
+- Names: a letter chain of order two, learned from a name base. A name is
+  refused if it is too short or too long for the base, has three equal
+  letters in a row, doubles a letter that the base does not double, or is
+  already in use on the map.
+- Culture sets: `european` (default), `oriental`, `antique`,
+  `high-fantasy`, `dark-fantasy`. `cultures` must not be more than the set
+  has.
+- Suitability of a land cell: biome habitability, plus rivers, plus coast,
+  minus height.
+- Cultures and states grow by least cost over the map. Water costs much
+  more than land, so each land cell, islands too, gets exactly one state.
+  Water cells have no state.
+- Places: the pinned places first, exactly where they are, with their names.
+  A pinned place without a name gets a name from its culture. Each pin with
+  `capital_of` is the capital of a state with that name. More capitals are
+  generated until there are `states` states. Towns: `towns`, or about one
+  for 150 land cells. Generated places keep `min_distance_from_pins` from
+  each pinned place, and a distance from each other that becomes smaller
+  only if not enough places fit. A generated place is a port if it touches
+  the ocean.
+- Provinces: about a third of the places of a state are seats; each grows
+  inside its state.
+- The SVG draws state borders (dash-dot) and province borders (dots) in the
+  `regions` group, and a symbol for each place in the `places` group, with
+  the id `place-<pin id>` or `place-<number>`. Names come with labels in
+  Milestone 8.
+- Religions are not in this version.
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
