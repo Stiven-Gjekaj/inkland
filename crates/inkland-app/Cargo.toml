@@ -15,4 +15,5 @@ workspace = true
 [dependencies]
 inkland.workspace = true
 inkland-core.workspace = true
+inkland-render.workspace = true
 serde_json.workspace = true
