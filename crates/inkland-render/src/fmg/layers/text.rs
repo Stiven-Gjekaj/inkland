@@ -73,7 +73,8 @@ pub fn labels(s: &mut String, ctx: &Ctx) {
             .or_default()
             .push(l);
     }
-    s.push_str("<g id=\"labels\">\n");
+    // A label stroke is a halo under the glyphs (`#labels` in `index.css`).
+    s.push_str("<g id=\"labels\" paint-order=\"stroke\" stroke-linejoin=\"round\">\n");
     for group in GROUPS {
         let Some(list) = by_group.get(group) else {
             continue;
