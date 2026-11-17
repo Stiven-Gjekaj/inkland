@@ -18,6 +18,7 @@ png = ["dep:resvg"]
 
 [dependencies]
 inkland-core.workspace = true
+libm.workspace = true
 resvg = { workspace = true, optional = true }
 
 [dev-dependencies]

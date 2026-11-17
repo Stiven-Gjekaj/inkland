@@ -636,6 +636,7 @@ name = "inkland-render"
 version = "0.1.0"
 dependencies = [
  "inkland-core",
+ "libm",
  "resvg",
  "serde_json",
 ]
