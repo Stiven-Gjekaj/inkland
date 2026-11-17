@@ -27,6 +27,7 @@ serde_path_to_error = "0.1"
 clap = { version = "4", features = ["derive"] }
 delaunator = "1.1"
 libm = "0.2"
+flate2 = "1"
 proptest = "1"
 roxmltree = "0.21"
 resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts"] }

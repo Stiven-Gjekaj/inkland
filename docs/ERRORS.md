@@ -53,6 +53,8 @@ With more than one error, the exit code comes from the most basic fault:
 | `RIVER_MOUTH_REGION_KIND` | 2 | 0.1.0 | A river mouth region is not of kind `marsh`, `lake`, or `sea`. |
 | `VALUE_OUT_OF_RANGE` | 2 | 0.1.0 | A value is outside its permitted range. |
 | `TEMPLATE_INVALID` | 2 | 0.1.0 | A step of a custom heightmap template cannot be read. The message names the step. |
+| `MAP_PARSE` | 2 | 0.1.0 | `inkland import` cannot read the map file: it is not text, gzip, or base64, or a record is missing or not valid. `details`: `record` (the record number, from 0), if a record is the cause. |
+| `MAP_VERSION` | 2 | 0.1.0 | `inkland import` cannot read maps of this version. `details`: `found`, `supported`. |
 | `PIN_OUTSIDE_FRAME` | 3 | 0.1.0 | A pin, a crop, or an overlay item is outside the frame. |
 | `PIN_IN_FORCED_SEA` | 3 | 0.1.0 | A place is inside a `sea` or `lake` region. `details`: `region`. |
 | `PIN_SAME_POSITION` | 3 | 0.1.0 | Two point pins have the same position. Each place needs its own cell. `details`: `other`. |

@@ -92,6 +92,10 @@ codes! {
         ValueOutOfRange = "VALUE_OUT_OF_RANGE" => InvalidConfig,
         /// A step of a custom heightmap template cannot be read.
         TemplateInvalid = "TEMPLATE_INVALID" => InvalidConfig,
+        /// A map file of Azgaar's Fantasy Map Generator cannot be read.
+        MapParse = "MAP_PARSE" => InvalidConfig,
+        /// The version of a map file is not one that the import can read.
+        MapVersion = "MAP_VERSION" => InvalidConfig,
         /// A pin or a crop is outside the frame.
         PinOutsideFrame = "PIN_OUTSIDE_FRAME" => Infeasible,
         /// A point pin is in a `sea` or `lake` region.

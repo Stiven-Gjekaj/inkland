@@ -686,6 +686,7 @@ version = "0.1.0"
 name = "inkland-io"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "inkland-core",
  "schemars",
  "serde",
