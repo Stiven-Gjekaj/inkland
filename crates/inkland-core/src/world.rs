@@ -368,14 +368,7 @@ impl World {
             sea_level,
             society: &society,
         });
-        let religions = crate::religions::build(&crate::religions::Input {
-            config,
-            grid: &grid,
-            heights: &heights,
-            sea_level,
-            features: &features,
-            society: &society,
-        });
+
         let routes = crate::roads::build(&crate::roads::Input {
             config,
             grid: &grid,
@@ -389,6 +382,14 @@ impl World {
             society: &society,
         })?;
         let (roads, sea_routes) = (routes.roads, routes.sea);
+        let religions = crate::religions::build(&crate::religions::Input {
+            config,
+            grid: &grid,
+            biomes: &biomes,
+            society: &society,
+            roads: &roads,
+            sea_routes: &sea_routes,
+        });
         Ok(World {
             seed: config.seed,
             width: w,

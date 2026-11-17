@@ -206,7 +206,7 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
             .list
             .iter()
             .find(|r| r.id == world.religions.cell_religion[c])
-            .map(|r| json!({ "id": r.id, "name": r.name, "kind": r.kind })),
+            .map(|r| json!({ "id": r.id, "name": r.name, "type": r.kind, "form": r.form })),
         "nearest_place": nearest_place,
         "nearest_river": nearest_river,
         "nearest_road": nearest_road,
