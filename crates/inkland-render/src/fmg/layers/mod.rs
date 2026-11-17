@@ -5,6 +5,7 @@ mod base;
 mod decor;
 mod lines;
 pub(crate) mod marks;
+pub(crate) mod overlays;
 mod palette;
 mod text;
 
@@ -41,12 +42,12 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Emblems => marks::emblems(s, ctx),
         Markers => marks::markers(s, ctx),
         Features => marks::features(s, ctx),
-        Cells => {}
-        Grid => {}
-        Coordinates => {}
-        Temperature => {}
-        Precipitation => {}
-        Population => {}
+        Cells => overlays::cells(s, ctx),
+        Grid => overlays::grid(s, ctx),
+        Coordinates => overlays::coordinates(s, ctx),
+        Temperature => overlays::temperature(s, ctx),
+        Precipitation => overlays::precipitation(s, ctx),
+        Population => overlays::population(s, ctx),
         Compass => decor::compass(s, ctx),
         ScaleBar => decor::scale_bar(s, ctx),
         Vignette => decor::vignette(s, ctx),
