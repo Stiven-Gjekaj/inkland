@@ -117,8 +117,10 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
         variants: selected
             .into_iter()
             .map(|v| {
-                let svg = inkland_render::svg::render(&world, config, v);
+                let rendered = inkland_render::svg::render(&world, config, v);
+                let svg = rendered.svg;
                 let mut report = inkland_io::report::variant_report(&world, config, &v.name, &hash);
+                add_labels(&mut report, &rendered.labels);
                 // The print checks run on the written SVG text.
                 let checks = check_svg(&svg, config);
                 if let Some(list) = report["checks"].as_array_mut() {
@@ -132,6 +134,40 @@ pub fn generate(config: &Config, only: Option<&str>) -> Result<Output, Vec<Error
             })
             .collect(),
     })
+}
+
+/// Put the result of label placement in a report: the `labels` section, the
+/// `all_labels_placed` check, and a `LABEL_UNPLACED` warning for each
+/// required label without a place. Optional labels, such as the labels of
+/// generated towns, are in the list but do not fail the check.
+fn add_labels(report: &mut Value, labels: &inkland_render::labels::Labels) {
+    let missing = labels.required_unplaced();
+    report["labels"] = serde_json::json!({
+        "placed": labels.placed.len(),
+        "unplaced": labels.unplaced.iter().map(|u| serde_json::json!({
+            "id": u.id,
+            "reason": u.reason,
+            "required": u.required,
+        })).collect::<Vec<_>>(),
+    });
+    if let Some(list) = report["checks"].as_array_mut() {
+        list.push(serde_json::json!({
+            "name": "all_labels_placed",
+            "pass": missing == 0,
+            "count": missing,
+        }));
+    }
+    if let Some(list) = report["warnings"].as_array_mut() {
+        for u in labels.unplaced.iter().filter(|u| u.required) {
+            let w = Warning::new(
+                WarningCode::LabelUnplaced,
+                "/render",
+                format!("the label {:?} has no free place ({})", u.id, u.reason),
+            )
+            .with("id", u.id.clone());
+            list.push(serde_json::to_value(&w).unwrap_or(Value::Null));
+        }
+    }
 }
 
 /// A PNG preview of an SVG. The longer side is `longest_px` pixels.
@@ -291,6 +327,56 @@ mod tests {
         assert_eq!(r["checks"][0]["name"], "pinned_road_length");
         assert_eq!(r["checks"][0]["pass"], false);
         assert!(out.variants[0].checks_failed());
+    }
+
+    #[test]
+    fn report_lists_the_labels_and_fails_for_a_required_label_without_a_place() {
+        let pins = json!({ "regions": [
+            { "id": "hills", "kind": "hills", "name": "The Hills", "box": [30, 20, 70, 60] }
+        ]});
+        let ok = generate(
+            &config(json!({ "world": { "cells": 1500 }, "pins": pins })),
+            None,
+        )
+        .unwrap();
+        let r = &ok.variants[0].report;
+        assert!(r["labels"]["placed"].as_u64().unwrap() > 0);
+        let check = r["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "all_labels_placed")
+            .unwrap();
+        assert_eq!(check["pass"], true);
+        assert!(
+            ok.variants[0]
+                .svg
+                .contains("<text id=\"label-region-hills\"")
+        );
+
+        let big = config(json!({ "world": { "cells": 1500 }, "pins": pins,
+            "render": { "font_sizes_pt": { "region": 400 } } }));
+        let out = generate(&big, None).unwrap();
+        let r = &out.variants[0].report;
+        let unplaced = &r["labels"]["unplaced"];
+        assert!(
+            unplaced
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|u| u["id"] == "label-region-hills"
+                    && u["reason"] == "outside"
+                    && u["required"] == true)
+        );
+        assert!(
+            r["warnings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|w| w["code"] == "LABEL_UNPLACED")
+        );
+        assert!(out.variants[0].checks_failed());
+        assert!(!out.variants[0].svg.contains("label-region-hills"));
     }
 
     #[test]

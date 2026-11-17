@@ -31,9 +31,17 @@ fn n(v: f64) -> String {
     fixed(v, 3)
 }
 
+/// The SVG of one variant and its labels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rendered {
+    pub svg: String,
+    pub labels: crate::labels::Labels,
+}
+
 /// Write the SVG of one variant.
-pub fn render(world: &World, config: &Config, variant: &Variant) -> String {
+pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
     let page = Page::new(config, variant);
+    let labels = crate::labels::place(world, config, variant, &page);
     let min = config.render.min_line_width_pt;
     let coast_w = line_mm(COAST_WIDTH_PT.max(min));
     let neat_w = line_mm(NEATLINE_WIDTH_PT.max(min));
@@ -70,10 +78,16 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> String {
             LayerName::Regions => write_borders(&mut s, world, config, &page),
             LayerName::Roads => write_roads(&mut s, world, config, &page),
             LayerName::Places => write_places(&mut s, world, config, &page),
-            LayerName::Labels => {}
+            LayerName::Labels => write_labels(&mut s, &labels),
         }
     }
-    crate::extras::write(&mut s, config, variant, &page);
+    crate::extras::write(
+        &mut s,
+        config,
+        variant,
+        &page,
+        &crate::labels::symbol_points(world, &page),
+    );
     let _ = writeln!(
         s,
         "<rect id=\"neatline\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\"/>",
@@ -84,7 +98,84 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> String {
         n(neat_w)
     );
     s.push_str("</svg>\n");
-    s
+    Rendered { svg: s, labels }
+}
+
+/// Write the labels: real `<text>` with a white halo behind it. A river label
+/// follows a path in `<defs>`.
+fn write_labels(s: &mut String, labels: &crate::labels::Labels) {
+    use crate::extras::xml;
+    use crate::labels::Geometry;
+    let paths: Vec<_> = labels
+        .placed
+        .iter()
+        .filter_map(|l| match &l.geometry {
+            Geometry::Path { points, .. } => Some((&l.id, points)),
+            Geometry::Point { .. } => None,
+        })
+        .collect();
+    if !paths.is_empty() {
+        s.push_str("<defs>\n");
+        for (id, points) in paths {
+            let mut d = String::new();
+            for (i, p) in points.iter().enumerate() {
+                d.push(if i == 0 { 'M' } else { 'L' });
+                let _ = write!(d, "{} {}", n(p[0]), n(p[1]));
+            }
+            let _ = writeln!(s, "<path id=\"path-{id}\" d=\"{d}\"/>");
+        }
+        s.push_str("</defs>\n");
+    }
+    let _ = writeln!(
+        s,
+        "<g id=\"labels\" fill=\"{INK}\" stroke=\"{PAPER}\" stroke-width=\"{}\" stroke-linejoin=\"round\" paint-order=\"stroke\">",
+        n(crate::labels::HALO_MM)
+    );
+    for l in &labels.placed {
+        let spacing = if l.spacing > 0.0 {
+            format!(" letter-spacing=\"{}\"", n(l.spacing))
+        } else {
+            String::new()
+        };
+        let font = format!(
+            "font-family=\"{}\" font-size=\"{}\"{spacing}",
+            xml(&l.family),
+            n(l.size)
+        );
+        match &l.geometry {
+            Geometry::Point {
+                x,
+                y,
+                anchor,
+                angle,
+            } => {
+                let turn = if *angle != 0 {
+                    format!(" transform=\"rotate({angle} {} {})\"", n(*x), n(*y))
+                } else {
+                    String::new()
+                };
+                let _ = writeln!(
+                    s,
+                    "<text id=\"{}\" x=\"{}\" y=\"{}\" {font} text-anchor=\"{anchor}\"{turn}>{}</text>",
+                    l.id,
+                    n(*x),
+                    n(*y),
+                    xml(&l.text)
+                );
+            }
+            Geometry::Path { offset, .. } => {
+                let _ = writeln!(
+                    s,
+                    "<text id=\"{}\" dy=\"{}\" {font} text-anchor=\"middle\"><textPath href=\"#path-{}\" startOffset=\"50%\" text-anchor=\"middle\">{}</textPath></text>",
+                    l.id,
+                    n(-offset),
+                    l.id,
+                    xml(&l.text)
+                );
+            }
+        }
+    }
+    s.push_str("</g>\n");
 }
 
 fn write_coast(s: &mut String, world: &World, page: &Page, coast_w: f64, min: f64) {
@@ -500,7 +591,7 @@ mod tests {
     fn svg() -> (String, World) {
         let c = config();
         let w = World::build(&c).unwrap();
-        (render(&w, &c, &c.variants[0]), w)
+        (render(&w, &c, &c.variants[0]).svg, w)
     }
 
     #[test]
@@ -544,7 +635,7 @@ mod tests {
         let mut c = config();
         c.render.min_line_width_pt = 2.0;
         let w = World::build(&c).unwrap();
-        let s = render(&w, &c, &c.variants[0]);
+        let s = render(&w, &c, &c.variants[0]).svg;
         assert!(s.contains(&format!("stroke-width=\"{}\"", n(line_mm(2.0)))));
         assert!(!s.contains(&format!("stroke-width=\"{}\"", n(line_mm(COAST_WIDTH_PT)))));
     }
@@ -555,7 +646,7 @@ mod tests {
         c.world.template = serde_json::from_value(json!("pangea")).unwrap();
         c.world.cells = 5000;
         let w = World::build(&c).unwrap();
-        let s = render(&w, &c, &c.variants[0]);
+        let s = render(&w, &c, &c.variants[0]).svg;
         assert!(!w.rivers.is_empty());
         assert!(s.contains("<g id=\"rivers\""));
         for r in &w.rivers {
@@ -583,7 +674,7 @@ mod tests {
         c.world.template = serde_json::from_value(json!("pangea")).unwrap();
         c.world.cells = 5000;
         let w = World::build(&c).unwrap();
-        let s = render(&w, &c, &c.variants[0]);
+        let s = render(&w, &c, &c.variants[0]).svg;
         assert!(w.society.places.len() > 5);
         for p in &w.society.places {
             assert!(

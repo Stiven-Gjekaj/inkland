@@ -339,7 +339,7 @@ mod tests {
         }))
         .unwrap();
         let w = World::build(&c).unwrap();
-        let svg = crate::svg::render(&w, &c, &c.variants[0]);
+        let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
         let results = check_svg(&svg, &opts());
         let bad: Vec<_> = results.iter().filter(|r| !r.pass).collect();
         assert!(bad.is_empty(), "{bad:?}");

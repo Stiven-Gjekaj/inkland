@@ -58,15 +58,105 @@ pub fn nice_length(max: f64) -> f64 {
     p
 }
 
-/// Write the extras of a variant into the SVG.
-pub fn write(s: &mut String, config: &Config, variant: &Variant, page: &Page) {
+/// The box `[x0, y0, x1, y1]` of a scale bar with its left end at `x` and
+/// its top edge at `y`.
+fn scale_bar_box(config: &Config, page: &Page, [x, y]: [f64; 2]) -> [f64; 4] {
+    let small = pt(config.render.font_sizes_pt.other);
+    let [_, _, mw, _] = page.map_rect();
+    let bar = nice_length(0.25 * mw / page.scale) * page.scale;
+    let f = crate::metrics::FontMetrics::of(&config.render.fonts.other);
+    let last = f.width(&format!("0000 {}s", config.units.name), small, 0.0);
+    [
+        x - 2.0,
+        y - 1.0 - small,
+        x + bar + last / 2.0 + 1.0,
+        y + 1.6,
+    ]
+}
+
+/// The left end of the scale bar, on its top edge. The scale bar goes in the
+/// bottom-left corner, or in the bottom-right corner if fewer place symbols
+/// are there. `symbols` are the place symbols on the page, in mm.
+fn scale_bar_origin(config: &Config, page: &Page, symbols: &[[f64; 2]]) -> [f64; 2] {
+    let [mx, my, mw, mh] = page.map_rect();
+    let left = [mx + 4.0, my + mh - 5.0];
+    let [x0, _, x1, _] = scale_bar_box(config, page, left);
+    let right = [mx + mw - 4.0 - (x1 - x0) + 2.0, my + mh - 5.0];
+    let count = |o: [f64; 2]| {
+        let [a, b, c, d] = scale_bar_box(config, page, o);
+        symbols
+            .iter()
+            .filter(|p| p[0] >= a - 2.0 && p[0] <= c + 2.0 && p[1] >= b - 2.0 && p[1] <= d + 2.0)
+            .count()
+    };
+    if count(right) < count(left) {
+        right
+    } else {
+        left
+    }
+}
+
+/// The centre of the compass.
+fn compass_centre(page: &Page) -> [f64; 2] {
+    let [mx, my, mw, _] = page.map_rect();
+    [mx + mw - 7.0, my + 9.0]
+}
+
+/// The cartouche: `[x, y, width, height]`.
+fn cartouche_rect(config: &Config, title: &str, page: &Page) -> [f64; 4] {
+    let [mx, my, mw, _] = page.map_rect();
+    let size = pt(config.render.font_sizes_pt.title);
+    let f = crate::metrics::FontMetrics::of(&config.render.fonts.title);
+    let w = (f.width(title, size, 0.0) + 6.0).min(mw - 8.0);
+    [mx + 4.0, my + 4.0, w, size * 1.8]
+}
+
+/// The boxes `[x0, y0, x1, y1]` of the extras of a variant that are on the
+/// map, in mm. Labels keep off them. The grid is not in the list.
+pub fn boxes(
+    config: &Config,
+    variant: &Variant,
+    page: &Page,
+    symbols: &[[f64; 2]],
+) -> Vec<[f64; 4]> {
+    let e = merged(config, variant);
+    let small = pt(config.render.font_sizes_pt.other);
+    let mut out = Vec::new();
+    if e.scale_bar == Some(true) {
+        out.push(scale_bar_box(
+            config,
+            page,
+            scale_bar_origin(config, page, symbols),
+        ));
+    }
+    if e.compass == Some(true) {
+        let [cx, cy] = compass_centre(page);
+        out.push([cx - 2.5, cy - 6.5 - small, cx + 2.5, cy + 2.5]);
+    }
+    if let Some(c) = &e.cartouche {
+        let [x, y, w, h] = cartouche_rect(config, &c.title, page);
+        out.push([x - 0.5, y - 0.5, x + w + 0.5, y + h + 0.5]);
+    }
+    out
+}
+
+/// Write the extras of a variant into the SVG. `symbols` are the place
+/// symbols on the page, in mm.
+pub fn write(
+    s: &mut String,
+    config: &Config,
+    variant: &Variant,
+    page: &Page,
+    symbols: &[[f64; 2]],
+) {
     let e = merged(config, variant);
     let min = config.render.min_line_width_pt;
     let line = n(line_mm(0.5f64.max(min)));
     let font = xml(&config.render.fonts.other);
     let title_font = xml(&config.render.fonts.title);
     let [mx, my, mw, mh] = page.map_rect();
-    let small = pt(7.0);
+    let sizes = &config.render.font_sizes_pt;
+    let small = pt(sizes.other);
 
     if let Some(grid) = &e.grid
         && grid.step > 0.0
@@ -92,7 +182,7 @@ pub fn write(s: &mut String, config: &Config, variant: &Variant, page: &Page) {
         let _ = writeln!(
             s,
             "<g id=\"grid-labels\" font-family=\"{font}\" font-size=\"{}\" fill=\"{INK}\">",
-            n(pt(6.0))
+            n(small)
         );
         let mut k = (x0 / grid.step).ceil();
         while k * grid.step <= x1 {
@@ -125,7 +215,7 @@ pub fn write(s: &mut String, config: &Config, variant: &Variant, page: &Page) {
         // At most a quarter of the map width.
         let length = nice_length(0.25 * mw / page.scale);
         let bar = length * page.scale;
-        let (x, y) = (mx + 4.0, my + mh - 5.0);
+        let [x, y] = scale_bar_origin(config, page, symbols);
         let _ = writeln!(
             s,
             "<g id=\"scale-bar\" stroke=\"{INK}\" stroke-width=\"{line}\">"
@@ -163,7 +253,7 @@ pub fn write(s: &mut String, config: &Config, variant: &Variant, page: &Page) {
     }
 
     if e.compass == Some(true) {
-        let (cx, cy) = (mx + mw - 7.0, my + 9.0);
+        let [cx, cy] = compass_centre(page);
         let _ = writeln!(
             s,
             "<g id=\"compass\" stroke=\"{INK}\" stroke-width=\"{line}\">"
@@ -193,15 +283,14 @@ pub fn write(s: &mut String, config: &Config, variant: &Variant, page: &Page) {
             "<text x=\"{}\" y=\"{}\" font-family=\"{font}\" font-size=\"{}\" text-anchor=\"middle\" fill=\"{INK}\" stroke=\"none\">N</text>",
             n(cx),
             n(cy - 6.0),
-            n(pt(8.0))
+            n(small)
         );
         s.push_str("</g>\n");
     }
 
     if let Some(c) = &e.cartouche {
-        let size = pt(12.0);
-        let w = (c.title.chars().count() as f64 * size * 0.55 + 6.0).min(mw - 8.0);
-        let (x, y) = (mx + 4.0, my + 4.0);
+        let size = pt(sizes.title);
+        let [x, y, w, _] = cartouche_rect(config, &c.title, page);
         let _ = writeln!(s, "<g id=\"cartouche\">");
         let _ = writeln!(
             s,
