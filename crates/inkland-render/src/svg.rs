@@ -14,6 +14,9 @@ use std::fmt::Write as _;
 /// Line widths, in points. Milestone 7 moves these into the style config.
 pub const COAST_WIDTH_PT: f64 = 0.75;
 pub const NEATLINE_WIDTH_PT: f64 = 1.0;
+pub const STATE_BORDER_PT: f64 = 0.8;
+pub const PROVINCE_BORDER_PT: f64 = 0.5;
+pub const PLACE_LINE_PT: f64 = 0.5;
 pub const RIVER_MIN_PT: f64 = 0.5;
 pub const RIVER_STEP_PT: f64 = 0.35;
 pub const RIVER_MAX_PT: f64 = 2.0;
@@ -70,6 +73,8 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> String {
     }
     s.push_str("</g>\n");
     write_rivers(&mut s, world, config, &page);
+    write_borders(&mut s, world, config, &page);
+    write_places(&mut s, world, config, &page);
     let _ = writeln!(
         s,
         "<rect id=\"neatline\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\"/>",
@@ -111,6 +116,191 @@ fn write_rivers(s: &mut String, world: &World, config: &Config, page: &Page) {
     );
     for (id, d, w) in items {
         let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{}\"/>", n(w));
+    }
+    s.push_str("</g>\n");
+}
+
+/// Join edges that share a vertex into lines. The result is the same for
+/// the same edges: lines start at the lowest free end, and closed loops at
+/// their lowest vertex.
+pub fn chain_edges(edges: &[(u32, u32)]) -> Vec<Vec<u32>> {
+    use std::collections::BTreeMap;
+    let mut adj: BTreeMap<u32, Vec<(u32, usize)>> = BTreeMap::new();
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        adj.entry(a).or_default().push((b, i));
+        adj.entry(b).or_default().push((a, i));
+    }
+    let mut used = vec![false; edges.len()];
+    let mut lines = Vec::new();
+    let walk = |start: u32, used: &mut Vec<bool>| -> Vec<u32> {
+        let mut line = vec![start];
+        let mut cur = start;
+        while let Some(&(next, e)) = adj[&cur].iter().filter(|(_, e)| !used[*e]).min() {
+            used[e] = true;
+            line.push(next);
+            cur = next;
+            if adj[&cur].len() != 2 {
+                break;
+            }
+        }
+        line
+    };
+    // Open lines first: from each vertex that is not on exactly two edges.
+    let ends: Vec<u32> = adj
+        .iter()
+        .filter(|(_, v)| v.len() != 2)
+        .map(|(&k, _)| k)
+        .collect();
+    for v in ends {
+        while adj[&v].iter().any(|(_, e)| !used[*e]) {
+            lines.push(walk(v, &mut used));
+        }
+    }
+    // Then closed loops.
+    let all: Vec<u32> = adj.keys().copied().collect();
+    for v in all {
+        if adj[&v].iter().any(|(_, e)| !used[*e]) {
+            lines.push(walk(v, &mut used));
+        }
+    }
+    lines
+}
+
+/// The polygon edges between land cells whose owners differ by `key`.
+fn owner_edges(world: &World, key: &dyn Fn(usize) -> (u32, u32)) -> Vec<(u32, u32)> {
+    let g = &world.grid;
+    let mut edges = Vec::new();
+    for c in 0..g.len() {
+        if !world.features.is_land(c) {
+            continue;
+        }
+        let poly = &g.polygons[c];
+        for (k, &other) in g.edge_cells[c].iter().enumerate() {
+            if other == inkland_core::grid::OUTSIDE {
+                continue;
+            }
+            let o = other as usize;
+            if o < c || !world.features.is_land(o) {
+                continue;
+            }
+            let (a, b) = (key(c), key(o));
+            // Different owners; a missing second owner (0) is not a border.
+            if a != b && (a.0 != b.0 || (a.1 != 0 && b.1 != 0)) {
+                edges.push((poly[k], poly[(k + 1) % poly.len()]));
+            }
+        }
+    }
+    edges
+}
+
+fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
+    let soc = &world.society;
+    let min = config.render.min_line_width_pt;
+    let line = |verts: &[u32]| -> String {
+        let pts: Vec<[f64; 2]> = verts
+            .iter()
+            .map(|&v| world.grid.vertices[v as usize])
+            .collect();
+        path_data(page, &pts, false)
+    };
+    let state_edges = owner_edges(world, &|c| (soc.cell_state[c], 0));
+    let province_edges: Vec<(u32, u32)> =
+        owner_edges(world, &|c| (soc.cell_state[c], soc.cell_province[c]))
+            .into_iter()
+            .filter(|e| !state_edges.contains(e))
+            .collect();
+    let _ = writeln!(
+        s,
+        "<g id=\"regions\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    );
+    let _ = writeln!(
+        s,
+        "<g id=\"borders-provinces\" stroke-width=\"{}\" stroke-dasharray=\"0.3 0.9\">",
+        n(pt(PROVINCE_BORDER_PT.max(min)))
+    );
+    for (i, l) in chain_edges(&province_edges).iter().enumerate() {
+        let d = line(l);
+        if !d.is_empty() {
+            let _ = writeln!(s, "<path id=\"border-province-{}\" d=\"{d}\"/>", i + 1);
+        }
+    }
+    s.push_str("</g>\n");
+    let _ = writeln!(
+        s,
+        "<g id=\"borders-states\" stroke-width=\"{}\" stroke-dasharray=\"2 0.8 0.4 0.8\">",
+        n(pt(STATE_BORDER_PT.max(min)))
+    );
+    for (i, l) in chain_edges(&state_edges).iter().enumerate() {
+        let d = line(l);
+        if !d.is_empty() {
+            let _ = writeln!(s, "<path id=\"border-state-{}\" d=\"{d}\"/>", i + 1);
+        }
+    }
+    s.push_str("</g>\n</g>\n");
+}
+
+/// The symbol of a place: a circle for a city or a town, a dot for a village,
+/// a square for a fortress, a cross for a ruin, a triangle for a custom
+/// place. A capital has a ring around its symbol.
+fn place_symbol(
+    kind: inkland_core::config::PlaceKind,
+    capital: bool,
+    x: f64,
+    y: f64,
+    w: &str,
+) -> String {
+    use inkland_core::config::PlaceKind::*;
+    let (x, y) = (n(x), n(y));
+    let mut out = match kind {
+        City => format!(
+            "<circle cx=\"{x}\" cy=\"{y}\" r=\"0.9\" fill=\"{PAPER}\" stroke-width=\"{w}\"/><circle cx=\"{x}\" cy=\"{y}\" r=\"0.35\" fill=\"{INK}\" stroke=\"none\"/>"
+        ),
+        Town => format!(
+            "<circle cx=\"{x}\" cy=\"{y}\" r=\"0.65\" fill=\"{PAPER}\" stroke-width=\"{w}\"/>"
+        ),
+        Village => {
+            format!("<circle cx=\"{x}\" cy=\"{y}\" r=\"0.4\" fill=\"{INK}\" stroke=\"none\"/>")
+        }
+        Fortress => format!(
+            "<rect x=\"{}\" y=\"{}\" width=\"1.4\" height=\"1.4\" fill=\"{PAPER}\" stroke-width=\"{w}\" transform=\"translate(-0.7 -0.7)\"/>",
+            x, y
+        ),
+        Ruin => format!(
+            "<path d=\"M{x} {y}m-0.6 -0.6l1.2 1.2m0 -1.2l-1.2 1.2\" fill=\"none\" stroke-width=\"{w}\"/>"
+        ),
+        Custom => format!(
+            "<path d=\"M{x} {y}m0 -0.8l0.7 1.2h-1.4z\" fill=\"{PAPER}\" stroke-width=\"{w}\"/>"
+        ),
+    };
+    if capital {
+        out.push_str(&format!(
+            "<circle cx=\"{x}\" cy=\"{y}\" r=\"1.35\" fill=\"none\" stroke-width=\"{w}\"/>"
+        ));
+    }
+    out
+}
+
+fn write_places(s: &mut String, world: &World, config: &Config, page: &Page) {
+    let w = n(pt(PLACE_LINE_PT.max(config.render.min_line_width_pt)));
+    let [x0, y0, x1, y1] = page.view;
+    let mut items: Vec<(String, String)> = world
+        .society
+        .places
+        .iter()
+        .filter(|p| p.at[0] >= x0 && p.at[0] <= x1 && p.at[1] >= y0 && p.at[1] <= y1)
+        .map(|p| {
+            let id = match &p.pin {
+                Some(pin) => format!("place-{pin}"),
+                None => format!("place-{}", p.id),
+            };
+            let [x, y] = page.to_page(p.at);
+            (id, place_symbol(p.kind, p.capital, x, y, &w))
+        })
+        .collect();
+    items.sort_by(|a, b| a.0.cmp(&b.0));
+    let _ = writeln!(s, "<g id=\"places\" stroke=\"{INK}\">");
+    for (id, sym) in items {
+        let _ = writeln!(s, "<g id=\"{id}\">{sym}</g>");
     }
     s.push_str("</g>\n");
 }
@@ -231,6 +421,32 @@ mod tests {
         assert!(river_width_pt(0.0, 50.0, 0.5) >= 0.5);
         assert!(river_width_pt(1e9, 50.0, 0.5) <= RIVER_MAX_PT);
         assert!(river_width_pt(400.0, 50.0, 0.5) > river_width_pt(60.0, 50.0, 0.5));
+    }
+
+    #[test]
+    fn chain_edges_joins_a_line_and_a_loop() {
+        let edges = [(1, 2), (3, 2), (3, 4), (10, 11), (11, 12), (12, 10)];
+        let lines = chain_edges(&edges);
+        assert_eq!(lines, vec![vec![1, 2, 3, 4], vec![10, 11, 12, 10]]);
+    }
+
+    #[test]
+    fn each_place_has_a_symbol_and_borders_are_drawn() {
+        let mut c = config();
+        c.world.template = serde_json::from_value(json!("pangea")).unwrap();
+        c.world.cells = 5000;
+        let w = World::build(&c).unwrap();
+        let s = render(&w, &c, &c.variants[0]);
+        assert!(w.society.places.len() > 5);
+        for p in &w.society.places {
+            assert!(
+                s.contains(&format!("<g id=\"place-{}\">", p.id)),
+                "place-{}",
+                p.id
+            );
+        }
+        assert!(s.contains("<g id=\"borders-states\""));
+        assert!(s.contains("id=\"border-state-1\""));
     }
 
     #[test]
