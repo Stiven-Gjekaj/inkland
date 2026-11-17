@@ -69,18 +69,46 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
         n(page.w_mm),
         n(page.h_mm)
     );
+    // A layer name of the original program draws the same as the name of
+    // inkland for the same thing; each drawing is made once.
+    let mut drawn: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
     for layer in &config.render.layers {
         use inkland_core::config::LayerName;
-        match layer {
-            LayerName::Coast => write_coast(&mut s, world, config, &page, coast_w, min),
-            LayerName::Relief => write_relief(&mut s, world, config, &page, min, &labels),
-            LayerName::Rivers => write_rivers(&mut s, world, config, variant, &page),
-            LayerName::Regions => write_borders(&mut s, world, config, &page),
-            LayerName::Roads => write_roads(&mut s, world, config, &page),
-            LayerName::Features => write_features(&mut s, config, variant, &page),
-            LayerName::Places => write_places(&mut s, world, config, &page),
-            LayerName::Labels => write_labels(&mut s, &labels),
-            _ => {}
+        let parts: &[&str] = match layer {
+            LayerName::Coast => &["water-lines", "coast"],
+            LayerName::Ocean => &["water-lines"],
+            LayerName::Coastline => &["coast"],
+            LayerName::Regions | LayerName::Borders => &["borders"],
+            LayerName::Roads | LayerName::Routes => &["roads"],
+            LayerName::Places | LayerName::BurgIcons => &["places"],
+            LayerName::Relief => &["relief"],
+            LayerName::Rivers => &["rivers"],
+            LayerName::Features => &["features"],
+            LayerName::Labels => &["labels"],
+            LayerName::Cells => &["cells"],
+            LayerName::Grid => &["grid"],
+            LayerName::Coordinates => &["coordinates"],
+            _ => &[],
+        };
+        for part in parts {
+            if !drawn.insert(part) {
+                continue;
+            }
+            match *part {
+                "water-lines" => write_water_lines(&mut s, world, &page, min),
+                "coast" => write_coast(&mut s, world, config, &page, coast_w),
+                "relief" => write_relief(&mut s, world, config, &page, min, &labels),
+                "rivers" => write_rivers(&mut s, world, config, variant, &page),
+                "borders" => write_borders(&mut s, world, config, &page),
+                "roads" => write_roads(&mut s, world, config, &page),
+                "features" => write_features(&mut s, config, variant, &page),
+                "places" => write_places(&mut s, world, config, &page),
+                "labels" => write_labels(&mut s, &labels),
+                "cells" => crate::print_layers::cells(&mut s, world, &page, min),
+                "grid" => crate::print_layers::grid(&mut s, config, &page, min),
+                "coordinates" => crate::print_layers::coordinates(&mut s, config, &page, min),
+                _ => {}
+            }
         }
     }
     crate::extras::write(
@@ -180,15 +208,8 @@ fn write_labels(s: &mut String, labels: &crate::labels::Labels) {
     s.push_str("</g>\n");
 }
 
-fn write_coast(
-    s: &mut String,
-    world: &World,
-    config: &Config,
-    page: &Page,
-    coast_w: f64,
-    min: f64,
-) {
-    // Water lines: two thin lines in the water along each coast.
+/// Water lines: two thin lines in the water along each coast.
+fn write_water_lines(s: &mut String, world: &World, page: &Page, min: f64) {
     let _ = writeln!(
         s,
         "<g id=\"water-lines\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\">",
@@ -207,6 +228,9 @@ fn write_coast(
         }
     }
     s.push_str("</g>\n");
+}
+
+fn write_coast(s: &mut String, world: &World, config: &Config, page: &Page, coast_w: f64) {
     let _ = writeln!(
         s,
         "<g id=\"coast\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\" stroke-linecap=\"round\">",
@@ -217,8 +241,9 @@ fn write_coast(
         // each island and each lake.
         let px = crate::fmg::geom::Px::new(page, config.frame.width, config.frame.height);
         let map = |p: [f64; 2]| page.to_page([p[0] / px.unit_px, p[1] / px.unit_px]);
-        let settings = crate::fmg::geom::CoastSettings::DEFAULT;
-        for o in crate::fmg::geom::outlines(world, px.unit_px, &settings) {
+        for o in
+            crate::fmg::geom::outlines(world, px.unit_px, &crate::fmg::geom::CoastSettings::DEFAULT)
+        {
             let d = crate::fmg::geom::coast_path(&o.shape, &map, 3);
             if !d.is_empty() {
                 let _ = writeln!(s, "<path id=\"coast-feature-{}\" d=\"{d}\"/>", o.feature);

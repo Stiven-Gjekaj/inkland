@@ -25,13 +25,16 @@ pub fn xml(text: &str) -> String {
 }
 
 /// The extras of a variant: the variant value where it has one, else the
-/// render value.
+/// render value. The layers `scale-bar` and `compass` turn their extras on.
 pub fn merged(config: &Config, variant: &Variant) -> Extras {
+    use inkland_core::config::LayerName;
     let r = &config.render.extras;
     let v = &variant.extras;
+    // The layers `scale-bar` and `compass` also show them.
+    let layer = |l: LayerName| config.render.layers.contains(&l).then_some(true);
     Extras {
-        scale_bar: v.scale_bar.or(r.scale_bar),
-        compass: v.compass.or(r.compass),
+        scale_bar: layer(LayerName::ScaleBar).or(v.scale_bar.or(r.scale_bar)),
+        compass: layer(LayerName::Compass).or(v.compass.or(r.compass)),
         cartouche: v.cartouche.clone().or_else(|| r.cartouche.clone()),
         grid: v.grid.clone().or_else(|| r.grid.clone()),
     }

@@ -12,4 +12,5 @@ mod metrics_data;
 pub mod page;
 #[cfg(feature = "png")]
 pub mod png;
+pub mod print_layers;
 pub mod svg;
