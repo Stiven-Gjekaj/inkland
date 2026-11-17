@@ -3,6 +3,7 @@
 
 pub mod azgaar;
 pub mod config;
+pub mod query;
 pub mod report;
 pub mod schema;
 pub mod world;

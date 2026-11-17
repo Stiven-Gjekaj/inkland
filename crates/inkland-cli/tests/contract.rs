@@ -377,6 +377,48 @@ fn an_overlay_variant_leaves_world_json_as_it_is() {
     assert!(svg.contains("id=\"feature-old-field\""));
 }
 
+/// Generate the minimal config with pins in `dir/out`, and return the path
+/// of its `world.json`.
+fn generated_world(dir: &Path) -> PathBuf {
+    let mut c = minimal();
+    c["world"] = json!({ "cells": 1500, "template": "pangea" });
+    c["pins"] =
+        json!({ "points": [{ "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [50, 40] }] });
+    let config = write_config(dir, &c);
+    let out = dir.join("out");
+    let (code, _) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--out-dir",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0);
+    out.join("world.json")
+}
+
+#[test]
+fn query_answers_for_a_point_of_a_world() {
+    let dir = tempfile::tempdir().unwrap();
+    let world = generated_world(dir.path());
+    let (code, q) = run(&["query", "--world", world.to_str().unwrap(), "--at", "50,40"]);
+    assert_eq!(code, 0, "{q}");
+    assert_eq!(q["nearest_place"]["id"], "ostrey");
+    assert_eq!(q["land"], true);
+    let (code, e) = run(&[
+        "query",
+        "--world",
+        world.to_str().unwrap(),
+        "--at",
+        "500,40",
+    ]);
+    assert_eq!(code, 2);
+    assert_eq!(e["error"]["code"], "VALUE_OUT_OF_RANGE");
+    let (code, e) = run(&["query", "--world", "no-such-file.json", "--at", "1,1"]);
+    assert_eq!(code, 4);
+    assert_eq!(e["error"]["code"], "IO_READ");
+}
+
 #[test]
 fn generate_twice_gives_the_same_bytes() {
     let dir = tempfile::tempdir().unwrap();

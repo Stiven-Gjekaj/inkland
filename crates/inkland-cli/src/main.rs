@@ -136,7 +136,9 @@ fn main() {
         Command::Schema => Ok(inkland::schema()),
         Command::Import { map, out } => import(&map, &out, verbose),
         Command::Version { .. } => Ok(inkland::version_info()),
-        Command::Query { .. } => not_yet("query", 10),
+        Command::Query { world, at } => {
+            read_text(&world, "world").and_then(|t| inkland::query(&t, &at).map_err(|e| vec![e]))
+        }
         Command::Export { .. } => not_yet("export", 10),
         Command::Edit { .. } => not_yet("edit", 10),
         Command::Check {
@@ -335,6 +337,20 @@ fn check(path: &Path, min_line_width_pt: f64, fonts_allowed: &str) -> Result<Val
     let checks = inkland::check_svg_with(&text, min_line_width_pt, fonts);
     let failed = checks.iter().any(|c| c["pass"] == false);
     Ok(json!({ "svg": path.display().to_string(), "checks": checks, "checks_failed": failed }))
+}
+
+/// The text of an input file, or an `IO_READ` error.
+fn read_text(path: &Path, what: &str) -> Result<String, Vec<Error>> {
+    std::fs::read_to_string(path).map_err(|e| {
+        vec![
+            Error::new(
+                ErrorCode::IoRead,
+                "",
+                format!("cannot read the {what}: {e}"),
+            )
+            .with("file", path.display().to_string()),
+        ]
+    })
 }
 
 fn not_yet(command: &str, milestone: u32) -> Result<Value, Vec<Error>> {

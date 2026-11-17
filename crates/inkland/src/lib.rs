@@ -12,6 +12,19 @@ pub use inkland_io::report::DryRunReport;
 use inkland_io::report::{Check, PinCounts, Tool};
 use serde_json::{Value, json};
 
+/// Read the text of a `world.json`: its config and the world that the
+/// config makes.
+pub fn read_world(text: &str) -> Result<(Config, inkland_core::world::World), Error> {
+    inkland_io::world::read_world(text)
+}
+
+/// The facts about the point `at` (`x,y` in config units) of a world file.
+pub fn query(world_text: &str, at: &str) -> Result<Value, Error> {
+    let p = inkland_io::query::parse_point(at)?;
+    let (config, world) = read_world(world_text)?;
+    inkland_io::query::query(&world, &config, p)
+}
+
 /// The JSON Schema of the config.
 pub fn schema() -> Value {
     inkland_io::schema::config_schema()
