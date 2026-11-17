@@ -61,23 +61,19 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> String {
         n(page.w_mm),
         n(page.h_mm)
     );
-    let _ = writeln!(
-        s,
-        "<g id=\"coast\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\" stroke-linecap=\"round\">",
-        n(coast_w)
-    );
-    for line in &world.coastlines {
-        let d = path_data(&page, &line.points, line.closed);
-        if d.is_empty() {
-            continue;
+    for layer in &config.render.layers {
+        use inkland_core::config::LayerName;
+        match layer {
+            LayerName::Coast => write_coast(&mut s, world, &page, coast_w, min),
+            LayerName::Relief => write_relief(&mut s, world, config, &page, min),
+            LayerName::Rivers => write_rivers(&mut s, world, config, &page),
+            LayerName::Regions => write_borders(&mut s, world, config, &page),
+            LayerName::Roads => write_roads(&mut s, world, config, &page),
+            LayerName::Places => write_places(&mut s, world, config, &page),
+            LayerName::Labels => {}
         }
-        let _ = writeln!(s, "<path id=\"coast-{}\" d=\"{d}\"/>", line.id);
     }
-    s.push_str("</g>\n");
-    write_rivers(&mut s, world, config, &page);
-    write_borders(&mut s, world, config, &page);
-    write_roads(&mut s, world, config, &page);
-    write_places(&mut s, world, config, &page);
+    crate::extras::write(&mut s, config, variant, &page);
     let _ = writeln!(
         s,
         "<rect id=\"neatline\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\"/>",
@@ -89,6 +85,70 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> String {
     );
     s.push_str("</svg>\n");
     s
+}
+
+fn write_coast(s: &mut String, world: &World, page: &Page, coast_w: f64, min: f64) {
+    // Water lines: two thin lines in the water along each coast.
+    let _ = writeln!(
+        s,
+        "<g id=\"water-lines\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\">",
+        n(pt(0.5f64.max(min)))
+    );
+    for (i, line) in crate::decor::water_lines(world).iter().enumerate() {
+        let pts: Vec<[f64; 2]> = line
+            .iter()
+            .map(|&v| world.grid.vertices[v as usize])
+            .collect();
+        let closed = line.len() > 2 && line.first() == line.last();
+        let smooth = crate::decor::chaikin(&pts, closed, 2);
+        let d = path_data(page, &smooth, closed);
+        if !d.is_empty() {
+            let _ = writeln!(s, "<path id=\"water-line-{}\" d=\"{d}\"/>", i + 1);
+        }
+    }
+    s.push_str("</g>\n");
+    let _ = writeln!(
+        s,
+        "<g id=\"coast\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\" stroke-linecap=\"round\">",
+        n(coast_w)
+    );
+    for line in &world.coastlines {
+        let smooth = crate::decor::chaikin(&line.points, line.closed, 2);
+        let d = path_data(page, &smooth, line.closed);
+        if d.is_empty() {
+            continue;
+        }
+        let _ = writeln!(s, "<path id=\"coast-{}\" d=\"{d}\"/>", line.id);
+    }
+    s.push_str("</g>\n");
+}
+
+fn write_relief(s: &mut String, world: &World, config: &Config, page: &Page, min: f64) {
+    use crate::decor::Symbol;
+    let symbols = crate::decor::relief(world, page, config.seed);
+    let _ = writeln!(
+        s,
+        "<g id=\"relief\" clip-path=\"url(#clip-map)\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">",
+        n(pt(0.5f64.max(min)))
+    );
+    for (sym, [x, y]) in symbols {
+        let fill = match sym {
+            Symbol::Mountain | Symbol::Tree => PAPER,
+            Symbol::Dune => INK,
+            Symbol::Hill | Symbol::Marsh => "none",
+        };
+        let stroke = if sym == Symbol::Dune {
+            " stroke=\"none\""
+        } else {
+            ""
+        };
+        let _ = writeln!(
+            s,
+            "<path d=\"{}\" fill=\"{fill}\"{stroke}/>",
+            sym.path(x, y)
+        );
+    }
+    s.push_str("</g>\n");
 }
 
 /// The line width of a river, in points: wider for more water.
