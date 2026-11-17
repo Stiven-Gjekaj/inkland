@@ -220,6 +220,21 @@ impl Features {
         f
     }
 
+    /// Set the height of each lake again: 0.1 below its lowest shore cell
+    /// (FMG `Lakes.getHeight` in `defineGroups`).
+    pub fn set_lake_heights(&mut self, heights: &[f64]) {
+        for f in &mut self.list {
+            if f.kind == FeatureKind::Lake && !f.shoreline.is_empty() {
+                let lowest = f
+                    .shoreline
+                    .iter()
+                    .map(|&c| heights[c])
+                    .fold(f64::INFINITY, f64::min);
+                f.height = ((lowest - 0.1) * 100.0).round() / 100.0;
+            }
+        }
+    }
+
     pub fn get(&self, id: u32) -> &Feature {
         &self.list[id as usize - 1]
     }

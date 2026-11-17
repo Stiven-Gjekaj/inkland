@@ -306,6 +306,7 @@ fn river_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_
                 Mouth::Water(_) => "water",
                 Mouth::Join(_) => "join",
                 Mouth::Sink => "sink",
+                Mouth::Edge => "edge",
             };
             let end = river.points[river.points.len() - 1];
             serde_json::json!({

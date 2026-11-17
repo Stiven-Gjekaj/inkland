@@ -10,7 +10,7 @@ use crate::fit::{FitPoint, FitRegion, apply_points, apply_regions};
 use crate::grid::Grid;
 use crate::heightmap::{Heightmap, parse_steps, templates};
 use crate::rand::Rand;
-use crate::rivers::{Course, Drainage, River, drain, river_threshold, trace};
+use crate::rivers::{Course, Drainage, Lake, River, river_threshold};
 use crate::seed::{Layer, SeedTree};
 use std::collections::BTreeMap;
 
@@ -65,6 +65,8 @@ pub struct World {
     pub courses: Vec<Course>,
     /// All rivers. A pinned river has `course: Some(index)`.
     pub rivers: Vec<River>,
+    /// The water data of each lake, in feature order.
+    pub lakes: Vec<Lake>,
     /// The biome of each cell (see `biomes::NAMES`).
     pub biomes: Vec<u8>,
     /// Cultures, places, states, and provinces.
@@ -290,14 +292,26 @@ impl World {
         }
         let coastlines = coastlines(&grid, &features);
 
-        let drainage = drain(&grid, &heights, &features, &precipitation, &courses);
-        let rivers = trace(
-            &grid,
-            &features,
-            &drainage,
-            &courses,
-            river_threshold(grid.len()),
-        );
+        // Water flow and rivers (FMG `Rivers.generate`).
+        let flow = crate::rivers::generate(&crate::rivers::Input {
+            grid: &grid,
+            heights: &heights,
+            sea_level,
+            features: &features,
+            precipitation: &precipitation,
+            temperature: &temperature,
+            courses: &courses,
+            cells_desired: cell_count(config),
+            lake_elevation_limit: f64::from(config.world.lake_elevation_limit),
+        });
+        let drainage = flow.drainage;
+        let rivers = flow.rivers;
+        let lakes = flow.lakes;
+        let mut heights = flow.heights;
+        // Pins win: the new heights stay in the ranges of the regions.
+        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level);
+        let mut features = features;
+        features.set_lake_heights(&heights);
         let mut river_cells = vec![false; grid.len()];
         for r in &rivers {
             for &c in &r.cells {
@@ -377,6 +391,7 @@ impl World {
             drainage,
             courses,
             rivers,
+            lakes,
             biomes,
             society,
             roads,
@@ -827,7 +842,7 @@ mod river_tests {
         match tey.mouth {
             Mouth::Join(j) => assert!(corrin.cells.contains(&j)),
             Mouth::Water(_) => assert_eq!(*tey.cells.last().unwrap(), harbour),
-            Mouth::Sink => panic!("the Tey ends in a sink"),
+            Mouth::Sink | Mouth::Edge => panic!("the Tey does not reach water"),
         }
     }
 

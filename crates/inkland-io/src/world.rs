@@ -163,6 +163,7 @@ fn river_value(
         Mouth::Water(c) => json!({ "kind": "water", "cell": c }),
         Mouth::Join(c) => json!({ "kind": "join", "cell": c }),
         Mouth::Sink => json!({ "kind": "sink" }),
+        Mouth::Edge => json!({ "kind": "edge" }),
     };
     json!({
         "id": r.id,
@@ -170,6 +171,10 @@ fn river_value(
         "name": name.name,
         "type": name.kind,
         "parent": r.parent,
+        "basin": r.basin,
+        "source_width": round(r.source_width, 3),
+        "width_factor": round(r.width_factor, 3),
+        "width": round(r.width, 3),
         "mouth": mouth,
         "flux": round(r.flux, 3),
         "length": round(r.length, 3),
