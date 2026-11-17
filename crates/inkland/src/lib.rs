@@ -25,6 +25,21 @@ pub fn query(world_text: &str, at: &str) -> Result<Value, Error> {
     inkland_io::query::query(&world, &config, p)
 }
 
+/// The GeoJSON export of a world file. `format` must be `geojson`. `layers`
+/// is a list `a,b,c` of layers, or `None` for all layers.
+pub fn export(world_text: &str, format: &str, layers: Option<&str>) -> Result<Value, Error> {
+    if format != "geojson" {
+        return Err(Error::new(
+            ErrorCode::CliUsage,
+            "",
+            format!("{format:?} is not an export format; use geojson"),
+        ));
+    }
+    let layers = inkland_io::geojson::parse_layers(layers)?;
+    let (config, world) = read_world(world_text)?;
+    Ok(inkland_io::geojson::export(&world, &config, &layers))
+}
+
 /// The JSON Schema of the config.
 pub fn schema() -> Value {
     inkland_io::schema::config_schema()

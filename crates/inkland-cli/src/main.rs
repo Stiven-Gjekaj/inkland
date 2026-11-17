@@ -46,12 +46,15 @@ enum Command {
         #[arg(long)]
         at: String,
     },
-    /// Export a world as GeoJSON.
+    /// Export a world as GeoJSON, to stdout.
     Export {
         #[arg(long)]
         world: PathBuf,
-        #[arg(long)]
+        /// The format. Only `geojson`.
+        #[arg(long, default_value = "geojson")]
         format: String,
+        /// The layers, separated by commas: coast, rivers, regions, roads,
+        /// places, borders. Default: all.
         #[arg(long)]
         layers: Option<String>,
     },
@@ -139,7 +142,12 @@ fn main() {
         Command::Query { world, at } => {
             read_text(&world, "world").and_then(|t| inkland::query(&t, &at).map_err(|e| vec![e]))
         }
-        Command::Export { .. } => not_yet("export", 10),
+        Command::Export {
+            world,
+            format,
+            layers,
+        } => read_text(&world, "world")
+            .and_then(|t| inkland::export(&t, &format, layers.as_deref()).map_err(|e| vec![e])),
         Command::Edit { .. } => not_yet("edit", 10),
         Command::Check {
             svg,

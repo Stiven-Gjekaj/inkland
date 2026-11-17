@@ -420,6 +420,24 @@ fn query_answers_for_a_point_of_a_world() {
 }
 
 #[test]
+fn export_gives_geojson_of_the_asked_layers() {
+    let dir = tempfile::tempdir().unwrap();
+    let world = generated_world(dir.path());
+    let w = world.to_str().unwrap();
+    let (code, v) = run(&[
+        "export", "--world", w, "--format", "geojson", "--layers", "places",
+    ]);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["type"], "FeatureCollection");
+    let feats = v["features"].as_array().unwrap();
+    assert!(feats.iter().any(|f| f["properties"]["pin"] == "ostrey"));
+    assert!(feats.iter().all(|f| f["properties"]["layer"] == "places"));
+    let (code, e) = run(&["export", "--world", w, "--format", "kml"]);
+    assert_eq!(code, 2);
+    assert_eq!(e["error"]["code"], "CLI_USAGE");
+}
+
+#[test]
 fn generate_twice_gives_the_same_bytes() {
     let dir = tempfile::tempdir().unwrap();
     let mut c = minimal();

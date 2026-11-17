@@ -688,6 +688,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "inkland-core",
+ "libm",
  "schemars",
  "serde",
  "serde_json",
