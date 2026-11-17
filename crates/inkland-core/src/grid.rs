@@ -62,6 +62,97 @@ pub struct Grid {
     pub vertices: Vec<[f64; 2]>,
     /// `true` for a cell next to a boundary point.
     pub border: Vec<bool>,
+    /// `true` for the second grid (FMG `pack`): its points are not on the
+    /// lattice, so a lattice slot is not a cell.
+    pub packed: bool,
+    /// Buckets of cells for the search of the nearest cell.
+    pub index: CellIndex,
+}
+
+/// Square buckets of cells. A bucket holds the cells whose sites are in it.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CellIndex {
+    size: f64,
+    cols: usize,
+    rows: usize,
+    /// The cells of bucket `b` are `cells[start[b]..start[b + 1]]`.
+    start: Vec<u32>,
+    cells: Vec<u32>,
+}
+
+impl CellIndex {
+    fn new(points: &[[f64; 2]], width: f64, height: f64, size: f64) -> Self {
+        let cols = ((width / size).ceil() as usize).max(1);
+        let rows = ((height / size).ceil() as usize).max(1);
+        let bucket = |p: [f64; 2]| -> usize {
+            let c = ((p[0] / size).floor().max(0.0) as usize).min(cols - 1);
+            let r = ((p[1] / size).floor().max(0.0) as usize).min(rows - 1);
+            r * cols + c
+        };
+        let mut count = vec![0u32; cols * rows + 1];
+        for &p in points {
+            count[bucket(p) + 1] += 1;
+        }
+        for b in 0..cols * rows {
+            count[b + 1] += count[b];
+        }
+        let start = count.clone();
+        let mut fill = count;
+        let mut cells = vec![0u32; points.len()];
+        for (i, &p) in points.iter().enumerate() {
+            let b = bucket(p);
+            cells[fill[b] as usize] = i as u32;
+            fill[b] += 1;
+        }
+        CellIndex {
+            size,
+            cols,
+            rows,
+            start,
+            cells,
+        }
+    }
+
+    /// The cell whose site is nearest to `(x, y)`. Ties go to the lower
+    /// cell index.
+    fn nearest(&self, points: &[[f64; 2]], x: f64, y: f64) -> usize {
+        let c0 = ((x / self.size).floor().max(0.0) as i64).min(self.cols as i64 - 1);
+        let r0 = ((y / self.size).floor().max(0.0) as i64).min(self.rows as i64 - 1);
+        let mut best: Option<(f64, usize)> = None;
+        let reach = self.cols.max(self.rows) as i64;
+        for ring in 0..=reach {
+            for r in (r0 - ring)..=(r0 + ring) {
+                if r < 0 || r >= self.rows as i64 {
+                    continue;
+                }
+                for c in (c0 - ring)..=(c0 + ring) {
+                    if c < 0 || c >= self.cols as i64 {
+                        continue;
+                    }
+                    if (r - r0).abs().max((c - c0).abs()) != ring {
+                        continue;
+                    }
+                    let b = r as usize * self.cols + c as usize;
+                    for &cell in &self.cells[self.start[b] as usize..self.start[b + 1] as usize] {
+                        let p = points[cell as usize];
+                        let d = (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y);
+                        let cell = cell as usize;
+                        if best.is_none_or(|(bd, bc)| d < bd || (d == bd && cell < bc)) {
+                            best = Some((d, cell));
+                        }
+                    }
+                }
+            }
+            // A bucket of the next ring is at least `ring` buckets away.
+            if let Some((bd, _)) = best {
+                let reach = ring as f64 * self.size;
+                if bd <= reach * reach {
+                    break;
+                }
+            }
+        }
+        best.map_or(0, |(_, c)| c)
+    }
 }
 
 /// How far each point can move from its lattice position, as a fraction of
@@ -241,6 +332,8 @@ impl Grid {
             polygons: Vec::new(),
             vertices: Vec::new(),
             border: Vec::new(),
+            packed: false,
+            index: CellIndex::default(),
         };
         let mut taken = vec![false; points.len()];
         let mut site_cells = Vec::with_capacity(sites.len());
@@ -327,6 +420,8 @@ impl Grid {
             polygons: Vec::new(),
             vertices: Vec::new(),
             border: Vec::new(),
+            packed: false,
+            index: CellIndex::default(),
         };
         let boundary = grid.boundary();
         grid.set_points(points, &boundary);
@@ -399,6 +494,7 @@ impl Grid {
             edge_cells.push(neighbors);
         }
 
+        self.index = CellIndex::new(&points, self.width, self.height, self.lattice.spacing);
         self.points = points;
         self.edge_cells = edge_cells;
         self.polygons = polygons;
@@ -423,7 +519,11 @@ impl Grid {
     }
 
     /// The lattice slot that contains a position. The slot is a cell index.
+    /// In a second grid, it is the nearest cell.
     pub fn slot(&self, x: f64, y: f64) -> usize {
+        if self.packed {
+            return self.find_cell(x, y);
+        }
         let row = ((y / self.step_y).floor() as i64).clamp(0, i64::from(self.cells_y) - 1);
         let col = (((x - self.lattice.row_shift(row)) / self.step_x).floor() as i64)
             .clamp(0, i64::from(self.cells_x) - 1);
@@ -432,20 +532,38 @@ impl Grid {
 
     /// The cell whose site is nearest to a position.
     pub fn find_cell(&self, x: f64, y: f64) -> usize {
-        let mut best = self.slot(x, y);
-        let d = |c: usize| {
-            let p = self.points[c];
-            (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y)
-        };
-        loop {
-            let next = self
-                .neighbors(best)
-                .fold(best, |b, c| if d(c) < d(b) { c } else { b });
-            if next == best {
-                return best;
-            }
-            best = next;
+        self.index.nearest(&self.points, x, y)
+    }
+
+    /// The area of the polygon of a cell, in square units.
+    pub fn area(&self, cell: usize) -> f64 {
+        let poly = &self.polygons[cell];
+        let k = poly.len();
+        let mut sum = 0.0;
+        for i in 0..k {
+            let a = self.vertices[poly[i] as usize];
+            let b = self.vertices[poly[(i + 1) % k] as usize];
+            sum += a[0] * b[1] - b[0] * a[1];
         }
+        (sum / 2.0).abs()
+    }
+
+    /// Make a second grid of the given sites, with the frame, the lattice,
+    /// and the boundary points of this grid (FMG `Pack.generate`).
+    pub fn packed(&self, points: Vec<[f64; 2]>) -> Grid {
+        let mut g = Grid {
+            points: Vec::new(),
+            edge_cells: Vec::new(),
+            polygons: Vec::new(),
+            vertices: Vec::new(),
+            border: Vec::new(),
+            packed: true,
+            index: CellIndex::default(),
+            ..self.clone()
+        };
+        let boundary = self.boundary();
+        g.set_points(points, &boundary);
+        g
     }
 }
 
