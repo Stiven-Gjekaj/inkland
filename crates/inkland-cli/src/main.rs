@@ -28,7 +28,11 @@ enum Command {
     /// Generate the maps of a config.
     Generate(GenerateArgs),
     /// Print the JSON Schema of the config.
-    Schema,
+    Schema {
+        /// Print the config reference in Markdown, not the JSON Schema.
+        #[arg(long)]
+        markdown: bool,
+    },
     /// Make a config from a map file of Azgaar's Fantasy Map Generator.
     Import {
         /// The `.map` file.
@@ -143,7 +147,11 @@ fn main() {
     let verbose = cli.verbose;
     let out = match cli.command {
         Command::Generate(args) => generate(args, verbose),
-        Command::Schema => Ok(inkland::schema()),
+        Command::Schema { markdown: true } => {
+            print!("{}", inkland::schema_markdown());
+            std::process::exit(ExitCode::Ok.code());
+        }
+        Command::Schema { markdown: false } => Ok(inkland::schema()),
         Command::Import { map, out } => import(&map, &out, verbose),
         Command::Version { .. } => Ok(inkland::version_info()),
         Command::Query { world, at } => {

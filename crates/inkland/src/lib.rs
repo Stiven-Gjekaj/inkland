@@ -82,6 +82,11 @@ pub fn schema() -> Value {
     inkland_io::schema::config_schema()
 }
 
+/// The config reference in Markdown, made from the schema.
+pub fn schema_markdown() -> String {
+    inkland_io::schema::config_markdown()
+}
+
 /// All config rules and pin feasibility checks that need no terrain.
 pub fn validate(config: &Config) -> Vec<Error> {
     inkland_constraints::validate(config)
