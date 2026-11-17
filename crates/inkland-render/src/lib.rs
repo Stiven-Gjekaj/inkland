@@ -5,6 +5,8 @@
 pub mod checks;
 pub mod decor;
 pub mod extras;
+pub mod metrics;
+mod metrics_data;
 pub mod page;
 #[cfg(feature = "png")]
 pub mod png;
