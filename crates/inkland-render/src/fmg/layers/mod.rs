@@ -4,6 +4,7 @@ pub(crate) mod areas;
 mod base;
 mod decor;
 mod lines;
+pub(crate) mod marks;
 mod palette;
 mod text;
 
@@ -34,12 +35,12 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Borders => lines::borders(s, ctx),
         Routes => lines::routes(s, ctx),
         Rivers => lines::rivers(s, ctx),
-        Relief => {}
-        BurgIcons => {}
-        Ice => {}
-        Emblems => {}
-        Markers => {}
-        Features => {}
+        Relief => marks::relief(s, ctx),
+        BurgIcons => marks::burg_icons(s, ctx),
+        Ice => marks::ice(s, ctx),
+        Emblems => marks::emblems(s, ctx),
+        Markers => marks::markers(s, ctx),
+        Features => marks::features(s, ctx),
         Cells => {}
         Grid => {}
         Coordinates => {}
@@ -125,6 +126,7 @@ pub fn defs(ctx: &Ctx, body: &str) -> String {
     }
     decor::filter_defs(&mut d, &refs);
     decor::other_defs(&mut d, ctx, &refs);
+    marks::symbol_defs(&mut d, &refs);
     for (id, def) in ctx.extra_defs.borrow().iter() {
         if refs.contains(id) {
             d.push_str(def);
