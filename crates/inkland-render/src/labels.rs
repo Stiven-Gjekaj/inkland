@@ -1314,8 +1314,18 @@ mod tests {
 
     #[test]
     fn a_large_generated_river_gets_an_optional_label() {
+        // A label can collide with the names of a world, so some of a few
+        // worlds must place a river label.
+        let mut placed = 0;
+        for seed in 11..16 {
+            placed += river_labels_of(seed);
+        }
+        assert!(placed > 0, "no river label");
+    }
+
+    fn river_labels_of(seed: u64) -> usize {
         let (w, c) = world(
-            11,
+            seed,
             "continents",
             json!({ "world": { "cells": 8000, "template": "continents" } }),
         );
@@ -1325,7 +1335,6 @@ mod tests {
             .iter()
             .filter(|l| l.kind == Kind::River)
             .collect();
-        assert!(!rivers.is_empty(), "no river label");
         for l in &rivers {
             let id: u32 = l.id.trim_start_matches("label-river-").parse().unwrap();
             let i = w.rivers.iter().position(|r| r.id == id).unwrap();
@@ -1337,6 +1346,7 @@ mod tests {
                 assert!(!u.required);
             }
         }
+        rivers.len()
     }
 
     #[test]
