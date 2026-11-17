@@ -11,14 +11,16 @@ A chapter can cite a fact from a map, and a machine can check that fact.
 
 ## Status
 
-Milestone 3 is complete. The tool makes terrain and coastlines around
-pinned places and regions, and it writes a black-and-white SVG page, a world
-file, a report, and a PNG preview. A pinned place stays at its exact
-position, on land. A pinned region gets heights in its range. Rivers,
-generated places, roads, labels, and overlays come in later milestones.
+Milestone 4 is complete. The tool makes terrain, climate, biomes, and
+rivers around pinned places, regions, and rivers. It writes a
+black-and-white SVG page, a world file, a report, and a PNG preview. A pinned
+place stays at its exact position, on land. A pinned region gets heights in
+its range. A pinned river passes its points in order, flows downhill, and
+ends at its mouth. Generated places, roads, labels, and overlays come in
+later milestones.
 
 ```sh
-cargo run -p inkland-cli -- generate --config fixtures/golden/pins-book-layout.json --out-dir out --preview out/preview.png
+cargo run -p inkland-cli -- generate --config fixtures/golden/rivers-book-layout.json --out-dir out --preview out/preview.png
 cargo run -p inkland-cli -- generate --config fixtures/configs/full.json --dry-run
 cargo run -p inkland-cli -- schema
 cargo run -p inkland-cli -- version
