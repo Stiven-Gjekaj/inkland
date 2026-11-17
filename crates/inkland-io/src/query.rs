@@ -2,7 +2,7 @@
 //!
 //! The answer has the cell under the point, its height, biome, climate,
 //! feature, owners, the pinned regions that contain the point, and the
-//! nearest place, river, and road. Distances are in config units.
+//! nearest place, river, road, and marker. Distances are in config units.
 
 use inkland_core::config::{Config, Origin};
 use inkland_core::error::{Error, ErrorCode};
@@ -118,6 +118,21 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
             })
         });
 
+    let nearest_marker = world
+        .markers
+        .iter()
+        .map(|m| (dist(m.at, p), m))
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.id.cmp(&b.1.id)))
+        .map(|(d, m)| {
+            json!({
+                "id": m.id,
+                "type": m.kind,
+                "name": m.name,
+                "legend": m.legend,
+                "distance": round(d, 3),
+            })
+        });
+
     // Left and right of the river, as one looks downstream.
     let y_up = config.frame.origin == Origin::BottomLeft;
     let nearest_river = world
@@ -210,6 +225,7 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
         "nearest_place": nearest_place,
         "nearest_river": nearest_river,
         "nearest_road": nearest_road,
+        "nearest_marker": nearest_marker,
     }))
 }
 
@@ -243,6 +259,7 @@ mod tests {
         assert!(q["nearest_river"]["side"].is_string());
         assert!(q["biome"].is_string());
         assert!(q["nearest_river"]["name"].is_string());
+        assert!(q["nearest_marker"]["type"].is_string());
         assert!(q["feature"]["group"].is_string());
         assert!(q["religion"]["name"].is_string());
     }

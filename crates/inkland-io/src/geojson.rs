@@ -13,7 +13,9 @@ use inkland_core::world::World;
 use serde_json::{Value, json};
 
 /// The layers of the export, in output order.
-pub const LAYERS: [&str; 6] = ["coast", "rivers", "regions", "roads", "places", "borders"];
+pub const LAYERS: [&str; 7] = [
+    "coast", "rivers", "regions", "roads", "places", "markers", "borders",
+];
 
 /// The number of points of a circle region.
 const CIRCLE_POINTS: usize = 64;
@@ -160,6 +162,21 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
                     "capital": p.capital,
                     "port": p.port,
                     "state": state(p.state),
+                }),
+            ));
+        }
+    }
+    if has("markers") {
+        for m in &world.markers {
+            features.push(feature(
+                json!({ "type": "Point", "coordinates": pt(m.at) }),
+                json!({
+                    "layer": "markers",
+                    "id": m.id,
+                    "type": m.kind,
+                    "icon": m.icon,
+                    "name": m.name,
+                    "legend": m.legend,
                 }),
             ));
         }

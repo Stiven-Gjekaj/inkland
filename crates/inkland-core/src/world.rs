@@ -82,6 +82,8 @@ pub struct World {
     pub names: crate::geonames::Names,
     /// Folk and organized religions.
     pub religions: crate::religions::Religions,
+    /// Markers: points of interest, as data.
+    pub markers: Vec<crate::markers::Marker>,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -404,6 +406,20 @@ impl World {
             sea_level,
             society: &society,
         });
+        let markers = crate::markers::generate(&crate::markers::Input {
+            config,
+            grid: &grid,
+            features: &features,
+            biomes: &biomes,
+            temperature: &temperature,
+            rivers: &rivers,
+            names: &names,
+            society: &society,
+            religions: &religions,
+            roads: &roads,
+            sea_routes: &sea_routes,
+            pin_cells: &pin_cells,
+        });
         Ok(World {
             seed: config.seed,
             width: w,
@@ -436,6 +452,7 @@ impl World {
             sea_routes,
             names,
             religions,
+            markers,
         })
     }
 

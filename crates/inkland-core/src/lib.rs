@@ -23,6 +23,7 @@ pub mod grid;
 pub mod heightmap;
 pub mod ice;
 pub mod lakes;
+pub mod markers;
 pub mod names;
 pub mod num;
 pub mod overlay;

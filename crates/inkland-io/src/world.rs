@@ -78,6 +78,15 @@ pub fn world_value(world: &World, config: &Config) -> Value {
             }
             v
         }).collect::<Vec<_>>(),
+        "markers": world.markers.iter().map(|m| json!({
+            "id": m.id,
+            "type": m.kind,
+            "icon": m.icon,
+            "cell": m.cell,
+            "at": point(m.at),
+            "name": m.name,
+            "legend": m.legend,
+        })).collect::<Vec<_>>(),
         "religions": world.religions.list.iter().map(|r| json!({
             "id": r.id,
             "name": r.name,

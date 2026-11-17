@@ -209,6 +209,12 @@ impl Chain {
         name
     }
 
+    /// A name with the lengths of the base, not checked for use
+    /// (`getCulture`).
+    pub fn get(&self, rng: &mut Rand) -> String {
+        self.get_base(rng, self.base.min, self.base.max, None)
+    }
+
     /// A short name (`getBaseShort`).
     pub fn get_short(&self, rng: &mut Rand) -> String {
         let min = self.base.min - 1;
