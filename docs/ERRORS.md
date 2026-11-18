@@ -71,7 +71,7 @@ With more than one error, the exit code comes from the most basic fault:
 | `PIN_SAME_POSITION` | 3 | 0.1.0 | Two point pins have the same position. Each place needs its own cell. `details`: `other`. |
 | `PORT_NOT_NEAR_COAST` | 3 | 0.1.0 | A port has no water next to it, and no channel of 8 cells or fewer can join it to water. `details`: `max_channel_cells`. |
 | `REGION_CONFLICT` | 3 | 0.1.0 | Two regions overlap, but their height ranges have no common value. `details`: `other`. |
-| `SEA_NOT_CONNECTED` | 3 | 0.1.0 | A `sea` region without `landlocked: true` does not connect to the ocean at a frame edge. |
+| `SEA_NOT_CONNECTED` | 3 | 0.1.0 | A `sea` region without `landlocked: true` has water that does not connect to the ocean at a frame edge. Land in the region is shore. `details.at` gives the cut-off water. |
 | `RIVER_MOUTH_ON_LAND` | 3 | 0.1.0 | A point mouth is in a land region or on land that does not touch water, or a place mouth is not a port. |
 | `RIVER_NOT_DOWNHILL` | 3 | 0.1.0 | The heights of the regions on a river course do not permit downhill flow, or no path joins the points of the river. |
 | `RIVER_CROSSES_RIVER` | 3 | 0.1.0 | A pinned river cannot reach its next point without crossing another pinned river, in each order of planning. |
