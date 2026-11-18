@@ -475,7 +475,7 @@ impl World {
                 goods: &goods,
             },
             &mut society,
-        );
+        )?;
         // The military (FMG `Military.generate`), after the taxes.
         let era = crate::markers::era(config.seed);
         crate::military::generate(

@@ -379,6 +379,16 @@ One item of a legend box.
 | `color` | string | yes |  | The color of the swatch, as `#rrggbb`. |
 | `text` | string | yes |  | The text of the item. |
 
+### MarketEntry
+
+A change to the market centers. `at` names the place nearest to the point. Without `remove` and `to`, the entry adds a market with this place as its center. With `remove`, it removes the market of this center. With `to`, it moves the market of this center to the place nearest to `to`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `at` | array of 2 number | yes |  | A point `[x, y]`: the place nearest to it. |
+| `remove` | boolean |  |  | Remove the market of the place. |
+| `to` | array of 2 number |  |  | The new center: the place nearest to this point. |
+
 ### MeasurerEntry
 
 A measurer: its kind and its points `[x, y]`, in units.
@@ -750,6 +760,7 @@ Generation options.
 | `lake_elevation_limit` | integer |  |  | A land low point becomes a lake when its water cannot reach other water through cells lower than its height plus this limit, on the height scale 0 to 100. 0 to 80. 80 makes no such lakes. |
 | `lattice` | [`Lattice`](#lattice) |  |  | The lattice of the points of the first grid: `square`, `hex-pointy`, `hex-flat`, `diamond`, or `triangle`. |
 | `legends` | array of [`LegendEntry`](#legendentry) |  |  | Legend boxes: a title and colored items. |
+| `markets` | array of [`MarketEntry`](#marketentry) |  |  | Changes to the markets: add, move, or remove a market center. |
 | `measurers` | array of [`MeasurerEntry`](#measurerentry) |  |  | Measurers after the default ruler: rulers, opisometers, and planimeters. |
 | `military_units` | array of [`UnitEntry`](#unitentry) |  |  | Changes to the military units of Azgaar's Fantasy Map Generator, in order. Empty: the default roster of 6 units. |
 | `notes` | array of [`NoteEntry`](#noteentry) |  |  | Notes of the map, as the Notes editor of Azgaar's Fantasy Map Generator writes them. |

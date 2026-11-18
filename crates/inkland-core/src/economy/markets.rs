@@ -298,6 +298,68 @@ pub fn recenter(
     }
 }
 
+/// Apply the market changes of the config to the centers (burg indices)
+/// and their colors, in order. A new market gets a new distinct color.
+pub fn apply_config(
+    config: &crate::config::Config,
+    burgs: &[Burg],
+    centers: &mut Vec<usize>,
+    colors: &mut Vec<String>,
+    rng: &mut crate::rand::Rand,
+) -> Result<(), crate::error::Error> {
+    use crate::error::{Error, ErrorCode};
+    let nearest = |p: [f64; 2]| {
+        (0..burgs.len()).min_by(|&a, &b| {
+            let d = |k: usize| libm::hypot(burgs[k].at[0] - p[0], burgs[k].at[1] - p[1]);
+            d(a).total_cmp(&d(b)).then(a.cmp(&b))
+        })
+    };
+    for (i, e) in config.world.markets.iter().enumerate() {
+        let path = format!("/world/markets/{i}");
+        let bad = |m: String| Error::new(ErrorCode::MarketInvalid, path.clone(), m);
+        if e.remove && e.to.is_some() {
+            return Err(bad("a market entry cannot have both remove and to".into()));
+        }
+        let Some(b) = nearest(e.at) else {
+            return Err(bad("the world has no place for a market".into()));
+        };
+        let at = centers.iter().position(|&c| c == b);
+        match (e.remove, e.to, at) {
+            (true, _, Some(k)) => {
+                centers.remove(k);
+                colors.remove(k);
+            }
+            (false, Some(to), Some(k)) => {
+                let Some(t) = nearest(to) else {
+                    return Err(bad("the world has no place for a market".into()));
+                };
+                if centers.contains(&t) && t != b {
+                    return Err(bad("the new center has a market already".into()));
+                }
+                centers[k] = t;
+            }
+            (false, None, None) => {
+                centers.push(b);
+                let mut c = crate::colors::distinct_colors(colors.len() + 1, rng);
+                colors.push(c.pop().unwrap_or_else(|| "#808080".to_owned()));
+            }
+            (false, None, Some(_)) => {
+                return Err(bad(format!(
+                    "the place {} is a market center already",
+                    burgs[b].id
+                )));
+            }
+            (_, _, None) => {
+                return Err(bad(format!(
+                    "the place {} is not a market center",
+                    burgs[b].id
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,5 +431,54 @@ mod tests {
         assert_eq!(margin_rate(0.0), 0.04);
         assert_eq!(margin_rate(30.0), 0.05);
         assert_eq!(margin_rate(1e9), 0.5);
+    }
+}
+
+#[cfg(test)]
+mod config_tests {
+    use crate::config::Config;
+    use crate::world::World;
+    use serde_json::json;
+
+    fn build(markets: serde_json::Value) -> Result<World, crate::error::Error> {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 7, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 4000, "template": "continents", "states": 6, "markets": markets }
+        }))
+        .unwrap();
+        World::build(&c)
+    }
+
+    #[test]
+    fn market_entries_add_move_and_remove_centers() {
+        let base = build(json!([])).unwrap();
+        let places = &base.society.places;
+        let centers: Vec<u32> = base.economy.markets.iter().map(|m| m.center).collect();
+        let free = places
+            .iter()
+            .find(|p| !centers.contains(&p.id))
+            .expect("a place without a market");
+        let first = &places[centers[0] as usize - 1];
+        let added = build(json!([{ "at": free.at }])).unwrap();
+        assert_eq!(added.economy.markets.len(), centers.len() + 1);
+        assert!(added.economy.markets.iter().any(|m| m.center == free.id));
+        assert!(added.society.places[free.id as usize - 1].plaza);
+        let removed = build(json!([{ "at": first.at, "remove": true }])).unwrap();
+        assert_eq!(removed.economy.markets.len(), centers.len() - 1);
+        assert!(!removed.economy.markets.iter().any(|m| m.center == first.id));
+        let moved = build(json!([{ "at": first.at, "to": free.at }])).unwrap();
+        assert_eq!(moved.economy.markets.len(), centers.len());
+        assert!(moved.economy.markets.iter().any(|m| m.center == free.id));
+        assert!(!moved.economy.markets.iter().any(|m| m.center == first.id));
+        for markets in [
+            json!([{ "at": first.at }]),
+            json!([{ "at": free.at, "remove": true }]),
+        ] {
+            let e = build(markets).unwrap_err();
+            assert_eq!(
+                (e.code, e.path.as_str()),
+                (crate::error::ErrorCode::MarketInvalid, "/world/markets/0")
+            );
+        }
     }
 }

@@ -122,6 +122,11 @@ codes! {
         /// a point where no state is, or a tariff rate that is not a number
         /// or `embargo`.
         FinanceInvalid = "FINANCE_INVALID" => InvalidConfig,
+        /// An entry of `world.markets` adds a market at a place that is a
+        /// center already, moves or removes the market of a place that is
+        /// not a center, has both `remove` and `to`, or the world has no
+        /// place.
+        MarketInvalid = "MARKET_INVALID" => Infeasible,
         /// An edit of a world file sets or unsets a value that a
         /// `world.json` does not keep: an overlay, a variant, a render
         /// option, or a font directory.

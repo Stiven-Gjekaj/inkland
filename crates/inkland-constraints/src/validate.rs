@@ -251,6 +251,15 @@ impl<'a> Validator<'a> {
             self.errors
                 .extend(inkland_core::economy::finance::check(c, &goods, i, f));
         }
+        for (i, m) in w.markets.iter().enumerate() {
+            if m.remove && m.to.is_some() {
+                self.err(
+                    ErrorCode::MarketInvalid,
+                    format!("/world/markets/{i}"),
+                    "a market entry cannot have both remove and to",
+                );
+            }
+        }
         for (i, z) in w.zones.iter().enumerate() {
             self.errors.extend(inkland_core::zones::check(i, z));
         }

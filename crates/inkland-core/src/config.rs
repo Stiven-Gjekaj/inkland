@@ -249,6 +249,27 @@ pub struct World {
     /// budget that sets the state orders, and the tariffs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub finance: Vec<FinanceEntry>,
+    /// Changes to the markets: add, move, or remove a market center.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub markets: Vec<MarketEntry>,
+}
+
+/// A change to the market centers. `at` names the place nearest to the
+/// point. Without `remove` and `to`, the entry adds a market with this
+/// place as its center. With `remove`, it removes the market of this
+/// center. With `to`, it moves the market of this center to the place
+/// nearest to `to`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MarketEntry {
+    /// A point `[x, y]`: the place nearest to it.
+    pub at: Point,
+    /// Remove the market of the place.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub remove: bool,
+    /// The new center: the place nearest to this point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<Point>,
 }
 
 /// The budget of a state, in percents of the taxes collected. A value that
@@ -678,6 +699,7 @@ impl Default for World {
             legends: Vec::new(),
             zones: Vec::new(),
             finance: Vec::new(),
+            markets: Vec::new(),
         }
     }
 }

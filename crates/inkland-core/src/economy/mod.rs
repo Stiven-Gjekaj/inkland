@@ -204,7 +204,7 @@ pub(crate) fn burg_views(soc: &Society) -> Vec<markets::Burg> {
 /// Run the economy: markets (`Markets.generate`), the run of one day
 /// (`Production.produce`), and the taxes (`Taxes.collect`). The plaza of
 /// each place is its market: a center has one.
-pub fn build(input: &Input, soc: &mut Society) -> Economy {
+pub fn build(input: &Input, soc: &mut Society) -> Result<Economy, crate::error::Error> {
     let Input {
         config,
         grid,
@@ -246,6 +246,10 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
     let first: Vec<&markets::Burg> = centers.iter().map(|&k| &burgs[k]).collect();
     let cell_market = markets::expand(&flood, &first);
     markets::recenter(&burgs, &scored, &cell_market, &mut centers);
+    // The market changes of the config (`world.markets`).
+    let mut colors = colors;
+    let mut config_rng = Rand::new(tree.part_rng(Layer::Economy, "market-config"));
+    markets::apply_config(config, &burgs, &mut centers, &mut colors, &mut config_rng)?;
     let second: Vec<&markets::Burg> = centers.iter().map(|&k| &burgs[k]).collect();
     let cell_market = markets::expand(&flood, &second);
     let markets: Vec<markets::Market> = centers
@@ -340,7 +344,7 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
         .collect();
     let burg_cell: Vec<usize> = soc.places.iter().map(|p| p.cell).collect();
     economy.traffic = traffic::links(&economy.deals, &graph, &centers, &burg_cell);
-    economy
+    Ok(economy)
 }
 
 /// The cost of travel from the center of each market to each place, by
