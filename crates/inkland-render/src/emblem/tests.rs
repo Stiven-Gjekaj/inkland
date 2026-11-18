@@ -48,6 +48,7 @@ fn the_art_list_agrees_with_the_generator() {
             "licenses/by/",
             "licenses/by-sa/",
             "artlibre.org",
+            "gnu.org/licenses/fdl-1.3",
         ];
         assert!(ok.iter().any(|l| text.contains(l)), "{name}");
         assert!(!text.contains("by-nc"), "{name}");

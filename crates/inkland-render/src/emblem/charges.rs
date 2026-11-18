@@ -1,7 +1,8 @@
 //! The charge files of Azgaar's Fantasy Map Generator whose licenses permit
 //! use in inkland, kept as data in `assets/emblems/charges`: CC0, CC BY,
-//! CC BY-SA, and the Free Art License. Each file names its author and its
-//! license. Charges under CC BY-NC-SA, GFDL, or no license are not here.
+//! CC BY-SA, the Free Art License, and the GNU FDL 1.3 (its text is in
+//! `assets/emblems/GFDL-1.3.txt`). Each file names its author and its
+//! license. Charges under CC BY-NC-SA or with no license are not here.
 //! A script made this list from the directory.
 
 /// Each charge: its name and the text of its file, sorted by name.
@@ -69,6 +70,10 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "carreau",
         include_str!("../../assets/emblems/charges/conventional/carreau.svg"),
+    ),
+    (
+        "castle2",
+        include_str!("../../assets/emblems/charges/architecture/castle2.svg"),
     ),
     (
         "cavalier",
@@ -355,6 +360,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/people/hermit.svg"),
     ),
     (
+        "hook",
+        include_str!("../../assets/emblems/charges/tools/hook.svg"),
+    ),
+    (
         "hourglass",
         include_str!("../../assets/emblems/charges/miscellaneous/hourglass.svg"),
     ),
@@ -363,8 +372,16 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/molluscs/kraken.svg"),
     ),
     (
+        "ladder2",
+        include_str!("../../assets/emblems/charges/tools/ladder2.svg"),
+    ),
+    (
         "ladybird",
         include_str!("../../assets/emblems/charges/bugs/ladybird.svg"),
+    ),
+    (
+        "lanceHead",
+        include_str!("../../assets/emblems/charges/arms/lanceHead.svg"),
     ),
     (
         "lanceWithBanner",
@@ -411,6 +428,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/conventional/mascle.svg"),
     ),
     (
+        "millstone",
+        include_str!("../../assets/emblems/charges/agriculture/millstone.svg"),
+    ),
+    (
         "mullet",
         include_str!("../../assets/emblems/charges/conventional/mullet.svg"),
     ),
@@ -455,6 +476,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/reptiles/ouroboros.svg"),
     ),
     (
+        "palace",
+        include_str!("../../assets/emblems/charges/architecture/palace.svg"),
+    ),
+    (
         "pillar",
         include_str!("../../assets/emblems/charges/architecture/pillar.svg"),
     ),
@@ -467,8 +492,16 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/conventional/pique.svg"),
     ),
     (
+        "ploughshare",
+        include_str!("../../assets/emblems/charges/agriculture/ploughshare.svg"),
+    ),
+    (
         "polypus",
         include_str!("../../assets/emblems/charges/molluscs/polypus.svg"),
+    ),
+    (
+        "portcullis",
+        include_str!("../../assets/emblems/charges/architecture/portcullis.svg"),
     ),
     (
         "raft",
@@ -505,6 +538,10 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "ribbon6",
         include_str!("../../assets/emblems/charges/ornaments/ribbon6.svg"),
+    ),
+    (
+        "ribbon7",
+        include_str!("../../assets/emblems/charges/ornaments/ribbon7.svg"),
     ),
     (
         "ribbon8",
@@ -593,6 +630,10 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "squirrel",
         include_str!("../../assets/emblems/charges/beasts/squirrel.svg"),
+    ),
+    (
+        "stagLodgedRegardant",
+        include_str!("../../assets/emblems/charges/beasts/stagLodgedRegardant.svg"),
     ),
     (
         "stork",
