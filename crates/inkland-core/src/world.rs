@@ -337,18 +337,23 @@ impl World {
             if r.pin.kind != RegionKind::Sea || r.pin.landlocked {
                 continue;
             }
+            // A land cell in the sea is shore: a place, a road, or the
+            // coast. Only water that is not the ocean breaks the sea.
             let lake = (0..grid.len())
-                .filter(|&c| r.contains(grid.points[c]))
-                .any(|c| features.get(features.of_cell[c]).kind != FeatureKind::Ocean);
-            if lake {
-                return Err(Error::new(
+                .filter(|&c| r.contains(grid.points[c]) && !features.is_land(c))
+                .find(|&c| features.get(features.of_cell[c]).kind != FeatureKind::Ocean);
+            if let Some(c) = lake {
+                let [x, y] = grid.points[c];
+                let mut e = Error::new(
                     ErrorCode::SeaNotConnected,
                     format!("/pins/regions/{}", r.index),
                     format!(
-                        "the sea {:?} does not connect to the ocean at a frame edge; move it to the edge or set landlocked: true",
+                        "the sea {:?} does not connect to the ocean at a frame edge: its water at ({x:.1}, {y:.1}) is cut off; move it to the edge or set landlocked: true",
                         r.pin.id
                     ),
-                ));
+                );
+                e.details.insert("at".into(), serde_json::json!([x, y]));
+                return Err(e);
             }
         }
         let coastlines = coastlines(&grid, &features);
@@ -905,7 +910,29 @@ mod pin_tests {
         let e = World::build(&make(false)).unwrap_err();
         assert_eq!(e.code, ErrorCode::SeaNotConnected);
         assert_eq!(e.path, "/pins/regions/0");
+        // The error gives a water cell that the ocean does not reach.
+        let at = e.details["at"].as_array().unwrap();
+        let (x, y) = (at[0].as_f64().unwrap(), at[1].as_f64().unwrap());
+        assert!((x - 200.0).powi(2) + (y - 150.0).powi(2) <= 40.0 * 40.0);
         assert!(World::build(&make(true)).is_ok());
+    }
+
+    #[test]
+    fn land_in_a_sea_at_the_coast_is_shore() {
+        // The sea reaches over the coast line, and a town stands in it. The
+        // town and its land are shore, not a cut-off sea.
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 4, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": { "steps": ["Add 40 all"] } },
+            "pins": {
+                "points": [{ "id": "harbour", "kind": "town", "at": [58, 150] }],
+                "regions": [{ "id": "sea", "kind": "sea", "box": [0, 0, 60, 300] }]
+            }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let cell = w.pin_cells[0];
+        assert!(w.features.is_land(cell), "the town stays land");
     }
 
     #[test]
