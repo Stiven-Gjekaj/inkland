@@ -582,7 +582,7 @@ pub fn network(input: &Input, river_of: &[u32], roads: &mut Vec<Road>) -> Vec<Ro
             } else {
                 roads.len() as u32 + 1
             };
-            let mut road = finish(input, river_of, id, None, kind, route_cells.clone());
+            let mut road = finish(input, river_of, id, None, kind, route_cells.clone(), false);
             road.group = group_name;
             road.feature = feature;
             road.name = route_name(group_name, &route_cells, soc, &net.burg, &mut rng);

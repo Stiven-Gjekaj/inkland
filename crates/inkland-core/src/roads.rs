@@ -8,7 +8,9 @@
 //! start place through its `via` points to its end place. With a
 //! `target_length`, a road that is too short gets a detour: a waypoint to
 //! one side of its longest leg, at a distance that a search finds so that
-//! the length is in the tolerance. A road that is too long cannot become
+//! the length is in the tolerance. The points of a pinned road move in
+//! their cells to cut the zigzag between cell sites, and the length is the
+//! length of that line. A road that is too long cannot become
 //! shorter; the report gives its real length, and its check fails.
 //!
 //! Then a network of generated roads joins the capitals of each landmass
@@ -113,12 +115,51 @@ fn dist(a: [f64; 2], b: [f64; 2]) -> f64 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt()
 }
 
-fn path_length(grid: &Grid, cells: &[usize]) -> f64 {
-    cells
-        .windows(2)
-        .map(|w| dist(grid.points[w[0]], grid.points[w[1]]))
-        .sum()
+fn line_length(points: &[[f64; 2]]) -> f64 {
+    points.windows(2).map(|w| dist(w[0], w[1])).sum()
 }
+
+/// The points of a pinned road. Each point moves in its cell toward the
+/// middle of its two neighbours, so that the line has no zigzag between
+/// the cell sites. The ends and the cells of places do not move.
+fn taut_points(input: &Input, cells: &[usize]) -> Vec<[f64; 2]> {
+    let grid = input.grid;
+    let mut points: Vec<[f64; 2]> = cells.iter().map(|&c| grid.points[c]).collect();
+    let fixed: Vec<bool> = cells
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| {
+            i == 0 || i + 1 == cells.len() || input.society.places.iter().any(|p| p.cell == c)
+        })
+        .collect();
+    for _ in 0..TAUT_PASSES {
+        for i in 1..cells.len().saturating_sub(1) {
+            if fixed[i] {
+                continue;
+            }
+            let p = points[i];
+            let (a, b) = (points[i - 1], points[i + 1]);
+            let m = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+            // The point stays in its cell.
+            for t in [1.0, 0.5, 0.25] {
+                let q = [p[0] + (m[0] - p[0]) * t, p[1] + (m[1] - p[1]) * t];
+                if grid.find_cell(q[0], q[1]) == cells[i] {
+                    points[i] = q;
+                    break;
+                }
+            }
+        }
+    }
+    points
+}
+
+/// The length of a pinned road along its taut points.
+fn path_length(input: &Input, cells: &[usize]) -> f64 {
+    line_length(&taut_points(input, cells))
+}
+
+/// The passes of `taut_points`.
+const TAUT_PASSES: usize = 8;
 
 /// The cost factor of a step into a cell of an earlier leg of the same
 /// road. A block can wall in a stop, so a reuse only costs more.
@@ -265,6 +306,7 @@ pub fn build(input: &Input) -> Result<Routes, Error> {
             Some(k),
             pin.kind,
             cells,
+            true,
         ));
     }
 
@@ -323,6 +365,7 @@ pub fn route_more(
             None,
             pin.kind,
             cells,
+            true,
         );
         road.overlay = Some(pin.id.clone());
         out.push(road);
@@ -359,7 +402,7 @@ fn route_pinned(
     };
     let lo = target * (1.0 - pin.tolerance);
     let hi = target * (1.0 + pin.tolerance);
-    let len0 = path_length(grid, &base);
+    let len0 = path_length(input, &base);
     if (lo..=hi).contains(&len0) {
         return Ok(base);
     }
@@ -382,7 +425,7 @@ fn route_pinned(
     } else {
         base
     };
-    let len0 = path_length(grid, &base);
+    let len0 = path_length(input, &base);
     if len0 >= lo {
         // In the tolerance, or still too long: a road cannot be shorter
         // than its shortest path.
@@ -415,7 +458,7 @@ fn route_pinned(
         let mut s = stops.clone();
         s.insert(leg + 1, c);
         let cells = router.route_through(&s)?;
-        let l = path_length(grid, &cells);
+        let l = path_length(input, &cells);
         Some((cells, l))
     };
     // Scan the offset on each side, then halve the step where the length
@@ -484,9 +527,14 @@ pub(crate) fn finish(
     pin: Option<usize>,
     kind: RoadKind,
     cells: Vec<usize>,
+    taut: bool,
 ) -> Road {
     let grid = input.grid;
-    let points: Vec<[f64; 2]> = cells.iter().map(|&c| grid.points[c]).collect();
+    let points: Vec<[f64; 2]> = if taut {
+        taut_points(input, &cells)
+    } else {
+        cells.iter().map(|&c| grid.points[c]).collect()
+    };
     let mut along = vec![0.0; cells.len()];
     for i in 1..cells.len() {
         along[i] = along[i - 1] + dist(points[i - 1], points[i]);
@@ -702,6 +750,28 @@ mod tests {
             .map(|s| s.place.as_str())
             .collect();
         assert_eq!(ids, ["kingsholm", "ford", "harbour"]);
+    }
+
+    #[test]
+    fn a_road_meets_its_target_at_each_cell_count() {
+        for cells in [10_000, 20_000, 50_000] {
+            let w = World::build(&book(cells)).unwrap();
+            let r = pinned(&w, 0);
+            assert!(
+                (r.length - 240.0).abs() <= 240.0 * 0.05,
+                "{cells} cells: length {}",
+                r.length
+            );
+            // The length is the length of the drawn line.
+            let drawn: f64 = r
+                .points
+                .windows(2)
+                .map(|p| ((p[0][0] - p[1][0]).powi(2) + (p[0][1] - p[1][1]).powi(2)).sqrt())
+                .sum();
+            assert!((drawn - r.length).abs() < 1e-9);
+            assert_eq!(*r.points.first().unwrap(), [150.0, 120.0]);
+            assert_eq!(*r.points.last().unwrap(), [22.0, 180.0]);
+        }
     }
 
     #[test]
