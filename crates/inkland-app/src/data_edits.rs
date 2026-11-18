@@ -99,6 +99,15 @@ pub fn command(
                 path: format!("/world/notes/{}", k - 1),
             })
         }
+        ("legends", "remove") => {
+            let k: usize = id.parse().map_err(|_| missing())?;
+            if k >= config.world.legends.len() {
+                return Err(missing());
+            }
+            Ok(Command::Remove {
+                path: format!("/world/legends/{k}"),
+            })
+        }
         ("measurers", "remove") => {
             let k: usize = id.parse().map_err(|_| missing())?;
             if k >= world.measurers.len() {
@@ -618,6 +627,11 @@ mod tests {
         let cmd = draw(e.config(), &w2, DrawTool::MoveRegiment, &id, &[to], "").unwrap();
         e.run(cmd).unwrap();
         let w3 = World::build(e.config()).unwrap();
+        let cmd = command(e.config(), &w3, "legends", "0", "remove", "").unwrap();
+        e.run(cmd).unwrap();
+        assert!(e.config().world.legends.is_empty());
+        e.undo().unwrap();
+        assert!(command(e.config(), &w3, "legends", "1", "remove", "").is_err());
         let moved = w3
             .society
             .states

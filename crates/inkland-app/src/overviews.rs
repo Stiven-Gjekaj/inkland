@@ -796,6 +796,22 @@ pub fn measurer_rows(world: &World, unit: &str) -> Vec<Row> {
         .collect()
 }
 
+/// The legend boxes of the config: the title and the number of items.
+pub fn legend_rows(world: &World) -> Vec<Row> {
+    world
+        .legends
+        .iter()
+        .enumerate()
+        .map(|(k, l)| {
+            row(
+                k.to_string(),
+                vec![l.name.clone(), l.items.len().to_string()],
+                false,
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1065,5 +1081,19 @@ mod tests {
             rows[0].cells[2],
             format!("{} mi", num(w.measurers[0].length(), 1))
         );
+    }
+
+    #[test]
+    fn the_legend_rows_give_the_title_and_the_items() {
+        let (mut c, _) = world();
+        c.world.legends = serde_json::from_value(json!([
+            { "name": "Roads", "items": [{ "color": "#aa0000", "text": "Kings road" }] }
+        ]))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let rows = legend_rows(&w);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "0");
+        assert_eq!(rows[0].cells, ["Roads", "1"]);
     }
 }
