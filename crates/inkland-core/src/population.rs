@@ -146,21 +146,8 @@ impl Cells {
                 r[c] = river.id;
             }
         }
-        let mut conf = vec![0.0; n];
-        for c in 0..n {
-            if r[c] == 0 {
-                continue;
-            }
-            let mut inflow: Vec<f64> = grid
-                .neighbors(c)
-                .filter(|&m| r[m] != 0 && drainage.receiver[m] == c)
-                .map(|m| fl[m])
-                .collect();
-            if inflow.len() >= 2 {
-                inflow.sort_by(|a, b| b.total_cmp(a));
-                conf[c] = inflow[1..].iter().sum();
-            }
-        }
+        // The confluence flux of the river stage (FMG `cells.conf`).
+        let conf: Vec<f64> = drainage.confluence.iter().map(|&f| f * scale).collect();
 
         let group: Vec<&'static str> = features
             .of_cell
@@ -309,5 +296,11 @@ mod tests {
             assert_eq!(cells.s[c].fract(), 0.0);
         }
         assert!(cells.s.iter().any(|&s| s > 0.0));
+    }
+
+    #[test]
+    fn the_rank_reads_the_confluence_flux_of_the_river_stage() {
+        let w = world();
+        assert_eq!(w.society.cells.conf, w.drainage.confluence);
     }
 }
