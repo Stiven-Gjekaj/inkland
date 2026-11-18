@@ -178,7 +178,10 @@ pub struct World {
     #[serde(default = "default_growth_rate")]
     #[schemars(range(min = 0.1, max = 2.0))]
     pub growth_rate: f64,
-    /// Number of states.
+    /// Number of states. A point pin with `capital_of` is the capital of
+    /// its state; generation adds the other capitals as cities. 0 and no
+    /// `capital_of`: the world has no states and no capitals. With
+    /// `towns: 0` too, the only places are the pins.
     #[serde(default = "default_states")]
     pub states: u32,
     /// Number of towns that generation adds, or `auto`.

@@ -346,8 +346,9 @@ pub fn build(input: &Input) -> Society {
         &mut srng,
         &mut name_rng,
     );
-    if states.is_empty() && !places.is_empty() {
-        // inkland: no capital, so the first place leads one state.
+    if states.is_empty() && !places.is_empty() && config.world.states > 0 {
+        // inkland: no capital, so the first place leads one state. With
+        // `states: 0` the world has no state.
         places[0].capital = true;
         states = crate::states::create(
             &state_input,
@@ -492,6 +493,27 @@ mod tests {
     use proptest::prelude::*;
     use serde_json::json;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn zero_states_and_zero_towns_leave_only_the_pins() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 4, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 3000, "template": "pangea", "states": 0, "towns": 0 },
+            "pins": { "points": [{ "id": "keep", "kind": "fortress", "name": "Dawnwatch Keep", "at": [150, 100] }] }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let soc = &w.society;
+        assert!(soc.states.is_empty());
+        assert_eq!(soc.places.len(), 1, "only the pin");
+        assert!(soc.places.iter().all(|p| p.pin.is_some() && !p.capital));
+        // With one state and no capital pin, generation adds a capital.
+        let mut one = c.clone();
+        one.world.states = 1;
+        let w = World::build(&one).unwrap();
+        assert_eq!(w.society.states.len(), 1);
+        assert!(w.society.places.iter().any(|p| p.capital));
+    }
 
     const TEMPLATES: [&str; 5] = [
         "continents",

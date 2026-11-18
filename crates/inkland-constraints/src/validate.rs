@@ -392,13 +392,6 @@ impl<'a> Validator<'a> {
                 "growth_rate must be 0.1 to 2",
             );
         }
-        if w.states == 0 {
-            self.err(
-                ErrorCode::ValueOutOfRange,
-                "/world/states",
-                "states must be 1 or more",
-            );
-        }
         let [south, north] = w.climate.latitude_range;
         if !(-90.0..=90.0).contains(&south) || !(-90.0..=90.0).contains(&north) || south >= north {
             self.err(
