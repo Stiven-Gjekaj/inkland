@@ -120,27 +120,35 @@ impl CellIndex {
         let r0 = ((y / self.size).floor().max(0.0) as i64).min(self.rows as i64 - 1);
         let mut best: Option<(f64, usize)> = None;
         let reach = self.cols.max(self.rows) as i64;
-        for ring in 0..=reach {
-            for r in (r0 - ring)..=(r0 + ring) {
-                if r < 0 || r >= self.rows as i64 {
-                    continue;
+        let visit = |r: i64, c: i64, best: &mut Option<(f64, usize)>| {
+            if r < 0 || r >= self.rows as i64 || c < 0 || c >= self.cols as i64 {
+                return;
+            }
+            let b = r as usize * self.cols + c as usize;
+            for &cell in &self.cells[self.start[b] as usize..self.start[b + 1] as usize] {
+                let p = points[cell as usize];
+                let d = (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y);
+                let cell = cell as usize;
+                if best.is_none_or(|(bd, bc)| d < bd || (d == bd && cell < bc)) {
+                    *best = Some((d, cell));
                 }
+            }
+        };
+        for ring in 0..=reach {
+            // Only the buckets on the edge of the ring: the top and bottom
+            // rows, then the left and right columns between them. Ties go
+            // to the lower cell index, so the order of the visits does not
+            // change the result.
+            if ring == 0 {
+                visit(r0, c0, &mut best);
+            } else {
                 for c in (c0 - ring)..=(c0 + ring) {
-                    if c < 0 || c >= self.cols as i64 {
-                        continue;
-                    }
-                    if (r - r0).abs().max((c - c0).abs()) != ring {
-                        continue;
-                    }
-                    let b = r as usize * self.cols + c as usize;
-                    for &cell in &self.cells[self.start[b] as usize..self.start[b + 1] as usize] {
-                        let p = points[cell as usize];
-                        let d = (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y);
-                        let cell = cell as usize;
-                        if best.is_none_or(|(bd, bc)| d < bd || (d == bd && cell < bc)) {
-                            best = Some((d, cell));
-                        }
-                    }
+                    visit(r0 - ring, c, &mut best);
+                    visit(r0 + ring, c, &mut best);
+                }
+                for r in (r0 - ring + 1)..=(r0 + ring - 1) {
+                    visit(r, c0 - ring, &mut best);
+                    visit(r, c0 + ring, &mut best);
                 }
             }
             // A bucket of the next ring is at least `ring` buckets away.
@@ -709,6 +717,31 @@ mod tests {
             let d = |c: usize| (g.points[c][0] - x).powi(2) + (g.points[c][1] - y).powi(2);
             let best = (0..g.len()).min_by(|&a, &b| d(a).total_cmp(&d(b))).unwrap();
             assert_eq!(d(found), d(best));
+        }
+    }
+
+    #[test]
+    fn find_cell_gives_the_nearest_site_far_from_a_sparse_pack() {
+        // A pack with sites only in a corner, as a pack without the open
+        // sea: a point far away searches many rings of empty buckets.
+        let base = grid(4000);
+        let sites: Vec<[f64; 2]> = base
+            .points
+            .iter()
+            .copied()
+            .filter(|p| p[0] < 60.0 && p[1] < 60.0)
+            .collect();
+        let g = base.packed(sites);
+        let mut k = 0.0;
+        while k < 1.0 {
+            let (x, y) = (400.0 * k, 300.0 * (1.0 - k * k));
+            let d = |c: usize| (g.points[c][0] - x).powi(2) + (g.points[c][1] - y).powi(2);
+            // The nearest site, and the lower index on a tie.
+            let best = (0..g.len())
+                .min_by(|&a, &b| d(a).total_cmp(&d(b)).then(a.cmp(&b)))
+                .unwrap();
+            assert_eq!(g.find_cell(x, y), best, "({x}, {y})");
+            k += 0.037;
         }
     }
 
