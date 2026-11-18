@@ -1,5 +1,5 @@
 //! The icons of `colour` mode: relief icons, place icons, port anchors, and
-//! goods icons.
+//! goods icons, and glyphs.
 //!
 //! Each icon file becomes an SVG `<symbol>`, as `icon-sets.ts` of the
 //! original program makes it. A symbol id is the set and the file name in
@@ -117,6 +117,41 @@ pub fn goods_icon_path(icon: &str) -> String {
     }
 }
 
+/// The prefix of a glyph id.
+const GLYPH_PREFIX: &str = "glyph-";
+
+/// The id of a glyph: its code points in hex, `XIV` gives `glyph-58-49-56`
+/// (`Icons.glyph`). An empty text gives an empty id.
+pub fn glyph_id(text: &str) -> String {
+    if text.is_empty() {
+        return String::new();
+    }
+    let hex: Vec<String> = text
+        .chars()
+        .map(|c| format!("{:x}", u32::from(c)))
+        .collect();
+    format!("{GLYPH_PREFIX}{}", hex.join("-"))
+}
+
+/// The text of a glyph id, or `None` for another id (`Icons.glyphText`).
+pub fn glyph_text(id: &str) -> Option<String> {
+    let rest = id.strip_prefix(GLYPH_PREFIX)?;
+    rest.split('-')
+        .map(|h| u32::from_str_radix(h, 16).ok().and_then(char::from_u32))
+        .collect()
+}
+
+/// The `<symbol>` of a glyph: its text in a 100 x 100 frame
+/// (`Icons.ensureGlyph`). The text takes the fill of the place that uses
+/// it.
+pub fn glyph_symbol(id: &str) -> Option<String> {
+    let text = glyph_text(id)?;
+    Some(format!(
+        "<symbol id=\"{id}\" viewBox=\"0 0 100 100\" overflow=\"visible\"><text x=\"50\" y=\"50\" font-size=\"100\" text-anchor=\"middle\" dominant-baseline=\"central\" stroke=\"none\">{}</text></symbol>",
+        crate::extras::xml(&text)
+    ))
+}
+
 /// The relief icon types (`TYPES` in `relief-generator.ts`): the name, the
 /// number of variants, and the fallback type.
 pub const RELIEF_TYPES: [(&str, u32, Option<&str>); 14] = [
@@ -221,6 +256,24 @@ mod tests {
             kebab(&goods_icon_path("goods-tropicalTimber")),
             "goods-tropical-timber"
         );
+    }
+
+    #[test]
+    fn a_glyph_id_holds_its_text() {
+        assert_eq!(glyph_id("XIV"), "glyph-58-49-56");
+        assert_eq!(glyph_id("\u{2696}\u{fe0f}"), "glyph-2696-fe0f");
+        assert_eq!(glyph_id(""), "");
+        assert_eq!(
+            glyph_text("glyph-2696-fe0f").as_deref(),
+            Some("\u{2696}\u{fe0f}")
+        );
+        assert_eq!(glyph_text("glyph-zz"), None);
+        assert_eq!(glyph_text("goods-amber"), None);
+        let s = glyph_symbol("glyph-3c-26").unwrap();
+        assert!(s.starts_with("<symbol id=\"glyph-3c-26\" viewBox=\"0 0 100 100\""));
+        assert!(s.contains(">&lt;&amp;</text>"));
+        let doc = format!("<svg xmlns=\"http://www.w3.org/2000/svg\">{s}</svg>");
+        assert!(roxmltree::Document::parse(&doc).is_ok());
     }
 
     #[test]

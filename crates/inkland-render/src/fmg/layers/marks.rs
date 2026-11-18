@@ -444,16 +444,18 @@ pub fn burg_icons(s: &mut String, ctx: &Ctx) {
     s.push_str("</g>\n");
 }
 
-/// The symbols that the body uses.
+/// The symbols that the body uses: icon files and glyphs.
 pub fn symbol_defs(d: &mut String, refs: &BTreeSet<String>) {
     let mut by_id: BTreeMap<String, &str> = BTreeMap::new();
     for (path, _) in super::super::icons_data::FILES {
         by_id.insert(icons::kebab(path), path);
     }
     for r in refs {
-        if let Some(path) = by_id.get(r)
-            && let Some(sym) = icons::symbol(path, r)
-        {
+        let sym = match by_id.get(r) {
+            Some(path) => icons::symbol(path, r),
+            None => icons::glyph_symbol(r),
+        };
+        if let Some(sym) = sym {
             d.push_str(&sym);
             d.push('\n');
         }
