@@ -13,7 +13,7 @@ use inkland_core::world::World;
 use serde_json::{Value, json};
 
 /// The layers of the export, in output order.
-pub const LAYERS: [&str; 8] = [
+pub const LAYERS: [&str; 15] = [
     "coast",
     "rivers",
     "regions",
@@ -22,6 +22,13 @@ pub const LAYERS: [&str; 8] = [
     "places",
     "markers",
     "borders",
+    "zones",
+    "markets",
+    "trade",
+    "regiments",
+    "journeys",
+    "measurers",
+    "deposits",
 ];
 
 /// The number of points of a circle region.
@@ -37,6 +44,56 @@ fn line(points: &[[f64; 2]]) -> Value {
 
 fn feature(geometry: Value, properties: Value) -> Value {
     json!({ "type": "Feature", "geometry": geometry, "properties": properties })
+}
+
+fn signed_area(ring: &[[f64; 2]]) -> f64 {
+    ring.windows(2)
+        .map(|w| w[0][0] * w[1][1] - w[1][0] * w[0][1])
+        .sum::<f64>()
+        / 2.0
+}
+
+fn contains(ring: &[[f64; 2]], p: [f64; 2]) -> bool {
+    let mut inside = false;
+    for w in ring.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if (a[1] > p[1]) != (b[1] > p[1])
+            && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]
+        {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+/// The MultiPolygon of a set of cells: each outer loop with the holes in
+/// it. The cells are on the left of each loop, so a hole turns the other
+/// way.
+fn cells_geometry(world: &World, inside: &dyn Fn(usize) -> bool) -> Option<Value> {
+    let rings: Vec<Vec<[f64; 2]>> = inkland_core::features::outlines(&world.grid, inside)
+        .iter()
+        .map(|l| l.iter().map(|&v| world.grid.vertices[v as usize]).collect())
+        .collect();
+    let largest = rings
+        .iter()
+        .max_by(|a, b| signed_area(a).abs().total_cmp(&signed_area(b).abs()))?;
+    let outer_sign = signed_area(largest).signum();
+    let (outer, holes): (Vec<_>, Vec<_>) = rings
+        .into_iter()
+        .partition(|r| signed_area(r).signum() == outer_sign);
+    let mut polygons: Vec<Vec<Vec<[f64; 2]>>> = outer.into_iter().map(|r| vec![r]).collect();
+    for h in holes {
+        if let Some(poly) = polygons.iter_mut().find(|poly| contains(&poly[0], h[0])) {
+            poly.push(h);
+        }
+    }
+    Some(json!({
+        "type": "MultiPolygon",
+        "coordinates": polygons
+            .iter()
+            .map(|poly| poly.iter().map(|r| line(r)).collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+    }))
 }
 
 /// Parse a list of layers `a,b,c`. An empty list or `None` gives all layers.
@@ -229,6 +286,93 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
         }
     }
 
+    if has("zones") {
+        for z in &world.zones {
+            let cells: std::collections::BTreeSet<usize> = z.cells.iter().copied().collect();
+            if let Some(g) = cells_geometry(world, &|c| cells.contains(&c)) {
+                features.push(feature(
+                    g,
+                    json!({ "layer": "zones", "id": z.id, "name": z.name, "type": z.kind,
+                            "cells": z.cells.len(), "note": z.note }),
+                ));
+            }
+        }
+    }
+    let eco = &world.economy;
+    if has("markets") {
+        for m in &eco.markets {
+            if let Some(g) = cells_geometry(world, &|c| eco.cell_market[c] == m.id) {
+                let center = world.society.places.get(m.center as usize - 1);
+                features.push(feature(
+                    g,
+                    json!({ "layer": "markets", "id": m.id, "center": m.center,
+                            "name": center.map(|p| p.name.clone()), "color": m.color }),
+                ));
+            }
+        }
+    }
+    if has("trade") {
+        for (i, l) in eco.traffic.iter().enumerate() {
+            let pts = [world.grid.points[l.cells[0]], world.grid.points[l.cells[1]]];
+            let units: f64 = l.goods.iter().map(|g| g.1).sum();
+            features.push(feature(
+                json!({ "type": "LineString", "coordinates": line(&pts) }),
+                json!({ "layer": "trade", "id": i + 1, "cells": l.cells, "water": l.water,
+                        "units": round(units, 3), "goods": l.goods.len() }),
+            ));
+        }
+    }
+    if has("regiments") {
+        for st in &world.society.states {
+            for r in &st.military {
+                features.push(feature(
+                    json!({ "type": "Point", "coordinates": pt(r.at) }),
+                    json!({ "layer": "regiments", "state": r.state, "id": r.id,
+                            "name": r.name, "naval": r.naval, "total": round(r.total, 3),
+                            "icon": r.icon }),
+                ));
+            }
+        }
+    }
+    if has("journeys") {
+        for j in &world.journeys {
+            for sg in &j.segments {
+                let pts: Vec<[f64; 2]> = sg.points.iter().map(|p| p.at).collect();
+                if pts.len() < 2 {
+                    continue;
+                }
+                features.push(feature(
+                    json!({ "type": "LineString", "coordinates": line(&pts) }),
+                    json!({ "layer": "journeys", "journey": j.id, "id": sg.id,
+                            "name": sg.name, "transport": sg.transport, "color": j.color,
+                            "length": round(sg.distance, 3) }),
+                ));
+            }
+        }
+    }
+    if has("measurers") {
+        for (i, m) in world.measurers.iter().enumerate() {
+            features.push(feature(
+                json!({ "type": "LineString", "coordinates": line(&m.points) }),
+                json!({ "layer": "measurers", "id": i + 1, "type": m.kind.name(),
+                        "length": round(m.length(), 3) }),
+            ));
+        }
+    }
+    if has("deposits") {
+        for (c, &g) in world.society.cells.good.iter().enumerate() {
+            if g == 0 {
+                continue;
+            }
+            let good = eco.goods.get(g as usize - 1);
+            features.push(feature(
+                json!({ "type": "Point", "coordinates": pt(world.grid.points[c]) }),
+                json!({ "layer": "deposits", "cell": c, "good": g,
+                        "name": good.map(|x| x.name) }),
+            ));
+        }
+    }
+
     json!({
         "type": "FeatureCollection",
         "crs": { "type": "name", "properties": { "name": "inkland:local" } },
@@ -317,5 +461,42 @@ mod tests {
             ErrorCode::CliUsage
         );
         assert_eq!(parse_layers(None).unwrap(), LAYERS);
+    }
+
+    #[test]
+    fn markets_and_zones_are_closed_multipolygons_of_their_cells() {
+        let (w, c) = world();
+        let v = export(&w, &c, &["markets", "zones"]);
+        let feats = v["features"].as_array().unwrap();
+        let markets = feats
+            .iter()
+            .filter(|f| f["properties"]["layer"] == "markets")
+            .count();
+        assert_eq!(markets, w.economy.markets.len());
+        for f in feats {
+            assert_eq!(f["geometry"]["type"], "MultiPolygon");
+            for poly in f["geometry"]["coordinates"].as_array().unwrap() {
+                for ring in poly.as_array().unwrap() {
+                    let r = ring.as_array().unwrap();
+                    assert!(r.len() >= 4);
+                    assert_eq!(r.first(), r.last());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_hole_goes_into_its_outer_ring() {
+        let outer = [
+            [0.0, 0.0],
+            [10.0, 0.0],
+            [10.0, 10.0],
+            [0.0, 10.0],
+            [0.0, 0.0],
+        ];
+        let hole = [[2.0, 2.0], [2.0, 4.0], [4.0, 4.0], [4.0, 2.0], [2.0, 2.0]];
+        assert!(signed_area(&outer) > 0.0 && signed_area(&hole) < 0.0);
+        assert!(contains(&outer, hole[0]));
+        assert!(!contains(&hole, [9.0, 9.0]));
     }
 }
