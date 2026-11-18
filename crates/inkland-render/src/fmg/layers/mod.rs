@@ -28,7 +28,7 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
     match layer {
         Ocean => base::ocean(s, ctx),
         Landmass => base::landmass(s, ctx),
-        Texture => {}
+        Texture => base::texture(s, ctx),
         Heightmap => base::heightmap(s, ctx),
         Lakes => base::lakes(s, ctx),
         Coastline => base::coastline(s, ctx),

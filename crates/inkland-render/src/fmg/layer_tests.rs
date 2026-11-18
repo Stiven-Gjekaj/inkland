@@ -563,6 +563,21 @@ fn zones_draw_with_the_hatches_of_fmg() {
 }
 
 #[test]
+fn the_texture_and_the_ocean_pattern_hold_their_images() {
+    let svg = render_with(&[LayerName::Ocean, LayerName::Texture], StyleName::Default);
+    assert!(svg.contains("<g id=\"texture\""));
+    assert!(svg.contains("<image preserveAspectRatio=\"xMidYMid slice\""));
+    assert!(svg.contains("href=\"data:image/jpeg;base64,"));
+    assert!(svg.contains("<pattern id=\"oceanic\""));
+    assert!(svg.contains("href=\"data:image/png;base64,"));
+    assert!(svg.contains("fill=\"url(#oceanic)\""));
+    parse_and_draw(&svg);
+    // The ink style has no ocean pattern.
+    let ink = render_with(&[LayerName::Ocean], StyleName::Ink);
+    assert!(!ink.contains("oceanic"));
+}
+
+#[test]
 fn heights_of_the_ink_and_cinderwood_styles_are_hachures() {
     for style in [StyleName::Ink, StyleName::Cinderwood] {
         let svg = render_with(&[LayerName::Heightmap], style);

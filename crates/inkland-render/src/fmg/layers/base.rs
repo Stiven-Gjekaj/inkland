@@ -130,9 +130,71 @@ pub fn ocean(s: &mut String, ctx: &Ctx) {
         }
     }
     s.push_str("</g>\n");
+    ocean_pattern(s, ctx);
     waves(s, ctx);
     bands(s, ctx);
     s.push_str("</g>\n");
+}
+
+/// The page pixels in one map pixel of the original program.
+fn map_px(ctx: &Ctx) -> f64 {
+    ctx.px.from_world_px([1.0, 0.0])[0] - ctx.px.from_world_px([0.0, 0.0])[0]
+}
+
+/// The ocean pattern: an image tile of 100 map pixels over the whole map
+/// (`drawOceanBase`).
+fn ocean_pattern(s: &mut String, ctx: &Ctx) {
+    let p = ["ocean", "pattern"];
+    let Some(href) = ctx
+        .style
+        .attr(&p, "href")
+        .and_then(|h| super::super::images::href(&h))
+    else {
+        return;
+    };
+    let tile = n(100.0 * map_px(ctx));
+    let opacity = ctx
+        .style
+        .attr(&p, "opacity")
+        .map(|o| format!(" opacity=\"{}\"", crate::extras::xml(&o)))
+        .unwrap_or_default();
+    ctx.def(
+        "oceanic",
+        format!(
+            "<pattern id=\"oceanic\" width=\"{tile}\" height=\"{tile}\" patternUnits=\"userSpaceOnUse\"><image id=\"oceanic-pattern\" width=\"{tile}\" height=\"{tile}\" href=\"{href}\"{opacity}/></pattern>"
+        ),
+    );
+    let _ = writeln!(
+        s,
+        "<g id=\"ocean-pattern\"><rect {} fill=\"url(#oceanic)\"/></g>",
+        ctx.map_rect_attrs(10.0)
+    );
+}
+
+/// The paper texture: one image over the map, from the point `x`, `y`
+/// (`drawTexture`).
+pub fn texture(s: &mut String, ctx: &Ctx) {
+    let p = ["texture"];
+    let Some(href) = ctx
+        .style
+        .option_str(&p, "href")
+        .and_then(|h| super::super::images::href(&h))
+    else {
+        return;
+    };
+    let k = map_px(ctx);
+    let x = ctx.style.option_f64(&p, "x").unwrap_or(0.0) * k;
+    let y = ctx.style.option_f64(&p, "y").unwrap_or(0.0) * k;
+    let [mx, my, mw, mh] = ctx.px.map_rect();
+    let _ = writeln!(
+        s,
+        "<g id=\"texture\"{}><image preserveAspectRatio=\"xMidYMid slice\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" href=\"{href}\"/></g>",
+        ctx.attrs(&p, &[]),
+        n(mx + x),
+        n(my + y),
+        n((mw - x).max(0.0)),
+        n((mh - y).max(0.0))
+    );
 }
 
 /// The reach of the coastal bands, in cell spacings.
