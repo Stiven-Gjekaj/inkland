@@ -47,7 +47,13 @@ inkland generate --config map.json --out-dir out --preview out/map.png
 Files in the output directory:
 
 - `world.json`: the base world. All variants share it. It does not change
-  when only overlays, variants, or render options change.
+  when only overlays, variants, or render options change. Besides the
+  terrain and the society, it holds the relations and the campaigns of each
+  state and the `chronicle`, the goods, the deposits (`cell_good`), the
+  markets (`cell_market`), the deal log (`deals`: `fields` and `rows`),
+  the economy of each place (`place_economy`), the finance, accounts,
+  regiments, and stability of each state, `cell_prosperity`, the `zones`,
+  the `journeys`, the `measurers`, the `legends`, and the `notes`.
 - `<variant>.svg`: the map, in mm, black and white, with real `<text>`.
 - `<variant>.report.json`: pins, labels, checks, and warnings.
 
@@ -103,6 +109,12 @@ river, and road with their distances. The state, the province, and the
 nearest place have `coa`, the coat of arms. `nearest_river.side` is `left` or
 `right` as one looks downstream.
 
+The output also gives the data of the economy and the story stages:
+`deposit` (the good of the cell), `market` (its id and the name of its
+center), `prosperity` (0 to 100, land only), `stability` (of the state and
+of the province, 0 to 1), `zones` (the zones that hold the cell), and
+`nearest_regiment`.
+
 ## `inkland export`
 
 Export a world as GeoJSON, to stdout.
@@ -115,12 +127,15 @@ inkland export --world out/world.json --format geojson --layers coast,rivers,roa
 |---|---|
 | `--world FILE` | The `world.json` of a generated world. |
 | `--format geojson` | The format. Only `geojson`. |
-| `--layers LIST` | The layers, separated by commas: `coast`, `rivers`, `regions`, `sea_routes`, `roads`, `places`, `markers`, `borders`. Default: all. |
+| `--layers LIST` | The layers, separated by commas: `coast`, `rivers`, `regions`, `sea_routes`, `roads`, `places`, `markers`, `borders`, `zones`, `markets`, `trade`, `regiments`, `journeys`, `measurers`, `deposits`. Default: all. |
 
 The coordinates are config units of the frame with 3 decimals, not WGS84.
 `crs` is `inkland:local`. Each feature has `layer`, an id, and, where they
 apply, a pin id, a name, a kind, and a length. A place has `coa`, its coat
-of arms.
+of arms. `zones` and `markets` are MultiPolygons of their cells, with the
+holes in each outer ring. `trade` has one line for each route link that
+carries goods, with the units of the day. `regiments` and `deposits` are
+points. `journeys` has one line for each segment.
 
 ## `inkland emblem`
 
