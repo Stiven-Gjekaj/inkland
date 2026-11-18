@@ -8,12 +8,14 @@
 //! - `lore`: the archetypes of a party and the name tables.
 //! - `map`: the world data that journeys read.
 //! - `path`: the pathfinding over land, routes, rivers, and water.
+//! - `places`: the place that names a cell.
 //!
 //! Journeys read the world. They never change it.
 
 pub mod lore;
 pub mod map;
 pub mod path;
+pub mod places;
 pub mod transports;
 
 pub use transports::{Domain, MAX_HOURS_PER_DAY, Transport};
