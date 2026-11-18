@@ -17,7 +17,7 @@ The config of one map.
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `font_dirs` | array of string |  | `[]` | Directories with font files. Only the PNG preview uses them. |
+| `font_dirs` | array of string |  | `[]` | More directories with font files for the PNG preview. The preview also has the free fonts of the style presets built in, and it uses the fonts of the system. The SVG never embeds a font. |
 | `frame` | [`Frame`](#frame) | yes |  | The size and the axes of the world. |
 | `overlays` | map of name to [`Overlay`](#overlay) |  |  | Named overlays. A variant shows the base world and one overlay. |
 | `pins` | [`Pins`](#pins) |  |  | Hard constraints. Generation fits around them and never moves them. |

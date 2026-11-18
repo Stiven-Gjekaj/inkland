@@ -46,7 +46,9 @@ pub struct Config {
     /// Render options for all variants.
     #[serde(default)]
     pub render: Render,
-    /// Directories with font files. Only the PNG preview uses them.
+    /// More directories with font files for the PNG preview. The preview
+    /// also has the free fonts of the style presets built in, and it uses
+    /// the fonts of the system. The SVG never embeds a font.
     #[serde(default)]
     pub font_dirs: Vec<String>,
 }
