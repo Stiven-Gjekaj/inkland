@@ -10,7 +10,7 @@
 //! - `output`, `routes`, `trade`, `production`, `orders`, `taxes`,
 //!   `corruption`, `deals`: the run of one day (`Production.produce`), then
 //!   the collection of the taxes (`Taxes.collect`).
-//! - `prosperity`, `accounts`: what the run gives. FMG works them
+//! - `prosperity`, `accounts`, `traffic`: what the run gives. FMG works them
 //!   out on demand; inkland works them out once in `build` and keeps them
 //!   in `Economy`. The functions of `accounts` (`trade`, `budget`,
 //!   `outputs`, `known_for`, `economy_type`) give the rest on demand.
@@ -33,6 +33,7 @@ pub mod prosperity;
 pub mod routes;
 pub mod taxes;
 pub mod trade;
+pub mod traffic;
 
 use crate::config::Config;
 use crate::features::Features;
@@ -131,6 +132,8 @@ pub struct Economy {
     pub burg_living: Vec<Option<prosperity::Living>>,
     /// The accounts of the states, the provinces, and the world.
     pub accounts: accounts::Accounts,
+    /// The units of each good on each route link (`TradeTraffic`).
+    pub traffic: Vec<traffic::Link>,
 }
 
 impl Economy {
@@ -275,6 +278,7 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
         rural: Vec::new(),
         burg_living: Vec::new(),
         accounts: accounts::Accounts::default(),
+        traffic: Vec::new(),
     };
     produce(input, soc, &links, &mut economy);
     // The rural prosperity of the cells, as `produce` of FMG ends: before
@@ -326,6 +330,14 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
         output: &economy.rural_output,
         working: &economy.working_cell,
     });
+    let graph = graph(grid, soc, &links, economy.spacing);
+    let centers: Vec<usize> = economy
+        .markets
+        .iter()
+        .map(|m| soc.places[m.center as usize - 1].cell)
+        .collect();
+    let burg_cell: Vec<usize> = soc.places.iter().map(|p| p.cell).collect();
+    economy.traffic = traffic::links(&economy.deals, &graph, &centers, &burg_cell);
     economy
 }
 
@@ -824,6 +836,24 @@ mod tests {
             if let Some(l) = &e.burg_living[b] {
                 assert!((0.0..=1.0).contains(&l.prosperity), "{}", p.name);
             }
+        }
+    }
+
+    #[test]
+    fn goods_travel_the_routes() {
+        let w = world(8, "archipelago");
+        let e = &w.economy;
+        assert!(!e.traffic.is_empty());
+        let links = super::route_links(&w.roads, &w.sea_routes, w.grid.len());
+        for l in &e.traffic {
+            let [a, b] = l.cells;
+            assert!(
+                links[a]
+                    .iter()
+                    .any(|&(m, water)| m == b && water == l.water),
+                "{a}-{b}"
+            );
+            assert!(l.goods.iter().all(|&(_, u)| u > 0.0));
         }
     }
 
