@@ -205,6 +205,12 @@ fn u16(v: f64) -> f64 {
     v.trunc().clamp(0.0, 65535.0)
 }
 
+/// Add a flux to a mark of a `Uint8Array`, as FMG does: the sum wraps
+/// at 256.
+fn add_u8(mark: u8, flux: f64) -> u8 {
+    ((f64::from(mark) + flux.trunc()).rem_euclid(256.0)) as u8
+}
+
 /// The midpoint of the polygon edge between two neighbor cells.
 fn shared_edge_midpoint(grid: &Grid, a: usize, b: usize) -> Option<[f64; 2]> {
     let poly = &grid.polygons[a];
@@ -424,6 +430,7 @@ pub fn generate(input: &Input) -> Output {
     let modifier = libm::pow(input.cells_desired / 10000.0, 0.25);
     let mut fl = vec![0.0f64; n];
     let mut r = vec![0u32; n];
+    let mut conf = vec![0u8; n];
     let mut rivers_data: BTreeMap<u32, Vec<i64>> = BTreeMap::new();
     let mut river_parents: BTreeMap<u32, u32> = BTreeMap::new();
     let mut river_next: u32 = 1;
@@ -501,6 +508,7 @@ pub fn generate(input: &Input) -> Output {
                 &mut FlowState {
                     fl: &mut fl,
                     r: &mut r,
+                    conf: &mut conf,
                     data: &mut rivers_data,
                     parents: &mut river_parents,
                     lakes: &mut lakes,
@@ -582,6 +590,7 @@ pub fn generate(input: &Input) -> Output {
             &mut FlowState {
                 fl: &mut fl,
                 r: &mut r,
+                conf: &mut conf,
                 data: &mut rivers_data,
                 parents: &mut river_parents,
                 lakes: &mut lakes,
@@ -1055,6 +1064,9 @@ fn resolve_depressions(
 struct FlowState<'a> {
     fl: &'a mut [f64],
     r: &'a mut [u32],
+    /// The confluence marks of the drain (FMG `cells.conf`, a
+    /// `Uint8Array` at this step).
+    conf: &'a mut [u8],
     data: &'a mut BTreeMap<u32, Vec<i64>>,
     parents: &'a mut BTreeMap<u32, u32>,
     lakes: &'a mut [Lake],
@@ -1071,17 +1083,23 @@ struct FlowEnv<'a> {
 
 /// Give the water of a river to a cell (FMG `flowDown`).
 fn flow_down(s: &mut FlowState, env: &FlowEnv, to: usize, from_flux: f64, river: u32) {
-    let to_flux = s.fl[to];
+    // The water of the river that is already in the cell, without the
+    // water of its tributaries.
+    let to_flux = s.fl[to] - f64::from(s.conf[to]);
     let to_river = s.r[to];
     let land = env.h[to] >= env.sea;
     if to_river != 0 {
         if from_flux > to_flux {
+            s.conf[to] = add_u8(s.conf[to], s.fl[to]);
             if land {
                 s.parents.insert(to_river, river);
             }
             s.r[to] = river;
-        } else if land {
-            s.parents.insert(river, to_river);
+        } else {
+            s.conf[to] = add_u8(s.conf[to], from_flux);
+            if land {
+                s.parents.insert(river, to_river);
+            }
         }
     } else {
         s.r[to] = river;
@@ -1328,6 +1346,56 @@ mod tests {
         assert_eq!(out.drainage.receiver[b], NONE);
         assert!(out.drainage.elevation[a] > out.drainage.elevation[b]);
         assert_eq!(out.rivers[0].mouth, Mouth::Sink);
+    }
+
+    #[test]
+    fn a_confluence_compares_the_own_water_of_the_river() {
+        // Cell 0 is on river 1 with 100 water, and 80 of it comes from
+        // tributaries. River 2 brings 50: more than the own 20 of river 1,
+        // so river 2 keeps its id downstream.
+        let (mut fl, mut r, mut conf) = (vec![100.0], vec![1u32], vec![80u8]);
+        let (mut data, mut parents) = (BTreeMap::new(), BTreeMap::new());
+        let (mut lakes, mut lake_river, mut entering): (Vec<Lake>, Vec<Option<u32>>, Vec<f64>) =
+            (Vec::new(), Vec::new(), Vec::new());
+        let h = [50.0];
+        let no_lake = |_: usize| None;
+        let env = FlowEnv {
+            h: &h,
+            sea: 20.0,
+            lake_of: &no_lake,
+        };
+        let mut state = FlowState {
+            fl: &mut fl,
+            r: &mut r,
+            conf: &mut conf,
+            data: &mut data,
+            parents: &mut parents,
+            lakes: &mut lakes,
+            lake_river: &mut lake_river,
+            entering_flux: &mut entering,
+        };
+        flow_down(&mut state, &env, 0, 50.0, 2);
+        assert_eq!(r[0], 2);
+        assert_eq!(parents.get(&1), Some(&2));
+        assert_eq!(fl[0], 150.0);
+        // The mark is a byte: 80 + 100 = 180.
+        assert_eq!(conf[0], 180);
+        // The own water of river 2 is now 150 - 180 < 0, so river 3 takes
+        // the id, as in FMG. The mark grows by 150 and wraps at 256.
+        let mut state = FlowState {
+            fl: &mut fl,
+            r: &mut r,
+            conf: &mut conf,
+            data: &mut data,
+            parents: &mut parents,
+            lakes: &mut lakes,
+            lake_river: &mut lake_river,
+            entering_flux: &mut entering,
+        };
+        flow_down(&mut state, &env, 0, 100.0, 3);
+        assert_eq!(r[0], 3);
+        assert_eq!(parents.get(&2), Some(&3));
+        assert_eq!(conf[0], 74);
     }
 
     #[test]
