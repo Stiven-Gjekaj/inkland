@@ -179,6 +179,8 @@ pub fn generate(
                 center: burg.cell,
                 form_name: form_name.to_owned(),
                 color: crate::colors::mixed_color(&s.color, rng, 0.2, 0.3),
+                wild: false,
+                coa: None,
             });
         }
     }
@@ -352,6 +354,8 @@ pub fn generate(
                 center,
                 form_name: form_name.to_owned(),
                 color: crate::colors::mixed_color(&s.color, rng, 0.2, 0.3),
+                wild: true,
+                coa: None,
             });
         }
     }

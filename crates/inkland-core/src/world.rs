@@ -396,6 +396,15 @@ impl World {
                 religions: &religions,
             },
         );
+        // Coats of arms (FMG `Emblems.generate` in each stage).
+        crate::emblems::assign(
+            &mut society,
+            &crate::emblems::Input {
+                config,
+                features: &features,
+                biomes: &biomes,
+            },
+        );
         let names = crate::geonames::build(&crate::geonames::Input {
             config,
             grid: &grid,

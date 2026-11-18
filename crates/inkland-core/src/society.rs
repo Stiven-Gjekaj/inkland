@@ -57,6 +57,8 @@ pub struct Place {
     pub walls: bool,
     pub shanty: bool,
     pub temple: bool,
+    /// The coat of arms (`emblems.rs`).
+    pub coa: Option<crate::emblems::Coa>,
 }
 
 impl Place {
@@ -84,6 +86,7 @@ impl Place {
             walls: false,
             shanty: false,
             temple: false,
+            coa: None,
         }
     }
 }
@@ -118,6 +121,8 @@ pub struct State {
     pub burgs: u32,
     pub rural: f64,
     pub urban: f64,
+    /// The coat of arms (`emblems.rs`).
+    pub coa: Option<crate::emblems::Coa>,
 }
 
 impl Default for State {
@@ -140,6 +145,7 @@ impl Default for State {
             burgs: 0,
             rural: 0.0,
             urban: 0.0,
+            coa: None,
         }
     }
 }
@@ -159,6 +165,11 @@ pub struct Province {
     pub full_name: String,
     /// A color as `#rrggbb`. Data only.
     pub color: String,
+    /// `true` for a wild province: land that no seat reaches (an island, a
+    /// colony, or a territory).
+    pub wild: bool,
+    /// The coat of arms (`emblems.rs`).
+    pub coa: Option<crate::emblems::Coa>,
 }
 
 /// The society of a world.

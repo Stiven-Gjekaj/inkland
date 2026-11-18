@@ -312,7 +312,8 @@ impl<'r> Generator<'r> {
         Generator { rng }
     }
 
-    fn p(&mut self, p: f64) -> bool {
+    /// `P` of FMG on the random source of the generator.
+    pub fn p(&mut self, p: f64) -> bool {
         self.rng.p(p)
     }
 
@@ -1039,6 +1040,130 @@ pub fn validate(coa: &Coa) -> Vec<CoaFault> {
 /// The position letters of a charge.
 pub const POSITIONS: &str = "abcdefghijklmnopqyzABCDEFGHIJKL";
 
+/// What the emblem stage reads.
+pub struct Input<'a> {
+    pub config: &'a crate::config::Config,
+    pub features: &'a crate::features::Features,
+    pub biomes: &'a [u8],
+}
+
+/// The shapes that FMG picks for each culture or state (`DIVERSIFORM_SHAPES`).
+const DIVERSIFORM: [&str; 3] = ["culture", "random", "state"];
+
+/// The emblem stage: the coats of arms of the states, then the places, then
+/// the provinces, as FMG makes them in `createStates`, `defineEmblem` of
+/// `burgsSpecify`, and `Provinces.generate`. It uses its own part of the
+/// seed tree, so it moves no other random numbers.
+pub fn assign(soc: &mut crate::society::Society, input: &Input) {
+    let tree = crate::seed::SeedTree::new(input.config.seed);
+    let mut rng = Rand::new(tree.part_rng(crate::seed::Layer::States, "emblems"));
+    let mut g = Generator::new(&mut rng);
+    let shape = "culture";
+
+    // A culture of the `random` set, or each culture with the shape
+    // `random`, gets a random shield.
+    for c in &mut soc.cultures {
+        if c.shield.is_empty() || shape == "random" {
+            c.shield = g.random_shield();
+        }
+    }
+    let culture_shield = |soc: &crate::society::Society, culture: u32| -> String {
+        // The wildlands (culture 0) have the shield `round`.
+        soc.cultures
+            .get((culture as usize).wrapping_sub(1))
+            .map_or_else(|| "round".to_owned(), |c| c.shield.clone())
+    };
+    let shield_of = |soc: &crate::society::Society, culture: u32, state: u32| -> String {
+        if !DIVERSIFORM.contains(&shape) {
+            return shape.to_owned();
+        }
+        if shape == "state"
+            && state != crate::society::NONE
+            && let Some(s) = soc.states.get(state as usize - 1)
+            && let Some(shield) = s.coa.as_ref().and_then(|c| c.shield.clone())
+        {
+            return shield;
+        }
+        culture_shield(soc, culture)
+    };
+    let none = Parent {
+        coa: None,
+        kinship: 0.0,
+        dominion: 0.0,
+    };
+
+    // States (`createStates`).
+    for i in 0..soc.states.len() {
+        let kind = soc.states[i].kind.name();
+        let mut coa = g.generate(&none, Some(kind));
+        coa.shield = Some(shield_of(soc, soc.states[i].culture, crate::society::NONE));
+        soc.states[i].coa = Some(coa);
+    }
+
+    // Places (`defineEmblem`).
+    for i in 0..soc.places.len() {
+        let p = &soc.places[i];
+        let state = soc.states.get((p.state as usize).wrapping_sub(1));
+        let mut kinship = 0.25;
+        if p.capital {
+            kinship += 0.1;
+        } else if p.port {
+            kinship -= 0.1;
+        }
+        if state.is_some_and(|s| s.culture != p.culture) {
+            kinship -= 0.25;
+        }
+        let kind = if p.capital && g.p(0.2) {
+            "Capital"
+        } else if p.ptype == crate::cultures::CultureType::Generic {
+            "City"
+        } else {
+            p.ptype.name()
+        };
+        let parent = Parent {
+            coa: state.and_then(|s| s.coa.as_ref()),
+            kinship,
+            dominion: 0.0,
+        };
+        let mut coa = g.generate(&parent, Some(kind));
+        coa.shield = Some(shield_of(soc, p.culture, p.state));
+        soc.places[i].coa = Some(coa);
+    }
+
+    // Provinces (`Provinces.generate`).
+    for i in 0..soc.provinces.len() {
+        let pr = &soc.provinces[i];
+        let seat = soc.places.get((pr.seat as usize).wrapping_sub(1));
+        let state = soc.states.get((pr.state as usize).wrapping_sub(1));
+        let port = seat.is_some_and(|p| p.port);
+        let kind =
+            crate::burgs::place_type(&soc.cells, input.features, input.biomes, pr.center, port);
+        let parent = if pr.wild {
+            let dominion = match pr.form_name.as_str() {
+                "Colony" => g.p(0.95),
+                "Island" | "Islands" => g.p(0.7),
+                _ => g.p(0.3),
+            };
+            Parent {
+                coa: state.and_then(|s| s.coa.as_ref()),
+                kinship: if dominion { 0.0 } else { 0.4 },
+                dominion: f64::from(u8::from(dominion)),
+            }
+        } else {
+            let by_seat = seat.is_some_and(|p| p.name == pr.name);
+            Parent {
+                coa: seat.and_then(|p| p.coa.as_ref()),
+                kinship: if by_seat { 0.8 } else { 0.4 },
+                dominion: 0.0,
+            }
+        };
+        let mut coa = g.generate(&parent, Some(kind.name()));
+        let culture = soc.cell_culture[pr.center];
+        coa.shield = Some(shield_of(soc, culture, pr.state));
+        soc.provinces[i].coa = Some(coa);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1167,6 +1292,61 @@ mod tests {
             paths,
             ["/t1", "/shield", "/charges/0/charge", "/charges/0/p"]
         );
+    }
+
+    fn world(seed: u64, set: &str) -> crate::world::World {
+        let c: crate::config::Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": seed, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": "continents", "culture_set": set }
+        }))
+        .unwrap();
+        crate::world::World::build(&c).unwrap()
+    }
+
+    #[test]
+    fn each_state_place_and_province_has_valid_arms() {
+        for (seed, set) in [(1, "european"), (2, "random"), (3, "high-fantasy")] {
+            let w = world(seed, set);
+            let s = &w.society;
+            assert!(!s.states.is_empty() && !s.provinces.is_empty());
+            let all = s
+                .states
+                .iter()
+                .map(|x| &x.coa)
+                .chain(s.places.iter().map(|x| &x.coa))
+                .chain(s.provinces.iter().map(|x| &x.coa));
+            for coa in all {
+                let coa = coa.as_ref().expect("each item has arms");
+                assert_eq!(validate(coa), Vec::new(), "{coa:?}");
+                assert!(coa.shield.as_deref().is_some_and(is_shield), "{coa:?}");
+            }
+            // The shape of the arms of a place is the shield of its culture.
+            for p in &s.places {
+                let culture = &s.cultures[p.culture as usize - 1];
+                assert_eq!(
+                    p.coa.as_ref().unwrap().shield.as_ref(),
+                    Some(&culture.shield)
+                );
+            }
+            assert!(s.cultures.iter().all(|c| is_shield(&c.shield)));
+        }
+    }
+
+    #[test]
+    fn places_take_much_from_the_arms_of_their_state() {
+        // FMG gives a place a kinship of 0.25 to 0.35 with its state, so a
+        // part of the places has the field of the state.
+        let w = world(11, "european");
+        let s = &w.society;
+        let same = s
+            .places
+            .iter()
+            .filter(|p| {
+                p.coa.as_ref().unwrap().t1
+                    == s.states[p.state as usize - 1].coa.as_ref().unwrap().t1
+            })
+            .count();
+        assert!(same * 10 > s.places.len(), "{same} of {}", s.places.len());
     }
 
     #[test]
