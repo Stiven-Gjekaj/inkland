@@ -82,6 +82,7 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         Goods => Some("goods"),
         Markets => Some("markets"),
         Trade => Some("trade-animation"),
+        Military => Some("armies"),
         Texture | Ice | Population | Markers | Features => None,
         Coast | Regions | Roads | Places => None,
     }
@@ -635,4 +636,36 @@ fn trade_draws_the_traffic_of_the_links() {
     assert_eq!(both.matches("<path id=\"goods-link-").count(), count);
     let empty = world_with(|w| w.economy.traffic.clear());
     assert!(!render_world(&empty, &[LayerName::Trade]).contains("<g id=\"trade-animation\""));
+}
+
+#[test]
+fn military_draws_a_box_for_each_regiment() {
+    let svg = render_with(&[LayerName::Military], StyleName::Default);
+    assert!(svg.contains("<g id=\"armies\" font-size=\"6\" fill-opacity=\"1\" stroke=\"#000\""));
+    let soc = &world().society;
+    let palette = layers::Palette::of(world());
+    let mut n = 0;
+    for st in soc.states.iter().filter(|s| !s.military.is_empty()) {
+        let fill = &palette.states[&st.id];
+        assert!(svg.contains(&format!("<g id=\"army-{}\" fill=\"{fill}\"", st.id)));
+        for r in &st.military {
+            let id = format!("<g id=\"regiment-{}-{}\"", st.id, r.id);
+            assert!(svg.contains(&id), "{id}");
+            let box_w = if r.naval { 12 } else { 18 };
+            let at = svg.find(&id).unwrap();
+            assert!(svg[at..].contains(&format!("width=\"{box_w}\" height=\"6\"/>")));
+            n += 1;
+        }
+    }
+    assert!(n > 0, "the test world has regiments");
+    // Each regiment icon is a glyph symbol in a white fill.
+    assert!(svg.contains("<symbol id=\"glyph-"));
+    assert!(svg.contains("fill=\"#ffffff\"/></g>"));
+    parse_and_draw(&svg);
+    let empty = world_with(|w| {
+        for st in &mut w.society.states {
+            st.military.clear();
+        }
+    });
+    assert!(!render_world(&empty, &[LayerName::Military]).contains("<g id=\"armies\""));
 }

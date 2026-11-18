@@ -6,6 +6,7 @@ mod decor;
 pub(crate) mod economy;
 mod lines;
 pub(crate) mod marks;
+mod military;
 pub(crate) mod overlays;
 mod palette;
 pub(crate) mod text;
@@ -57,6 +58,7 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Vignette => decor::vignette(s, ctx),
         Legend => decor::legend(s, ctx),
         Labels => text::labels(s, ctx),
+        Military => military::military(s, ctx),
         Coast | Regions | Roads | Places => {}
     }
 }

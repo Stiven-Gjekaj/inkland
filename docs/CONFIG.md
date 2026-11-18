@@ -296,6 +296,7 @@ One of:
 - `"population"`: Population. Only `colour` mode. Draws nothing when the world has no population.
 - `"emblems"`: Coats of arms. Only `colour` mode. Draws nothing when the world has no emblems.
 - `"burg-icons"`: The symbols of the places.
+- `"military"`: The regiments of the states: a box in the colour of the state with the troops and the icon (FMG `military`). Only `colour` mode. Draws nothing when the world has no regiments.
 - `"markers"`: Markers. Only `colour` mode. Draws nothing when the world has no markers.
 - `"scale-bar"`: A scale bar.
 - `"vignette"`: A dark edge around the map. Only `colour` mode.

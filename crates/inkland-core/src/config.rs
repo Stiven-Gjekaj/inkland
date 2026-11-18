@@ -1194,6 +1194,10 @@ pub enum LayerName {
     Emblems,
     /// The symbols of the places.
     BurgIcons,
+    /// The regiments of the states: a box in the colour of the state with
+    /// the troops and the icon (FMG `military`). Only `colour` mode. Draws
+    /// nothing when the world has no regiments.
+    Military,
     /// Markers. Only `colour` mode. Draws nothing when the world has no
     /// markers.
     Markers,
@@ -1207,7 +1211,7 @@ pub enum LayerName {
 
 impl LayerName {
     /// All layer names, in the order of their declaration.
-    pub const ALL: [LayerName; 39] = [
+    pub const ALL: [LayerName; 40] = [
         LayerName::Coast,
         LayerName::Relief,
         LayerName::Rivers,
@@ -1243,6 +1247,7 @@ impl LayerName {
         LayerName::Population,
         LayerName::Emblems,
         LayerName::BurgIcons,
+        LayerName::Military,
         LayerName::Markers,
         LayerName::ScaleBar,
         LayerName::Vignette,
