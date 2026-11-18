@@ -314,6 +314,7 @@ Label options.
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
+| `at` | array of 2 number |  |  | The middle of the label `[x, y]`, in units. The label goes here, level, before the other labels, which keep clear of it. Default: the placer finds a free place. |
 | `hide` | boolean |  | `false` | `true`: do not show the label. |
 | `size_pt` | number |  |  | Font size, in points. Default: the size of the label kind. |
 

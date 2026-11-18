@@ -1321,6 +1321,11 @@ pub struct LabelOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0.0))]
     pub size_pt: Option<f64>,
+    /// The middle of the label `[x, y]`, in units. The label goes here,
+    /// level, before the other labels, which keep clear of it. Default: the
+    /// placer finds a free place.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Point>,
 }
 
 /// One map to render.

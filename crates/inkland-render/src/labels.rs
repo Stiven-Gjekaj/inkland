@@ -1236,7 +1236,55 @@ pub fn place_with(
         });
     }
 
-    requests.sort_by(|a, b| a.rank.cmp(&b.rank).then_with(|| a.id.cmp(&b.id)));
+    // A label with a position in its options has one candidate there, and
+    // goes first.
+    let mut fixed: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for r in &mut requests {
+        let Some((kind, key)) = r.id.strip_prefix("label-").and_then(|k| k.split_once('-')) else {
+            continue;
+        };
+        let Some(at) = opts(kind, key).and_then(|o| o.at) else {
+            continue;
+        };
+        // The size of the first candidate, or, for an item with no
+        // candidate in the view, the size of its kind and its options.
+        let size = match r.candidates.first() {
+            Some(first) => first.size,
+            None => {
+                let default_pt = match r.group {
+                    "state" => sizes.state,
+                    "region" | "ocean" => sizes.region,
+                    "river" | "lake" => sizes.river,
+                    "capital" | "city" => sizes.place_city,
+                    "village" | "hamlet" => sizes.place_village,
+                    _ => sizes.place_town,
+                };
+                size_of(kind, key, &style(r.group), default_pt)
+            }
+        };
+        let f = FontMetrics::of(&r.family);
+        let [x, y] = page.to_page(at);
+        let y = y + f.cap(size) / 2.0;
+        let w = f.width(&r.text, size, 0.0);
+        r.candidates = vec![Candidate {
+            boxes: vec![text_box(x, y, "middle", w, f, size, 0.0)],
+            geometry: Geometry::Point {
+                x,
+                y,
+                anchor: "middle",
+                angle: 0,
+            },
+            size,
+            spacing: 0.0,
+            cost: 0.0,
+            tier: 0,
+            river: None,
+        }];
+        fixed.insert(r.id.clone());
+    }
+    requests.sort_by(|a, b| {
+        (!fixed.contains(&a.id), a.rank, &a.id).cmp(&(!fixed.contains(&b.id), b.rank, &b.id))
+    });
 
     // River segments, for the cost of crossing a river.
     let mut segments: Vec<(usize, [f64; 2], [f64; 2])> = Vec::new();
@@ -1261,7 +1309,29 @@ pub fn place_with(
     }
     let mut gone = vec![false; obstacles.len()];
 
-    for req in requests {
+    for mut req in requests {
+        if fixed.contains(&req.id) {
+            // The author put it here: no collision check.
+            let cand = req.candidates.remove(0);
+            for b in &cand.boxes {
+                index.insert(obstacles.len(), b.bounds());
+                obstacles.push(*b);
+                hideable.push(None);
+                gone.push(false);
+            }
+            out.placed.push(Placed {
+                id: req.id,
+                kind: req.kind,
+                group: req.group,
+                text: req.text,
+                family: req.family,
+                size: cand.size,
+                spacing: cand.spacing,
+                geometry: cand.geometry,
+                boxes: cand.boxes,
+            });
+            continue;
+        }
         if req.place.is_some_and(|p| out.hidden_places.contains(&p)) {
             out.unplaced.push(Unplaced {
                 id: req.id,
@@ -1513,6 +1583,58 @@ mod tests {
         assert!(ids.contains(&"label-region-hills"));
         assert!(ids.iter().any(|i| i.starts_with("label-state-")));
         assert_eq!(labels.required_unplaced(), 0, "{:?}", labels.unplaced);
+    }
+
+    #[test]
+    fn a_label_with_a_position_goes_there_first() {
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({
+                "overlays": { "today": { "labels": {
+                    "region:hills": { "at": [60, 250] },
+                    "place:ostrey": { "at": [205, 140] }
+                } } },
+                "variants": [{ "name": "full", "overlay": "today",
+                               "page": { "w_mm": 167, "h_mm": 250, "margin_mm": 5 } }]
+            }),
+        );
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let labels = place(&w, &c, &v, &page);
+        for (id, at) in [
+            ("label-region-hills", [60.0, 250.0]),
+            ("label-place-ostrey", [205.0, 140.0]),
+        ] {
+            let l = labels.placed.iter().find(|l| l.id == id).unwrap();
+            let Geometry::Point {
+                x,
+                y,
+                anchor,
+                angle,
+            } = l.geometry
+            else {
+                panic!("{id} is not at a point");
+            };
+            let q = page.to_page(at);
+            assert_eq!((anchor, angle), ("middle", 0));
+            assert!((x - q[0]).abs() < 1e-9 && y > q[1], "{id}");
+        }
+        // The other labels keep clear of them.
+        let fixed: Vec<&Placed> = labels
+            .placed
+            .iter()
+            .filter(|l| l.id == "label-region-hills")
+            .collect();
+        for l in labels
+            .placed
+            .iter()
+            .filter(|l| l.id != "label-region-hills" && l.id != "label-place-ostrey")
+        {
+            for b in &l.boxes {
+                assert!(fixed[0].boxes.iter().all(|f| !f.overlaps(b)), "{}", l.id);
+            }
+        }
     }
 
     #[test]
