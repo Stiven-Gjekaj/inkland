@@ -746,6 +746,30 @@ came from the review:
 - Still not in this version: depression lakes, the second grid, and river
   erosion.
 
+## 6.13 Notes from the faithful port (version 1.0)
+
+The owner changed the scope after the port review: inkland is a faithful
+remake of FMG, with its additions. Phase 0 had dropped the economy, the
+military, the zones, the emblems, and the journeys; version 1.0 ports
+them. `docs/PORT.md` gives the result, and `docs/notes/` gives each part.
+
+- The stages that the review listed as gaps are ported: depression lakes,
+  near-sea lakes, the second grid, and river downcut.
+- The physical, society, emblem, economy, military, zone, journey, and
+  annotation stages follow the FMG source, with the FMG data tables.
+- Colour mode draws each FMG layer with the 15 style presets. Print-safe
+  mode stays black and white.
+- Each FMG editor edit is a list or a value in the world part of the
+  config: `world.renames`, `world.goods`, `world.military_units`,
+  `world.transports`, `world.finance`, `world.markets`, `world.regiments`,
+  `world.journeys`, `world.zones`, `world.notes`, `world.measurers`, and
+  `world.legends`. An entry finds a generated item by a point or a pin, not
+  by its generated id. The `insert` and `remove` commands edit the lists
+  with exact undo.
+- Still not done: the trade animation, the fogging layer, the map drawing
+  tools of the app for some edits (issue 21), and the icon font (issue
+  22).
+
 ## 7. Road lengths in the report
 
 The book checks travel days against road lengths.
