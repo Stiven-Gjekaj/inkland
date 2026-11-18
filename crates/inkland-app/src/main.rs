@@ -12,6 +12,9 @@
 //! world again on a worker thread, and shows the SVG of the selected
 //! variant. A second worker thread renders the SVG for the map view.
 
+// On Windows the app opens without a console window.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod ui {
     #![allow(unsafe_code, clippy::all)]
     slint::include_modules!();
