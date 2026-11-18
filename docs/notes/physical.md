@@ -40,6 +40,9 @@ first-grid cell of each cell (FMG `pack.cells.g`).
 | Second grid | `src/model/graph/pack-generator.ts:17` | Land and coastal water stay. Three of four cells of the second ring of water stay. Sites between far coastal pairs. |
 | Coast markup | `src/model/physical/features-generator.ts:160`, `lakes.ts` | Distance field, haven, harbor, feature area and outline, lake shoreline and height. |
 | Rivers | `src/model/physical/river-generator.ts:228` | Tilt, closed lakes, depression filling (250 passes), water flow with lake outlets and evaporation, rivers of 3 or more cells, widths, basins, cuts of the river beds. |
+| Confluences | `river-generator.ts:331`, `:440` | At a confluence, the river with more own water keeps its id. The own water is the flux without the confluence mark, a byte that wraps at 256 as the `Uint8Array` of FMG. `Drainage::confluence` is the flux of the smaller rivers (`calculateConfluenceFlux`). The cell rank reads it. |
+| River lines | `src/utils/path-utils.ts` `meander` | One or two bend points between two cell sites, smaller next to water. Acute bends flip. A river turns toward the flow of the river that it joins. The bends scale with the cell spacing. `River::anchors` gives the line index of each cell site. The width at the mouth and the length come from the meandered line. |
+| Feature outlines | `features-generator.ts:223` `clipPoly` | The outlines clip to the frame (`geom::clip_polygon`, as `lineclip`). |
 | River types | `river-generator.ts:728` | `river`, `creek`, `brook`, `stream`, `fork`, `branch`, with the FMG weights. |
 | Feature groups | `features-generator.ts:379` | `continent`, `island`, `isle`, `lake_island`; `freshwater`, `salt`, `frozen`, `dry`, `sinkhole`, `lava`; `ocean`, `sea`, `gulf`. |
 | Feature names | `features-generator.ts:434` | Adjectives, map sides for oceans, and names from the culture of the first cell. |
@@ -72,9 +75,14 @@ first-grid cell of each cell (FMG `pack.cells.g`).
 - **Lake islands.** FMG calls an island a lake island when the cell before
   its first cell is in a lake. inkland calls an island a lake island when
   all water next to it is lake water and it does not touch the frame edge.
-- **River lines.** FMG draws a meandered line. inkland keeps the cell sites,
-  so that a pinned river passes its points exactly. The meander point count
-  of FMG still sets the river width.
+- **River lines.** The cell sites and the end point of a river are fixed
+  anchors of its meandered line, so a pinned river passes its points
+  exactly. FMG ends a river at the site of the water cell. inkland ends it
+  at the middle of the shared edge, or at the pinned mouth point. FMG
+  bends the end toward the river that it joins with the rivers made so far;
+  inkland uses all rivers, as the FMG renderer does.
+- **Print-safe rivers.** The line is a Catmull-Rom curve with alpha 0.1,
+  as in FMG, with one stroke width for each river.
 - **Names.** inkland writes the noun into the name: `Lake <name>`,
   `<name> Ocean`, `<name> Sea`, `<name> Gulf`. A name from a culture does
   not repeat. An adjective can repeat, as in FMG.
@@ -94,10 +102,11 @@ The format version is 2. It adds:
 - `coordinates`: the map size, the position, and the latitude and longitude
   box.
 - `distance`, `haven`, `harbor`: the coast markup of each cell.
-- For each feature: `area` and `outline`; for a lake also `height` and
-  `shoreline`.
+- For each feature: `area` and `outline`, clipped to the frame; for a lake
+  also `height` and `shoreline`.
 - For each river: `basin`, `source_width`, `width_factor`, `width`, and the
-  mouth kind `edge` for a river that leaves the frame.
+  mouth kind `edge` for a river that leaves the frame. The river `points`
+  are the meandered line.
 - `ice`: glaciers and icebergs.
 
 ## Effects on the later stages

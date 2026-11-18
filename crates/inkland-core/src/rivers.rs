@@ -16,13 +16,19 @@
 //!    lowest neighbor, or to its haven at the coast. A lake that gets more
 //!    water than it loses to evaporation drains at its lowest shore cell.
 //!    A cell with a flux of 30 or more is on a river. At a confluence the
-//!    river with more water keeps its id downstream.
+//!    river with more own water keeps its id downstream: the water of the
+//!    river already in the cell does not include its confluence mark.
 //! 5. `defineRivers`: rivers with fewer than 3 cells go. Each river gets its
 //!    discharge, its width at the source and at the mouth, and its parent.
 //! 6. `mergeLocked`: the pinned rivers are FMG locked rivers. A generated
 //!    river that reaches a pinned course ends there as its tributary.
-//! 7. The heights take the tilt and the filled depressions, and rivers cut
+//! 7. `calculateConfluenceFlux`: the water of the smaller rivers at each
+//!    confluence.
+//! 8. The heights take the tilt and the filled depressions, and rivers cut
 //!    their beds down by up to 5 (`downcutRivers`).
+//! 9. `addMeandering`: each river gets a meandered line through its cell
+//!    sites (`crate::meander`). The line sets the length and the width at
+//!    the mouth.
 //!
 //! FMG has the fixed sea level 20. inkland uses the sea level of the config:
 //! the downcut starts at `sea_level + 15` (35 in FMG). The flux is a whole
