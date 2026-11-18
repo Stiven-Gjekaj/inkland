@@ -1205,6 +1205,10 @@ pub enum LayerName {
     /// colour of the journey (FMG `journeys`). Only `colour` mode. Draws
     /// nothing when the world has no journeys.
     Journeys,
+    /// Rulers: the default ruler of FMG across the largest landmass, with
+    /// its length (FMG `rulers`). Only `colour` mode. Draws nothing when
+    /// the world has no measurers.
+    Rulers,
     /// A scale bar.
     ScaleBar,
     /// A dark edge around the map. Only `colour` mode.
@@ -1215,7 +1219,7 @@ pub enum LayerName {
 
 impl LayerName {
     /// All layer names, in the order of their declaration.
-    pub const ALL: [LayerName; 41] = [
+    pub const ALL: [LayerName; 42] = [
         LayerName::Coast,
         LayerName::Relief,
         LayerName::Rivers,
@@ -1254,6 +1258,7 @@ impl LayerName {
         LayerName::Military,
         LayerName::Markers,
         LayerName::Journeys,
+        LayerName::Rulers,
         LayerName::ScaleBar,
         LayerName::Vignette,
         LayerName::Legend,

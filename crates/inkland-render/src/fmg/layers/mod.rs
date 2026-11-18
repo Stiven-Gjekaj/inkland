@@ -48,6 +48,7 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Emblems => marks::emblems(s, ctx),
         Markers => marks::markers(s, ctx),
         Journeys => notes::journeys(s, ctx),
+        Rulers => notes::rulers(s, ctx),
         Features => marks::features(s, ctx),
         Cells => overlays::cells(s, ctx),
         Grid => overlays::grid(s, ctx),

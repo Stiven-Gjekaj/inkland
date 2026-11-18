@@ -614,10 +614,8 @@ mod tests {
         assert!(e.config().render.extras.grid.is_some());
         e.set_layer("grid", false).unwrap();
         assert!(e.config().render.extras.grid.is_none());
-        assert!(
-            e.set_layer("rulers", true).is_err(),
-            "no such renderer layer"
-        );
+        e.set_layer("rulers", true).unwrap();
+        assert!(catalog::config_layers(e.config()).contains(&"rulers".to_owned()));
         assert!(e.set_layer("nothing", true).is_err());
         while e.undo().unwrap() {}
         assert_eq!(e.config(), e.original());

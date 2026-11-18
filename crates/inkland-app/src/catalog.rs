@@ -105,7 +105,7 @@ pub const LAYERS: &[LayerDef] = &[
     layer("military", "Military", Some('m'), Layer("military")),
     layer("markers", "Markers", Some('k'), Layer("markers")),
     layer("journeys", "Journeys", None, Layer("journeys")),
-    layer("rulers", "Rulers", Some('='), Target::None),
+    layer("rulers", "Rulers", Some('='), Layer("rulers")),
     layer("scaleBar", "Scale Bar", Some('/'), Extra("scale_bar")),
     layer("vignette", "Vignette", Some('['), Layer("vignette")),
 ];
@@ -626,7 +626,7 @@ mod tests {
         let relief = layer_def("relief").unwrap();
         assert!(available(relief));
         let rulers = layer_def("rulers").unwrap();
-        assert!(!available(rulers));
+        assert!(available(rulers));
         // The scale bar is an extra, so it is always available.
         assert!(available(layer_def("scaleBar").unwrap()));
         // A made-up name is not known.

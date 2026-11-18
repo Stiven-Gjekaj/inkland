@@ -84,6 +84,7 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         Trade => Some("trade-animation"),
         Military => Some("armies"),
         Journeys => Some("journeys"),
+        Rulers => Some("ruler"),
         Texture | Ice | Population | Markers | Features => None,
         Coast | Regions | Roads | Places => None,
     }
@@ -693,4 +694,54 @@ fn journeys_draw_their_segments_with_markers() {
     let empty = world_with(|w| w.journeys.clear());
     let svg = render_world(&empty, &[LayerName::Journeys]);
     assert!(!svg.contains("<g id=\"journeys\"") && !svg.contains("journey-arrow"));
+}
+
+#[test]
+fn rulers_draw_the_default_ruler_with_its_length() {
+    let svg = render_with(&[LayerName::Rulers], StyleName::Default);
+    let w = world();
+    assert_eq!(w.measurers.len(), 1, "the default ruler");
+    assert!(svg.contains("<g id=\"ruler\" fill=\"none\""));
+    assert!(svg.contains("<g id=\"ruler-0\"><polyline points=\""));
+    // A white line under the dashed grey line, as FMG draws it.
+    assert!(svg.contains("stroke=\"currentColor\" stroke-width=\"2\" stroke-dasharray=\"none\"/>"));
+    assert!(svg.contains("stroke-width=\"2\" stroke-dasharray=\"10\"/>"));
+    assert_eq!(svg.matches("<circle r=\"1em\"").count(), 2);
+    let len = inkland_core::num::fixed(w.measurers[0].length().round(), 0);
+    assert!(svg.contains(&format!(">{len} miles</text>")), "{len}");
+    parse_and_draw(&svg);
+    // The style can hide the text.
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Rulers];
+    c.render
+        .style_overrides
+        .insert("rulers.attrs.data-labels".to_owned(), json!(false));
+    assert!(
+        !crate::svg::render(world(), &c, &c.variants[0])
+            .svg
+            .contains("</text>")
+    );
+    let empty = world_with(|w| w.measurers.clear());
+    assert!(!render_world(&empty, &[LayerName::Rulers]).contains("<g id=\"ruler\""));
+}
+
+#[test]
+fn the_other_measurers_draw_their_shapes() {
+    use inkland_core::annotations::{Measurer, MeasurerKind};
+    let pts = vec![[100.0, 100.0], [200.0, 100.0], [150.0, 200.0]];
+    let w = world_with(|w| {
+        w.measurers = [MeasurerKind::Opisometer, MeasurerKind::Planimeter]
+            .into_iter()
+            .map(|kind| Measurer {
+                kind,
+                points: pts.clone(),
+            })
+            .collect();
+    });
+    let svg = render_world(&w, &[LayerName::Rulers]);
+    assert!(svg.contains("<g id=\"opisometer-0\"><path d=\"M"));
+    assert!(svg.contains("<g id=\"planimeter-1\"><path d=\"M"));
+    // The area of the triangle: 100 x 100 / 2 square miles.
+    assert!(svg.contains(">5K square miles</text>"));
+    parse_and_draw(&svg);
 }
