@@ -246,6 +246,11 @@ impl<'a> Validator<'a> {
                 );
             }
         }
+        let goods = inkland_core::economy::goods::catalogue_from(&w.goods).unwrap_or_default();
+        for (i, f) in w.finance.iter().enumerate() {
+            self.errors
+                .extend(inkland_core::economy::finance::check(c, &goods, i, f));
+        }
         for (i, z) in w.zones.iter().enumerate() {
             self.errors.extend(inkland_core::zones::check(i, z));
         }

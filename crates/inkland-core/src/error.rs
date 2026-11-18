@@ -118,6 +118,10 @@ codes! {
         /// `at`, neither, a new zone without a name or a type, a shape with
         /// no cell, or a point where no generated zone is.
         ZoneInvalid = "ZONE_INVALID" => InvalidConfig,
+        /// An entry of `world.finance` has both or none of `at` and `pin`,
+        /// a point where no state is, or a tariff rate that is not a number
+        /// or `embargo`.
+        FinanceInvalid = "FINANCE_INVALID" => InvalidConfig,
         /// An edit of a world file sets or unsets a value that a
         /// `world.json` does not keep: an overlay, a variant, a render
         /// option, or a font directory.

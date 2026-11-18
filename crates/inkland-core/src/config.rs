@@ -245,6 +245,85 @@ pub struct World {
     /// generated zones.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub zones: Vec<ZoneEntry>,
+    /// Changes to the finance of the states: taxes, the market fee, the
+    /// budget that sets the state orders, and the tariffs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub finance: Vec<FinanceEntry>,
+}
+
+/// The budget of a state, in percents of the taxes collected. A value that
+/// the entry does not give keeps the generated value.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BudgetEntry {
+    /// The court, in percent. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub court: Option<f64>,
+    /// The administration, in percent. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub administration: Option<f64>,
+    /// The infrastructure, in percent. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub infrastructure: Option<f64>,
+    /// The military, in percent. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub military: Option<f64>,
+    /// The percent of each expense that officials pocket. 0 to 100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corruption: Option<f64>,
+}
+
+/// The rate of a tariff: a share of the price, or `embargo`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum TariffRate {
+    /// A share of the price, 0 or more.
+    Rate(f64),
+    /// The word `embargo`: no import.
+    Word(String),
+}
+
+/// An import rule of a state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TariffEntry {
+    /// The point pins in the states that the rule is for. Default: all
+    /// states.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub states: Option<Vec<String>>,
+    /// The names of the goods that the rule is for. Default: all goods.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goods: Option<Vec<String>>,
+    /// The rate: a share of the price, or `embargo`.
+    pub rate: TariffRate,
+}
+
+/// A change to the finance of a state. The entry finds its state by the
+/// point `at` or by the point pin `pin`. Give exactly one.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FinanceEntry {
+    /// A point `[x, y]` in the state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Point>,
+    /// The id of a point pin in the state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin: Option<String>,
+    /// The sales tax, a share of the price. 0 to 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sales_tax: Option<f64>,
+    /// The poll tax a day for each population point. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poll_tax: Option<f64>,
+    /// The license fee a day from each market of the state. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub market_fee: Option<f64>,
+    /// The budget.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<BudgetEntry>,
+    /// The tariffs. A list replaces the generated tariffs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tariffs: Option<Vec<TariffEntry>>,
 }
 
 /// A change to the zones. With a shape (`polygon`, `box`, or `circle`),
@@ -598,6 +677,7 @@ impl Default for World {
             measurers: Vec::new(),
             legends: Vec::new(),
             zones: Vec::new(),
+            finance: Vec::new(),
         }
     }
 }

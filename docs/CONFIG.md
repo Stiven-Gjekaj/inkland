@@ -62,6 +62,18 @@ One heightmap brush stroke: it adds `delta` at its centre, and less with distanc
 | `delta` | number | yes |  | Height change at the centre, on the 0 to 100 scale. -100 to 100. |
 | `radius` | number | yes |  | Radius, in units. More than 0. |
 
+### BudgetEntry
+
+The budget of a state, in percents of the taxes collected. A value that the entry does not give keeps the generated value.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `administration` | number |  |  | The administration, in percent. 0 or more. |
+| `corruption` | number |  |  | The percent of each expense that officials pocket. 0 to 100. |
+| `court` | number |  |  | The court, in percent. 0 or more. |
+| `infrastructure` | number |  |  | The infrastructure, in percent. 0 or more. |
+| `military` | number |  |  | The military, in percent. 0 or more. |
+
 ### Cartouche
 
 A title cartouche.
@@ -180,6 +192,20 @@ A feature that an overlay adds. Give exactly one of `at`, `polyline`, and `polyg
 Kinds of overlay features.
 
 Type: `"ruin"`, `"battle-site"`, `"border"`, `"wall"`, `"custom"`
+
+### FinanceEntry
+
+A change to the finance of a state. The entry finds its state by the point `at` or by the point pin `pin`. Give exactly one.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `at` | array of 2 number |  |  | A point `[x, y]` in the state. |
+| `budget` | [`BudgetEntry`](#budgetentry) |  |  | The budget. |
+| `market_fee` | number |  |  | The license fee a day from each market of the state. 0 or more. |
+| `pin` | string |  |  | The id of a point pin in the state. |
+| `poll_tax` | number |  |  | The poll tax a day for each population point. 0 or more. |
+| `sales_tax` | number |  |  | The sales tax, a share of the price. 0 to 1. |
+| `tariffs` | array of [`TariffEntry`](#tariffentry) |  |  | The tariffs. A list replaces the generated tariffs. |
 
 ### Flag
 
@@ -589,6 +615,25 @@ The style presets of `colour` mode. Each preset is a style of Azgaar's Fantasy M
 
 Type: `"default"`, `"ancient"`, `"atlas"`, `"cinderwood"`, `"clean"`, `"cyberpunk"`, `"dark-seas"`, `"frostbite"`, `"gloom"`, `"ink"`, `"light"`, `"monochrome"`, `"night"`, `"pale"`, `"watercolor"`
 
+### TariffEntry
+
+An import rule of a state.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `goods` | array of string |  |  | The names of the goods that the rule is for. Default: all goods. |
+| `rate` | [`TariffRate`](#tariffrate) | yes |  | The rate: a share of the price, or `embargo`. |
+| `states` | array of string |  |  | The point pins in the states that the rule is for. Default: all states. |
+
+### TariffRate
+
+The rate of a tariff: a share of the price, or `embargo`.
+
+One of:
+
+- number: A share of the price, 0 or more.
+- string: The word `embargo`: no import.
+
 ### Template
 
 A heightmap template.
@@ -698,6 +743,7 @@ Generation options.
 | `cultures` | integer |  | `6` | Number of cultures. |
 | `default_ruler` | boolean |  |  | `false`: no default ruler across the largest landmass. |
 | `emblem_shape` | string |  |  | The shield shape of the coats of arms: `culture` (the shield of the culture of each item, as Azgaar's Fantasy Map Generator does), `state` (the shield of the state), `random` (a random shield for each culture), or one shield name for all, for example `heater`, `spanish`, `round`, or `banner`. |
+| `finance` | array of [`FinanceEntry`](#financeentry) |  |  | Changes to the finance of the states: taxes, the market fee, the budget that sets the state orders, and the tariffs. |
 | `goods` | array of [`GoodEntry`](#goodentry) |  |  | Changes to the goods catalogue of Azgaar's Fantasy Map Generator, in order. Empty: the default catalogue of 71 goods. |
 | `growth_rate` | number |  | `1.0` | How far cultures and states grow. 0.1 to 2. Cultures and states stop at a total cost that this value multiplies. |
 | `jitter` | number |  |  | How far each point of the first grid can move from its lattice position, as a fraction of half the distance between neighbor points. 0 to 0.9. 0 gives a regular lattice. |

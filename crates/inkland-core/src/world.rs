@@ -461,6 +461,8 @@ impl World {
             sea_level,
             society: &society,
         });
+        // The finance of the config (`world.finance`), before the run.
+        crate::economy::finance::apply_config(config, &grid, &goods, &mut society)?;
         let economy = crate::economy::build(
             &crate::economy::Input {
                 config,
