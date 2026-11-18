@@ -1158,6 +1158,27 @@ impl Controller {
         g.set_emblem_custom(custom.is_some());
         let shown = custom.unwrap_or_else(|| coa.clone());
         g.set_emblem_json(s(serde_json::to_string(&shown).unwrap_or_default()));
+        let index = em::indexes(&shown);
+        let labels = [
+            "Shield",
+            "Field",
+            "Division",
+            "Division tincture",
+            "Ordinary",
+            "Ordinary tincture",
+            "Charge",
+            "Charge tincture",
+        ];
+        let parts: Vec<ui::EmblemPart> = em::choices()
+            .iter()
+            .enumerate()
+            .map(|(k, list)| ui::EmblemPart {
+                label: s(labels[k]),
+                choices: model(list.iter().map(s).collect()),
+                index: index[k] as i32,
+            })
+            .collect();
+        g.set_emblem_parts(slint::ModelRc::new(slint::VecModel::from(parts)));
         if open {
             // Two pixels for each logical pixel, for a sharp image.
             const SIZE: u32 = 392;
@@ -2026,6 +2047,23 @@ fn main() -> Result<(), slint::PlatformError> {
                 .and_then(|v| c.state.borrow_mut().editor.set(&path, v))
         };
         c.edited(r, "set custom arms");
+    });
+    let c = Rc::clone(&app);
+    a.on_emblem_part(move |k, i| {
+        let ui = c.ui();
+        let g = ui.global::<AppState>();
+        let text = g.get_emblem_json();
+        let Ok(coa) = serde_json::from_str::<inkland_core::emblems::Coa>(&text) else {
+            c.message("the arms of the item cannot be read", true);
+            return;
+        };
+        let (k, i) = (
+            usize::try_from(k).unwrap_or(0),
+            usize::try_from(i).unwrap_or(0),
+        );
+        let next = inkland_app::emblems::compose(&coa, k, i);
+        let json = serde_json::to_string(&next).unwrap_or_default();
+        ui.global::<Actions>().invoke_emblem_set(s(json));
     });
     let c = Rc::clone(&app);
     a.on_emblem_reset(move || {

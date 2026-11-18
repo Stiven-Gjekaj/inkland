@@ -1,7 +1,8 @@
 // The Emblems editor of FMG: the coat of arms of a state, a province, or a
-// burg of the shown world. "Set custom" writes the arms to the config:
-// `coa` of a burg pin, or `state_coa` of the pin that is the capital of a
-// state.
+// burg of the shown world. The selects change one part of the arms at a
+// time. "Set custom" writes the arms to the config: `coa` of a burg pin,
+// `state_coa` of the pin that is the capital of a state, or the rename
+// entry of a province.
 
 import { Theme, Label, DialogButton, Field, Select, FormRow, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
@@ -59,6 +60,19 @@ export component EmblemsDialog inherits Dialog {
         text: AppState.emblem-summary;
         wrap: word-wrap;
     }
+    for part[k] in AppState.emblem-parts: FormRow {
+        label: part.label;
+        label-width: 110px;
+        Select {
+            dialog: true;
+            horizontal-stretch: 1;
+            enabled: AppState.emblem-custom-path != "";
+            model: part.choices;
+            current-index: part.index;
+            commit: false;
+            selected(i) => { Actions.emblem-part(k, i); }
+        }
+    }
     FormRow {
         label: "Custom";
         label-width: 70px;
@@ -88,7 +102,7 @@ export component EmblemsDialog inherits Dialog {
     Tip {
         dialog: true;
         text: AppState.emblem-custom-path != ""
-            ? "Edit the JSON and press Enter or Set custom. Undo removes the edit."
-            : "Only a burg pin, or a state with a pinned capital, can have custom arms.";
+            ? "Each select changes one part of the arms. Or edit the JSON and press Enter or Set custom. Undo removes the edit."
+            : "Only a burg pin, a province, or a state with a pinned capital can have custom arms.";
     }
 }

@@ -41,6 +41,14 @@ export struct CheckRow {
     detail: string,
 }
 
+// One part of the visual arms editor: its label, its choices, and the
+// index of the choice of the shown arms.
+export struct EmblemPart {
+    label: string,
+    choices: [string],
+    index: int,
+}
+
 export global AppState {
     // The map image and where it goes in the map view.
     in property <image> map-image;
@@ -119,6 +127,8 @@ export global AppState {
     in property <string> emblem-custom-path;
     in property <bool> emblem-custom;
     in-out property <string> emblem-json;
+    // The parts of the visual arms editor, with the choice of each part.
+    in property <[EmblemPart]> emblem-parts;
 
     // The overviews of the world: the selected state (an index in
     // `Lists.state-names`) and the long texts.
@@ -205,6 +215,8 @@ export global Actions {
     // from JSON text, and remove the custom arms.
     callback emblem-select(int, int);
     callback emblem-set(string);
+    // The visual arms editor: set part `k` to choice `i`.
+    callback emblem-part(int, int);
     callback emblem-reset();
 
     // The Rust code calls this from the event loop when a worker thread

@@ -3,8 +3,9 @@
 //! (`controllers/political/emblems/emblems-editor.ts`).
 //!
 //! The arms come from the world. "Set custom" writes a coat of arms to the
-//! config: `coa` of a burg pin, or `state_coa` of the pin that is the
-//! capital of a state. A province has no config field.
+//! config: `coa` of a burg pin, `state_coa` of the pin that is the capital
+//! of a state, or the rename entry of a province. The visual editor
+//! changes one part of the arms at a time, as the FMG editor does.
 
 use inkland_core::config::Config;
 use inkland_core::emblems::Coa;
@@ -151,6 +152,171 @@ pub fn image(coa: &Coa, size: u32) -> Result<Vec<u8>, String> {
     scene.render_rgba(size, size, scale, [0.0, 0.0], [255, 255, 255])
 }
 
+/// The parts of the arms that the visual editor changes, in the order of
+/// its selects.
+pub const PARTS: [&str; 8] = [
+    "shield",
+    "field",
+    "division",
+    "division-tincture",
+    "ordinary",
+    "ordinary-tincture",
+    "charge",
+    "charge-tincture",
+];
+
+/// The choices of each part, in `PARTS` order. A part that can be empty
+/// starts with `none`.
+pub fn choices() -> &'static [Vec<String>; 8] {
+    static CHOICES: std::sync::OnceLock<[Vec<String>; 8]> = std::sync::OnceLock::new();
+    CHOICES.get_or_init(make_choices)
+}
+
+fn make_choices() -> [Vec<String>; 8] {
+    use inkland_core::emblems::data as d;
+    let names = |w: d::Weights| w.iter().map(|(n, _)| (*n).to_owned()).collect::<Vec<_>>();
+    let mut tinctures = names(d::METALS);
+    tinctures.extend(names(d::COLOURS));
+    tinctures.extend(names(d::STAINS));
+    let none = || vec!["none".to_owned()];
+    let mut shields: Vec<String> = d::SHIELDS.iter().flat_map(|(_, w)| names(w)).collect();
+    shields.dedup();
+    let mut divisions = none();
+    divisions.extend(names(d::DIVISIONS));
+    let mut ordinaries = none();
+    for n in names(d::ORDINARIES_LINED)
+        .into_iter()
+        .chain(names(d::ORDINARIES_STRAIGHT))
+    {
+        if !ordinaries.contains(&n) {
+            ordinaries.push(n);
+        }
+    }
+    // Only the charges that inkland can draw: some FMG charges have no art
+    // with a free license.
+    let mut charges = none();
+    charges.extend(
+        d::CHARGES
+            .iter()
+            .flat_map(|(_, w)| w.iter().map(|(n, _)| *n))
+            .chain(d::CHARGE_DATA.iter().map(|(n, _)| *n))
+            .collect::<std::collections::BTreeSet<&str>>()
+            .into_iter()
+            .filter(|n| {
+                let coa: Option<Coa> = serde_json::from_value(serde_json::json!({
+                    "t1": "gules", "charges": [{ "charge": n, "t": "or", "p": "e" }]
+                }))
+                .ok();
+                coa.is_some_and(|c| inkland_core::emblems::validate(&c).is_empty())
+            })
+            .map(str::to_owned),
+    );
+    [
+        shields,
+        tinctures.clone(),
+        divisions,
+        tinctures.clone(),
+        ordinaries,
+        tinctures.clone(),
+        charges,
+        tinctures,
+    ]
+}
+
+/// The index of the value of each part of a coat of arms in `choices`.
+/// A value that is not in the list gives 0.
+pub fn indexes(coa: &Coa) -> [usize; 8] {
+    let c = choices();
+    let find = |k: usize, v: Option<&str>| {
+        v.and_then(|v| c[k].iter().position(|x| x == v))
+            .unwrap_or(0)
+    };
+    [
+        find(0, coa.shield.as_deref()),
+        find(1, Some(&coa.t1)),
+        find(2, coa.division.as_ref().map(|d| d.division.as_str())),
+        find(3, coa.division.as_ref().map(|d| d.t.as_str())),
+        find(4, coa.ordinaries.first().map(|o| o.ordinary.as_str())),
+        find(5, coa.ordinaries.first().map(|o| o.t.as_str())),
+        find(6, coa.charges.first().map(|o| o.charge.as_str())),
+        find(7, coa.charges.first().map(|o| o.t.as_str())),
+    ]
+}
+
+/// A tincture that shows on the field: a metal on a colour, and a colour
+/// on a metal (the rule of tincture).
+fn contrast(field: &str) -> &'static str {
+    use inkland_core::emblems::data as d;
+    if d::METALS.iter().any(|(n, _)| *n == field) {
+        "azure"
+    } else {
+        "or"
+    }
+}
+
+/// The arms with the part `part` (see `PARTS`) set to choice `index`. A new
+/// division, ordinary, or charge gets a tincture that shows on the field.
+pub fn compose(coa: &Coa, part: usize, index: usize) -> Coa {
+    use inkland_core::emblems::{Charge, Division, Ordinary};
+    let c = choices();
+    let Some(value) = c.get(part).and_then(|l| l.get(index)).cloned() else {
+        return coa.clone();
+    };
+    let none = value == "none";
+    let mut out = coa.clone();
+    let on_field = contrast(&out.t1).to_owned();
+    match part {
+        0 => out.shield = Some(value),
+        1 => out.t1 = value,
+        2 if none => out.division = None,
+        2 => {
+            let t = out.division.as_ref().map_or(on_field, |d| d.t.clone());
+            out.division = Some(Division {
+                division: value,
+                t,
+                line: None,
+            });
+        }
+        3 => {
+            if let Some(d) = &mut out.division {
+                d.t = value;
+            }
+        }
+        4 if none => out.ordinaries.clear(),
+        4 => {
+            let t = out.ordinaries.first().map_or(on_field, |o| o.t.clone());
+            let o: Ordinary =
+                serde_json::from_value(serde_json::json!({ "ordinary": value, "t": t }))
+                    .expect("an ordinary of a name and a tincture");
+            out.ordinaries = vec![o];
+        }
+        5 => {
+            if let Some(o) = out.ordinaries.first_mut() {
+                o.t = value;
+            }
+        }
+        6 if none => out.charges.clear(),
+        6 => {
+            let t = out.charges.first().map_or(on_field, |o| o.t.clone());
+            let p = out
+                .charges
+                .first()
+                .map_or_else(|| "e".to_owned(), |o| o.p.clone());
+            let ch: Charge =
+                serde_json::from_value(serde_json::json!({ "charge": value, "t": t, "p": p }))
+                    .expect("a charge of a name, a tincture, and a position");
+            out.charges = vec![ch];
+        }
+        7 => {
+            if let Some(o) = out.charges.first_mut() {
+                o.t = value;
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,5 +407,54 @@ mod tests {
         assert_eq!(e.config().world.renames[0].name.as_deref(), Some("Hearth"));
         e.rename_area(kind, at, "").unwrap();
         assert_eq!(e.config(), &c);
+    }
+
+    #[test]
+    fn the_visual_editor_changes_one_part_and_keeps_valid_arms() {
+        let base: Coa = serde_json::from_value(serde_json::json!({ "t1": "gules" })).unwrap();
+        let c = choices();
+        let pick = |k: usize, v: &str| c[k].iter().position(|x| x == v).unwrap();
+        let mut coa = compose(&base, 0, pick(0, "heater"));
+        coa = compose(&coa, 2, pick(2, "perPale"));
+        coa = compose(&coa, 4, pick(4, "fess"));
+        coa = compose(&coa, 6, pick(6, "mullet"));
+        coa = compose(&coa, 7, pick(7, "argent"));
+        assert_eq!(coa.shield.as_deref(), Some("heater"));
+        assert_eq!(
+            coa.division.as_ref().unwrap().t,
+            "or",
+            "a metal on the colour field"
+        );
+        assert_eq!(coa.ordinaries[0].ordinary, "fess");
+        assert_eq!(
+            (coa.charges[0].charge.as_str(), coa.charges[0].t.as_str()),
+            ("mullet", "argent")
+        );
+        assert!(
+            inkland_core::emblems::validate(&coa).is_empty(),
+            "{:?}",
+            inkland_core::emblems::validate(&coa)
+        );
+        let idx = indexes(&coa);
+        assert!(
+            c[6].iter().any(|x| x == "fusil"),
+            "a conventional charge is a choice"
+        );
+        assert_eq!(c[6][idx[6]], "mullet");
+        assert_eq!(c[1][idx[1]], "gules");
+        // "none" takes a part away.
+        let plain = compose(&compose(&coa, 6, 0), 2, 0);
+        assert!(plain.charges.is_empty() && plain.division.is_none());
+        // Each choice of each part gives valid arms.
+        for (k, list) in c.iter().enumerate() {
+            for (i, choice) in list.iter().enumerate() {
+                let x = compose(&coa, k, i);
+                assert!(
+                    inkland_core::emblems::validate(&x).is_empty(),
+                    "{} {choice}",
+                    PARTS[k]
+                );
+            }
+        }
     }
 }
