@@ -483,6 +483,7 @@ impl World {
             roads: &roads,
             sea_routes: &sea_routes,
             pin_cells: &pin_cells,
+            economy: &economy,
         });
         // The journeys run last, as in FMG (`Journeys.generate`). Later
         // stages go before them.

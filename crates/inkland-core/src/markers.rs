@@ -9,10 +9,13 @@
 //! legend from the FMG word lists (`data/markers.ts`, MIT license, see
 //! THIRD_PARTY_NOTICES.md).
 //!
-//! inkland: no marker goes on the cell of a pinned place. The kinds that
-//! need the FMG economy (mines, guild halls, merchant houses, customs
-//! houses) are not made. The kinds that FMG weighs by trade use an even
-//! draw, as FMG does when there is no trade. Legends are plain text: a
+//! The kinds that read the economy (mines, guild halls, merchant houses,
+//! customs houses, bridges, inns, brigands, pirates, fairs) weigh their
+//! candidates by the trade of the last run (`indexTrade`, `indexGuilds`),
+//! as FMG does.
+//!
+//! inkland: no marker goes on the cell of a pinned place. The name of a
+//! mine has a colon where FMG writes an em-dash. Legends are plain text: a
 //! legend with a web page in FMG (dungeons) gives the address, and the
 //! encounters use the offline text of FMG. The portals, rifts, and
 //! disturbed burials come only with a fantasy culture set, as in FMG.
@@ -57,6 +60,8 @@ pub struct Input<'a> {
     pub roads: &'a [Road],
     pub sea_routes: &'a [Road],
     pub pin_cells: &'a [usize],
+    /// The last economy run.
+    pub economy: &'a crate::economy::Economy,
 }
 
 const BRIDGE_ADJECTIVES: &[(&str, u32)] = &[
@@ -325,6 +330,51 @@ const INN_COMMON_COURSES: &[&str] = &[
     "pears",
     "rat tails",
     "pig ears",
+];
+/// Inn fare by good name, served only where the market of the inn has the
+/// good (`INN_COURSES_BY_GOOD`).
+const INN_COURSES_BY_GOOD: &[(&str, &[&str])] = &[
+    ("Cattle", &["beef", "veal"]),
+    ("Sheep", &["lamb", "mutton"]),
+    (
+        "Game",
+        &[
+            "hare", "rabbit", "hart", "deer", "antlers", "bear", "buffalo", "badger", "beaver",
+            "boar", "pheasant",
+        ],
+    ),
+    (
+        "Fish",
+        &[
+            "carp", "bass", "pike", "catfish", "sturgeon", "escallop", "eel",
+        ],
+    ),
+    ("Whales", &["whale", "seal"]),
+    ("Camels", &["camel"]),
+    (
+        "Grain",
+        &["bread", "pie", "cake", "pottage", "pudding", "pasta"],
+    ),
+    ("Olives", &["olives"]),
+    ("Dates", &["dates"]),
+    ("Cheese", &["cheese"]),
+];
+/// Inn drinks by good name (`INN_DRINKS_BY_GOOD`).
+const INN_DRINKS_BY_GOOD: &[(&str, &[&str])] = &[
+    ("Wine", &["wine", "brandy"]),
+    ("Beer", &["beer", "ale"]),
+    (
+        "Liquor",
+        &[
+            "gin", "whisky", "rum", "vodka", "tequila", "absinthe", "liquor", "spirits",
+        ],
+    ),
+    ("Grain", &["kvass"]),
+    ("Honey", &["mead", "nectar"]),
+    ("Sugarcane", &["rum"]),
+    ("Tea", &["tea"]),
+    ("Cattle", &["milk"]),
+    ("Horses", &["kumis"]),
 ];
 const INN_COMMON_DRINKS: &[&str] = &["water", "cider", "juice", "sap"];
 const INN_COOKING_METHODS: &[&str] = &[
@@ -605,6 +655,161 @@ const fn k(kind: &'static str, icon: &'static str, min: f64, each: f64, multipli
     }
 }
 
+/// The last economy run, summed for the markers (`TradeIndex`).
+#[derive(Debug, Clone, Default)]
+struct Trade {
+    /// By market id: the value of its trade.
+    volume: Vec<f64>,
+    /// By market id: what its center earned on it.
+    margin: Vec<f64>,
+    /// By place id: the number of goods it traded.
+    goods: Vec<usize>,
+    /// By place id: the value of its trade.
+    burg_trade: Vec<f64>,
+    /// By state pair: the tariffs paid.
+    tariffs: BTreeMap<(u32, u32), f64>,
+    /// By place id: the made good it is famed for and its renown.
+    guilds: BTreeMap<u32, (u32, f64)>,
+}
+
+/// A pair of states in one order (`getStatePair`).
+fn state_pair(a: u32, b: u32) -> (u32, u32) {
+    if a < b { (a, b) } else { (b, a) }
+}
+
+/// Upper case at the start (`capitalize` of FMG).
+fn upper_first(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => String::new(),
+    }
+}
+
+/// A list in English: `a`, `a and b`, `a, b, and c` (`list`).
+fn list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [a] => a.clone(),
+        [a, b] => format!("{a} and {b}"),
+        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
+    }
+}
+
+/// Sum the deals of the last run (`indexTrade`).
+fn index_trade(soc: &Society, e: &crate::economy::Economy) -> Trade {
+    use crate::economy::deals::DealKind;
+    let markets = e.markets.len() + 1;
+    let places = soc.places.len() + 1;
+    let mut t = Trade {
+        volume: vec![0.0; markets],
+        margin: vec![0.0; markets],
+        goods: vec![0; places],
+        burg_trade: vec![0.0; places],
+        ..Trade::default()
+    };
+    let mut traded: Vec<std::collections::BTreeSet<u32>> = vec![Default::default(); places];
+    let market_state = |id: u32| {
+        e.market(id)
+            .and_then(|m| soc.places.get(m.center as usize - 1))
+            .map_or(NONE, |p| p.state)
+    };
+    for d in &e.deals {
+        if d.kind == DealKind::Kept {
+            continue;
+        }
+        let (m, b) = (d.market as usize, d.burg as usize);
+        let value = d.units * d.price;
+        t.volume[m] += value;
+        t.burg_trade[b] += value;
+        let fee = e.market(d.market).map_or(0.0, |m| m.fee_paid);
+        t.margin[m] += d.margin(fee);
+        traded[b].insert(d.good);
+        if d.tariff == 0.0 {
+            continue;
+        }
+        let state = soc.places.get(b.wrapping_sub(1)).map_or(NONE, |p| p.state);
+        *t.tariffs
+            .entry(state_pair(state, market_state(d.market)))
+            .or_insert(0.0) += d.tariff;
+    }
+    for m in &e.markets {
+        let Some(rural) = &m.rural else { continue };
+        let k = m.id as usize;
+        t.volume[k] += rural.earned + rural.spent;
+        t.margin[k] += rural.margin;
+    }
+    t.goods = traded.iter().map(std::collections::BTreeSet::len).collect();
+    t.guilds = index_guilds(soc, e);
+    t
+}
+
+/// The places famed for a made good: leaders among many makers and in
+/// their state (`indexGuilds`).
+fn index_guilds(soc: &Society, e: &crate::economy::Economy) -> BTreeMap<u32, (u32, f64)> {
+    /// World share times the root of the makers times the root of the
+    /// state share that a place needs.
+    const GUILD_RENOWN: f64 = 0.75;
+    /// The share of the value that a place makes that the good must be.
+    const GUILD_FOCUS: f64 = 0.25;
+    /// The value of the good that a place makes a day.
+    const GUILD_MIN_VALUE: f64 = 15.0;
+    let goods = e.goods.len() + 1;
+    let mut world = vec![0.0; goods];
+    let mut makers = vec![0u32; goods];
+    let mut in_state: BTreeMap<(u32, u32), f64> = BTreeMap::new();
+    let mut worth = vec![0.0; soc.places.len() + 1];
+    let mut crafts: Vec<(u32, u32, f64, u32)> = Vec::new();
+    for (k, p) in soc.places.iter().enumerate() {
+        let Some(pe) = e.places.get(k) else { continue };
+        for &(id, units) in &pe.production {
+            let Some(good) = e.good(id) else { continue };
+            if good.recipes.is_empty() {
+                continue;
+            }
+            world[id as usize] += units;
+            makers[id as usize] += 1;
+            *in_state.entry((p.state, id)).or_insert(0.0) += units;
+            worth[p.id as usize] += units * good.value;
+            crafts.push((p.id, id, units, p.state));
+        }
+    }
+    let mut guilds: BTreeMap<u32, (u32, f64)> = BTreeMap::new();
+    for (burg, id, units, state) in crafts {
+        let good = e.good(id).expect("a made good is in the catalogue");
+        let value = units * good.value;
+        if value < GUILD_MIN_VALUE || value / worth[burg as usize] < GUILD_FOCUS {
+            continue;
+        }
+        let renown = units / world[id as usize]
+            * libm::sqrt(f64::from(makers[id as usize]) * (units / in_state[&(state, id)]));
+        if renown < GUILD_RENOWN || renown <= guilds.get(&burg).map_or(0.0, |g| g.1) {
+            continue;
+        }
+        // One hall a place, for what it is most famed for.
+        guilds.insert(burg, (id, renown));
+    }
+    guilds
+}
+
+/// One draw over the weights (`extractWeighted`): an even draw when no
+/// candidate weighs anything.
+fn extract_weighted(rng: &mut Rand, cells: &mut Vec<usize>, weights: &mut Vec<f64>) -> usize {
+    let total = weights.iter().fold(0.0, |s, w| s + w);
+    let roll = rng.unit();
+    let mut index = (roll * cells.len() as f64) as usize;
+    if total != 0.0 {
+        let mut rest = roll * total - weights[0];
+        index = 0;
+        while rest >= 0.0 && index < weights.len() - 1 {
+            index += 1;
+            rest -= weights[index];
+        }
+    }
+    weights.remove(index);
+    cells.remove(index)
+}
+
 /// A campaign of a state (`generateCampaign`).
 struct Campaign {
     name: String,
@@ -619,14 +824,19 @@ struct Gen<'a> {
     chains: Vec<Chain>,
     /// The place on each cell, as an index in the place list.
     burg: Vec<Option<usize>>,
-    /// The route links of each cell: the neighbor and the route group.
-    links: Vec<BTreeMap<usize, &'static str>>,
+    /// The route links of each cell: the neighbor, the route index (roads,
+    /// then sea routes), and the route group (FMG `cells.routes`).
+    links: Vec<BTreeMap<usize, (usize, &'static str)>>,
+    /// The first and the last cell of each route.
+    route_ends: Vec<Option<(usize, usize)>>,
+    /// The last economy run, summed for the markers.
+    trade: Trade,
     campaigns: BTreeMap<u32, Vec<Campaign>>,
     era: String,
     markers: Vec<Marker>,
 }
 
-impl Gen<'_> {
+impl<'a> Gen<'a> {
     fn soc(&self) -> &Society {
         self.input.society
     }
@@ -652,10 +862,128 @@ impl Gen<'_> {
         !self.links[c].is_empty()
     }
     fn has_road(&self, c: usize) -> bool {
-        self.links[c].values().any(|&g| g == "roads")
+        self.links[c].values().any(|&(_, g)| g == "roads")
     }
     fn crossroad(&self, c: usize) -> bool {
-        self.links[c].len() > 3 || self.links[c].values().filter(|&&g| g == "roads").count() > 2
+        self.links[c].len() > 3
+            || self.links[c]
+                .values()
+                .filter(|&&(_, g)| g == "roads")
+                .count()
+                > 2
+    }
+    /// The good of the deposit of a cell, if it is an ore or a mineral.
+    fn ore(&self, c: usize) -> Option<&'a crate::economy::goods::Good> {
+        let e = self.input.economy;
+        let good = e.good(u32::from(self.soc().cells.good[c]))?;
+        good.tags
+            .iter()
+            .any(|&t| t == "ore" || t == "mineral")
+            .then_some(good)
+    }
+    /// The ore or mineral that the place of a cell extracts in the last run
+    /// (`getMinedGood`).
+    fn mined_good(&self, c: usize) -> Option<&'a crate::economy::goods::Good> {
+        let good = self.ore(c)?;
+        let k = self.burg[c]?;
+        let e = self.input.economy;
+        e.places
+            .get(k)?
+            .production
+            .iter()
+            .any(|&(id, _)| id == good.id)
+            .then_some(good)
+    }
+    /// The ore or mineral deposit under the place of a cell, mined or not
+    /// (`getDeposit`).
+    fn deposit(&self, c: usize) -> Option<&'a crate::economy::goods::Good> {
+        self.burg[c]?;
+        self.ore(c)
+    }
+    /// The names of the goods that the market of a cell had in stock or
+    /// traded in the last run (`getMarketGoods`).
+    fn market_goods(&self, c: usize) -> std::collections::BTreeSet<&'static str> {
+        let e = self.input.economy;
+        let id = e.cell_market.get(c).copied().unwrap_or(0);
+        let Some(market) = e.market(id) else {
+            return Default::default();
+        };
+        let stocked = market
+            .goods
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| g.stock > 0.0)
+            .map(|(k, _)| k as u32 + 1);
+        let dealt = e.deals.iter().filter(|d| d.market == id).map(|d| d.good);
+        stocked
+            .chain(dealt)
+            .filter_map(|g| e.good(g).map(|g| g.name))
+            .collect()
+    }
+    /// The trade of the market of a cell, square-rooted so the busiest
+    /// markets do not take every marker (`getMarketTrade`).
+    fn market_trade(&self, c: usize) -> f64 {
+        let id = self.input.economy.cell_market.get(c).copied().unwrap_or(0) as usize;
+        libm::sqrt(self.trade.volume.get(id).copied().unwrap_or(0.0))
+    }
+    /// The neighbor state that a road from the cell leads to, with the most
+    /// tariffs between the two states (`getCustomsBorder`).
+    fn customs_border(&self, c: usize) -> Option<(u32, f64)> {
+        let cell_state = &self.soc().cell_state;
+        let own = cell_state[c];
+        let mut border: Option<(u32, f64)> = None;
+        for (&n, &(_, group)) in &self.links[c] {
+            let state = cell_state[n];
+            if own == NONE || state == NONE || state == own || group != "roads" {
+                continue;
+            }
+            let tariffs = self
+                .trade
+                .tariffs
+                .get(&state_pair(own, state))
+                .copied()
+                .unwrap_or(0.0);
+            if tariffs > border.map_or(0.0, |b| b.1) {
+                border = Some((state, tariffs));
+            }
+        }
+        border
+    }
+    /// The weight of a candidate cell, for the kinds that FMG weighs.
+    fn weight(&self, kind: &str, c: usize) -> Option<f64> {
+        let burg_id = |c: usize| self.burg[c].map_or(0, |k| self.soc().places[k].id) as usize;
+        let at = |v: &[f64], k: usize| v.get(k).copied().unwrap_or(0.0);
+        let market =
+            |c: usize| self.input.economy.cell_market.get(c).copied().unwrap_or(0) as usize;
+        Some(match kind {
+            // Rich deposits draw miners: gold, silver, and gems most.
+            "mines" => self.deposit(c).map_or(0.0, |d| {
+                d.value * d.value * if d.tags.contains(&"luxury") { 4.0 } else { 1.0 }
+            }),
+            "bridges" => libm::sqrt(at(&self.trade.burg_trade, burg_id(c))),
+            "merchant-houses" => at(&self.trade.margin, market(c)).max(0.0),
+            "inns" => self.market_trade(c),
+            // Brigands prey on the roads of busy markets where the land is
+            // poor.
+            "brigands" => {
+                let prosperity = self.input.economy.prosperity.get(c).copied().unwrap_or(0);
+                self.market_trade(c) * (1.2 - f64::from(prosperity) / 100.0)
+            }
+            // Pirates prey on the busiest sea route through the cell.
+            "pirates" => {
+                let routes: std::collections::BTreeSet<usize> =
+                    self.links[c].values().map(|&(r, _)| r).collect();
+                routes
+                    .iter()
+                    .fold(0.0, |best: f64, &r| match self.route_ends[r] {
+                        Some((a, b)) => best.max(self.market_trade(a) + self.market_trade(b)),
+                        None => best,
+                    })
+            }
+            "fairs" => self.trade.goods.get(burg_id(c)).copied().unwrap_or(0) as f64,
+            "customs-houses" => self.customs_border(c).map_or(0.0, |b| b.1),
+            _ => return None,
+        })
     }
     /// A name from the culture of a cell (`getCulture`).
     fn culture_name(&mut self, culture: u32) -> String {
@@ -706,6 +1034,40 @@ impl Gen<'_> {
             "water-sources" => all
                 .filter(|&c| self.h(c) > 30.0 && cells.r[c] != 0)
                 .collect(),
+            "guild-halls" => all
+                .filter(|&c| {
+                    self.burg[c].is_some_and(|k| self.trade.guilds.contains_key(&soc.places[k].id))
+                })
+                .collect(),
+            "mines" => all.filter(|&c| self.deposit(c).is_some()).collect(),
+            "merchant-houses" => self
+                .input
+                .economy
+                .markets
+                .iter()
+                .filter_map(|m| soc.places.get(m.center as usize - 1).map(|p| p.cell))
+                .filter(|&c| free(c) && self.burg[c].is_some())
+                .collect(),
+            "customs-houses" => {
+                // One road crossing for each pair of states that trade under
+                // tariffs.
+                let mut crossings: BTreeMap<(u32, u32), usize> = BTreeMap::new();
+                let mut order: Vec<usize> = Vec::new();
+                for (c, &own) in soc.cell_state.iter().enumerate().take(n) {
+                    if !free(c) {
+                        continue;
+                    }
+                    if let Some((state, _)) = self.customs_border(c) {
+                        let pair = state_pair(own, state);
+                        if let std::collections::btree_map::Entry::Vacant(v) = crossings.entry(pair)
+                        {
+                            v.insert(c);
+                            order.push(c);
+                        }
+                    }
+                }
+                order
+            }
             "bridges" => {
                 let flux: Vec<f64> = cells.fl.iter().copied().filter(|&f| f != 0.0).collect();
                 let mean = flux.iter().sum::<f64>() / flux.len().max(1) as f64;
@@ -866,6 +1228,16 @@ impl Gen<'_> {
         }
     }
 
+    /// A local item with the chance 0.7 if there is one, else a common item
+    /// (`pick` of `addInn`).
+    fn pick_fare(&mut self, local: &[&'static str], common: &[&'static str]) -> &'static str {
+        if !local.is_empty() && self.rng.p(0.7) {
+            self.rng.pick(local)
+        } else {
+            self.rng.pick(common)
+        }
+    }
+
     /// The name and the legend of a new marker (the `add` functions).
     fn describe(&mut self, kind: &str, c: usize) -> (Option<String>, Option<String>) {
         let culture = self.culture(c);
@@ -916,6 +1288,99 @@ impl Gen<'_> {
                     ),
                 )
             }
+            "guild-halls" => {
+                let soc = self.soc();
+                let burg = self.burg[c].map(|k| &soc.places[k]);
+                let guild = burg.and_then(|b| self.trade.guilds.get(&b.id).copied());
+                match (burg, guild) {
+                    (Some(b), Some((good_id, _))) => {
+                        let e = self.input.economy;
+                        let made = e.good(good_id).expect("a guild good is in the catalogue");
+                        let good = made.name.to_lowercase();
+                        let worked = self.mined_good(c).filter(|m| {
+                            made.recipes
+                                .iter()
+                                .any(|r| r.iter().any(|&(id, _)| id == m.id))
+                        });
+                        let source = worked.map_or(String::new(), |m| {
+                            format!(
+                                ", worked from the {} of its own mines",
+                                m.name.to_lowercase()
+                            )
+                        });
+                        (
+                            Some(format!("{} {} Guild", b.name, upper_first(&good))),
+                            Some(format!(
+                                "{} is famed for its {good}{source}. The guild hall of its makers keeps the secrets of the craft, and its masters set the price far beyond the town.",
+                                b.name
+                            )),
+                        )
+                    }
+                    (b, _) => (
+                        Some(b.map_or_else(
+                            || "Guild Hall".to_owned(),
+                            |b| format!("{} Guild Hall", b.name),
+                        )),
+                        s("The hall of a craft guild that keeps the secrets of its trade."),
+                    ),
+                }
+            }
+            "mines" => {
+                let mined = self.mined_good(c);
+                let resource = mined
+                    .or_else(|| self.deposit(c))
+                    .map_or_else(|| "ore".to_owned(), |g| g.name.to_lowercase());
+                let Some(k) = self.burg[c] else {
+                    return (None, None);
+                };
+                let burg = &self.soc().places[k];
+                if mined.is_none() && !self.input.economy.deals.is_empty() {
+                    return (
+                        Some(format!("{}: old {resource} mine", burg.name)),
+                        Some(format!(
+                            "The {resource} mine by {} is played out. Its shafts stand empty, and the miners have long gone to work the fields.",
+                            burg.name
+                        )),
+                    );
+                }
+                let population = rn(
+                    burg.population
+                        * crate::military::POPULATION_SCALE
+                        * crate::military::URBANIZATION_RATE,
+                    0,
+                );
+                (
+                    Some(format!("{}: {resource} mining town", burg.name)),
+                    Some(format!(
+                        "{} is a mining town of {population} people just nearby the {resource} mine.",
+                        burg.name
+                    )),
+                )
+            }
+            "merchant-houses" => {
+                let e = self.input.economy;
+                let market = e.cell_market.get(c).copied().unwrap_or(0) as usize;
+                let margin_of = |id: usize| self.trade.margin.get(id).copied().unwrap_or(0.0);
+                let margin = margin_of(market);
+                let richer = e
+                    .markets
+                    .iter()
+                    .filter(|m| margin_of(m.id as usize) > margin)
+                    .count();
+                let rank = if richer > 0 {
+                    "one of the richest"
+                } else {
+                    "the richest"
+                };
+                let burg = self.place_name(c).unwrap_or_else(|| "the town".to_owned());
+                let family = self.culture_name(culture);
+                (
+                    Some(format!("House of {family}")),
+                    Some(format!(
+                        "A merchant family of {burg}, {rank} in the land. Its factors buy and sell across the whole market, and a share of every deal ends in its coffers."
+                    )),
+                )
+            }
             "bridges" => {
                 let burg = self.place_name(c).unwrap_or_default();
                 let river = self.river_name(c);
@@ -952,16 +1417,28 @@ impl Gen<'_> {
                         capitalize(type_name)
                     )
                 };
+                let local = self.market_goods(c);
+                let local_fare =
+                    |by_good: &[(&str, &'static [&'static str])]| -> Vec<&'static str> {
+                        by_good
+                            .iter()
+                            .filter(|(good, _)| local.contains(good))
+                            .flat_map(|(_, fare)| fare.iter().copied())
+                            .collect()
+                    };
                 let warm = self.input.temperature[c] >= 18.0;
                 let mut courses: Vec<&str> = INN_COMMON_COURSES.to_vec();
                 if warm {
                     courses.extend_from_slice(INN_WARM_COURSES);
                 }
-                let served = courses.contains(&animal.to_lowercase().as_str());
+                let local_courses = local_fare(INN_COURSES_BY_GOOD);
+                let lower = animal.to_lowercase();
+                let served =
+                    courses.contains(&lower.as_str()) || local_courses.contains(&lower.as_str());
                 let meal = if themed && served && self.rng.p(0.5) {
                     animal.to_owned()
                 } else {
-                    (*self.rng.pick(&courses)).to_owned()
+                    self.pick_fare(&local_courses, &courses).to_owned()
                 };
                 let course =
                     format!("{} {meal}", self.rng.pick(INN_COOKING_METHODS)).to_lowercase();
@@ -970,7 +1447,12 @@ impl Gen<'_> {
                 } else {
                     *self.rng.pick(INN_COLORS)
                 };
-                let drink = format!("{first} {}", self.rng.pick(INN_COMMON_DRINKS)).to_lowercase();
+                let local_drinks = local_fare(INN_DRINKS_BY_GOOD);
+                let drink = format!(
+                    "{first} {}",
+                    self.pick_fare(&local_drinks, INN_COMMON_DRINKS)
+                )
+                .to_lowercase();
                 let legend = format!(
                     "A big and famous roadside {type_name}. Delicious {course} with {drink} is served here."
                 );
@@ -1194,10 +1676,52 @@ impl Gen<'_> {
             }
             "fairs" => {
                 let burg = self.place_name(c).unwrap_or_default();
+                let e = self.input.economy;
+                let mut made: Vec<(u32, f64)> = self.burg[c]
+                    .and_then(|k| e.places.get(k))
+                    .map_or_else(Vec::new, |p| p.production.clone());
+                made.sort_by(|a, b| b.1.total_cmp(&a.1));
+                let mut wares: Vec<String> = Vec::new();
+                for (id, _) in made {
+                    if let Some(g) = e.good(id) {
+                        let name = g.name.to_lowercase();
+                        if !wares.contains(&name) {
+                            wares.push(name);
+                        }
+                    }
+                }
+                wares.truncate(3);
+                let offer = if wares.is_empty() {
+                    "with all manner of local and foreign goods and services on offer".to_owned()
+                } else {
+                    format!(
+                        "offering local {} alongside foreign goods and services",
+                        list(&wares)
+                    )
+                };
                 (
                     Some(format!("{burg} Fair")),
+                    Some(format!("A fair is being held in {burg}, {offer}.")),
+                )
+            }
+            "customs-houses" => {
+                let soc = self.soc();
+                let state = soc.cell_state[c];
+                let state_name = soc
+                    .states
+                    .get((state as usize).wrapping_sub(1))
+                    .map_or_else(|| "the state".to_owned(), |s| s.name.clone());
+                let from = self.customs_border(c).map_or(String::new(), |(b, _)| {
+                    format!(" from {}", soc.states[b as usize - 1].name)
+                });
+                let place = match self.place_name(c) {
+                    Some(n) => n,
+                    None => self.culture_name(culture),
+                };
+                (
+                    Some(format!("{place} Customs House")),
                     Some(format!(
-                        "A fair is being held in {burg}, with all manner of local and foreign goods and services on offer."
+                        "A customs house of {state_name} on the road{from}. Carts queue at its barrier while the wardens weigh their loads and collect the tariffs."
                     )),
                 )
             }
@@ -1387,12 +1911,14 @@ pub fn generate(input: &Input) -> Vec<Marker> {
     for (k, p) in soc.places.iter().enumerate() {
         burg[p.cell] = Some(k);
     }
-    let mut links: Vec<BTreeMap<usize, &'static str>> = vec![BTreeMap::new(); n];
-    for r in input.roads.iter().chain(input.sea_routes) {
+    let mut links: Vec<BTreeMap<usize, (usize, &'static str)>> = vec![BTreeMap::new(); n];
+    let mut route_ends: Vec<Option<(usize, usize)>> = Vec::new();
+    for (k, r) in input.roads.iter().chain(input.sea_routes).enumerate() {
+        route_ends.push(r.cells.first().zip(r.cells.last()).map(|(&a, &b)| (a, b)));
         for w in r.cells.windows(2) {
             if w[0] != w[1] {
-                links[w[0]].insert(w[1], r.group);
-                links[w[1]].insert(w[0], r.group);
+                links[w[0]].insert(w[1], (k, r.group));
+                links[w[1]].insert(w[0], (k, r.group));
             }
         }
     }
@@ -1406,7 +1932,11 @@ pub fn generate(input: &Input) -> Vec<Marker> {
         k("volcanoes", "volcano", 10.0, 500.0, 1.0),
         k("hot-springs", "hot-springs", 30.0, 1200.0, 1.0),
         k("water-sources", "droplet", 1.0, 1000.0, 1.0),
+        // Before the mines: a guild town often mines what its guild works.
+        k("guild-halls", "classical-building", 1.0, 1.0, 1.0),
+        k("mines", "pick", 1.0, 6.0, 1.0),
         k("bridges", "bridge", 1.0, 5.0, 1.0),
+        k("merchant-houses", "balance-scale", 3.0, 8.0, 1.0),
         k("inns", "beer", 1.0, 10.0, 1.0),
         k("lighthouses", "lighthouse", 1.0, 2.0, 1.0),
         k("waterfalls", "waterfall", 1.0, 5.0, 1.0),
@@ -1427,6 +1957,7 @@ pub fn generate(input: &Input) -> Vec<Marker> {
         k("circuses", "circus-tent", 80.0, 1000.0, 1.0),
         k("jousts", "fencer", 5.0, 500.0, 1.0),
         k("fairs", "carousel", 50.0, 1000.0, 1.0),
+        k("customs-houses", "customs", 1.0, 3.0, 1.0),
         k("canoes", "canoe", 500.0, 2000.0, 1.0),
         k("migration", "boar", 20.0, 1000.0, 1.0),
         k("dances", "dancer", 50.0, 1000.0, 1.0),
@@ -1446,6 +1977,8 @@ pub fn generate(input: &Input) -> Vec<Marker> {
         chains,
         burg,
         links,
+        route_ends,
+        trade: index_trade(soc, input.economy),
         campaigns: BTreeMap::new(),
         era,
         markers: Vec::new(),
@@ -1455,6 +1988,8 @@ pub fn generate(input: &Input) -> Vec<Marker> {
             continue;
         }
         let mut candidates = g.list(kind.kind);
+        let mut weights: Option<Vec<f64>> =
+            candidates.iter().map(|&c| g.weight(kind.kind, c)).collect();
         let len = candidates.len() as f64;
         let mut quantity = if len == 0.0 || len < kind.min / kind.multiplier {
             0
@@ -1462,8 +1997,13 @@ pub fn generate(input: &Input) -> Vec<Marker> {
             ((len / kind.each * kind.multiplier).ceil() as usize).min(candidates.len())
         };
         while quantity > 0 && !candidates.is_empty() {
-            let k = (g.rng.unit() * candidates.len() as f64) as usize;
-            let cell = candidates.remove(k);
+            let cell = match weights.as_mut() {
+                Some(w) => extract_weighted(&mut g.rng, &mut candidates, w),
+                None => {
+                    let k = (g.rng.unit() * candidates.len() as f64) as usize;
+                    candidates.remove(k)
+                }
+            };
             let at = match g.burg[cell] {
                 Some(p) => soc.places[p].at,
                 None => input.grid.points[cell],
@@ -1523,6 +2063,102 @@ mod tests {
         // Fantasy kinds need a fantasy culture set.
         assert!(!kinds.contains("portals") && !kinds.contains("rifts"));
         assert_eq!(m.iter().filter(|x| x.kind == "party").count(), 1);
+    }
+
+    #[test]
+    fn a_weighted_draw_follows_the_weights() {
+        use crate::rand::Rand;
+        let mut rng =
+            Rand::new(crate::seed::SeedTree::new(3).part_rng(crate::seed::Layer::Markers, "t"));
+        // One heavy candidate wins nearly each draw.
+        let mut heavy = 0;
+        for _ in 0..200 {
+            let mut cells = vec![10, 11, 12];
+            let mut w = vec![0.0, 1000.0, 1.0];
+            let c = super::extract_weighted(&mut rng, &mut cells, &mut w);
+            assert_eq!(cells.len(), 2);
+            assert_eq!(w.len(), 2);
+            assert!(!cells.contains(&c));
+            heavy += usize::from(c == 11);
+        }
+        assert!(heavy > 190, "{heavy}");
+        // A zero weight is never drawn while another weighs something.
+        for _ in 0..100 {
+            let mut cells = vec![1, 2];
+            let mut w = vec![0.0, 5.0];
+            assert_eq!(super::extract_weighted(&mut rng, &mut cells, &mut w), 2);
+        }
+        // No weight at all: an even draw.
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..100 {
+            let mut cells = vec![1, 2, 3];
+            let mut w = vec![0.0; 3];
+            seen.insert(super::extract_weighted(&mut rng, &mut cells, &mut w));
+        }
+        assert_eq!(seen.len(), 3);
+    }
+
+    #[test]
+    fn lists_and_capitals_follow_fmg() {
+        let s = |v: &[&str]| v.iter().map(|x| (*x).to_owned()).collect::<Vec<_>>();
+        assert_eq!(super::list(&s(&["salt"])), "salt");
+        assert_eq!(super::list(&s(&["salt", "wine"])), "salt and wine");
+        assert_eq!(
+            super::list(&s(&["salt", "wine", "iron"])),
+            "salt, wine, and iron"
+        );
+        assert_eq!(super::upper_first("fine cloth"), "Fine cloth");
+        assert_eq!(super::state_pair(5, 2), (2, 5));
+    }
+
+    #[test]
+    fn the_economy_markers_follow_the_last_run() {
+        let (_, w) = world("european");
+        let soc = &w.society;
+        let e = &w.economy;
+        let kinds: std::collections::BTreeSet<&str> = w.markers.iter().map(|x| x.kind).collect();
+        for k in ["guild-halls", "mines", "merchant-houses", "inns"] {
+            assert!(kinds.contains(k), "{k} in {kinds:?}");
+        }
+        let trade = super::index_trade(soc, e);
+        let place = |c: usize| soc.places.iter().find(|p| p.cell == c);
+        for m in &w.markers {
+            let name = m.name.as_deref().unwrap_or_default();
+            let legend = m.legend.as_deref().unwrap_or_default();
+            assert!(
+                !name.contains('\u{2014}') && !legend.contains('\u{2014}'),
+                "{name}"
+            );
+            match m.kind {
+                "guild-halls" => {
+                    let p = place(m.cell).expect("a guild hall is in a place");
+                    let (good, renown) = trade.guilds[&p.id];
+                    assert!(renown >= 0.75);
+                    assert!(
+                        e.places[p.id as usize - 1]
+                            .production
+                            .iter()
+                            .any(|g| g.0 == good)
+                    );
+                    assert!(name.ends_with(" Guild"), "{name}");
+                }
+                "mines" => {
+                    assert!(place(m.cell).is_some());
+                    let good = e.good(u32::from(soc.cells.good[m.cell])).unwrap();
+                    assert!(good.tags.iter().any(|&t| t == "ore" || t == "mineral"));
+                    assert!(name.contains(": "), "{name}");
+                }
+                "merchant-houses" => {
+                    let p = place(m.cell).unwrap();
+                    assert!(e.markets.iter().any(|k| k.center == p.id));
+                    assert!(name.starts_with("House of "));
+                }
+                "customs-houses" => {
+                    assert!(legend.contains(" on the road from "), "{legend}");
+                }
+                _ => {}
+            }
+        }
     }
 
     #[test]
