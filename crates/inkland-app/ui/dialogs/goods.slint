@@ -1,0 +1,25 @@
+// The Goods Editor of FMG: the goods of the shown world, with the color,
+// the name, the type, the unit, the units made a day, the units in stock,
+// and the base price. It does not edit, because the config has no goods.
+
+import { Theme, Label, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { Lists } from "../globals.slint";
+
+export component GoodsDialog inherits Dialog {
+    id: "goods";
+    title: "Goods Editor";
+    content-width: 500px;
+    pos-x: 440px;
+    pos-y: 50px;
+    Table {
+        header: ["Name", "Type", "Unit", "Produced", "Stock", "Price"];
+        widths: [130px, 64px, 70px, 64px, 56px, 50px];
+        rows: Lists.goods;
+        list-height: 300px;
+    }
+    Tip {
+        dialog: true;
+        text: "Goods: " + Lists.goods.length + ". MFG goods are made in burgs, RAW goods come from deposits. Produced counts the units made a day in cells and burgs. Stock counts the units left in all markets.";
+    }
+}

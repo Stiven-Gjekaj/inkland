@@ -87,6 +87,7 @@ const IMPLEMENTED: &[&str] = &[
     "cells",
     "emblems",
     "diplomacy",
+    "goods",
     "stability",
     "zones",
     "notes",
@@ -1189,6 +1190,7 @@ impl Controller {
         let w = open(d.get_diplomacy());
         l.set_relations(rows(w, &|w| ov::relation_rows(w, selected)));
         g.set_chronicle(s(w.map(ov::chronicle_text).unwrap_or_default()));
+        l.set_goods(rows(open(d.get_goods()), &ov::goods_rows));
         let view = open(d.get_stability()).and_then(|w| ov::stability_view(w, selected));
         g.set_stability_total(s(view.as_ref().map_or("", |v| v.total.as_str())));
         let (parts, provinces) = view.map_or((Vec::new(), Vec::new()), |v| (v.parts, v.provinces));

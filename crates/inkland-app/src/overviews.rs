@@ -397,6 +397,67 @@ pub fn stability_view(world: &World, selected: u32) -> Option<StabilityView> {
     })
 }
 
+/// The Goods Editor of FMG: the name, the type (`MFG` for a good with
+/// recipes, `RAW` for a good with deposits), the unit, the units made a
+/// day in cells and burgs, the units in stock in all markets, and the base
+/// price. The swatch has the color of the good.
+pub fn goods_rows(world: &World) -> Vec<Row> {
+    let e = &world.economy;
+    let n = e.goods.len();
+    let mut made = vec![0.0; n];
+    let mut add = |id: u32, units: f64| {
+        if let Some(m) = id.checked_sub(1).and_then(|k| made.get_mut(k as usize)) {
+            *m += units;
+        }
+    };
+    for cell in &e.rural_output {
+        for (id, units) in cell {
+            add(*id, *units);
+        }
+    }
+    for place in &e.places {
+        for (id, units) in &place.production {
+            add(*id, *units);
+        }
+    }
+    let mut stock = vec![0.0; n];
+    for m in &e.markets {
+        for (k, g) in m.goods.iter().enumerate() {
+            if g.stock > 0.0
+                && let Some(s) = stock.get_mut(k)
+            {
+                *s += g.stock;
+            }
+        }
+    }
+    e.goods
+        .iter()
+        .enumerate()
+        .map(|(k, g)| {
+            let kind: Vec<&str> = [
+                (!g.recipes.is_empty()).then_some("MFG"),
+                g.distribution.is_some().then_some("RAW"),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            row(
+                g.id.to_string(),
+                vec![
+                    g.name.to_owned(),
+                    kind.join(","),
+                    g.unit.to_owned(),
+                    num(made[k], 0),
+                    num(stock[k], 0),
+                    num(g.value, 2),
+                ],
+                false,
+            )
+            .with_color(g.color)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -551,5 +612,40 @@ mod tests {
         assert!(stability_view(&w, 0).is_none());
         assert_eq!(signed(0.123), "+12");
         assert_eq!(signed(-0.03), "-3");
+    }
+
+    #[test]
+    fn the_goods_rows_sum_the_output_and_the_stock() {
+        let (_, w) = world();
+        let e = &w.economy;
+        let rows = goods_rows(&w);
+        assert_eq!(rows.len(), e.goods.len());
+        let made: f64 = rows
+            .iter()
+            .map(|r| r.cells[3].parse::<f64>().unwrap())
+            .sum();
+        assert!(made > 0.0, "the world makes goods");
+        for (r, g) in rows.iter().zip(&e.goods) {
+            assert_eq!(r.cells[0], g.name);
+            assert_eq!(r.cells[5], num(g.value, 2));
+            assert_eq!(r.cells[1].contains("MFG"), !g.recipes.is_empty());
+            assert_eq!(r.cells[1].contains("RAW"), g.distribution.is_some());
+        }
+        // One good, counted here by hand.
+        let k = 0;
+        let id = e.goods[k].id;
+        let mut units = 0.0;
+        for c in &e.rural_output {
+            units += c.iter().filter(|x| x.0 == id).map(|x| x.1).sum::<f64>();
+        }
+        for p in &e.places {
+            units += p
+                .production
+                .iter()
+                .filter(|x| x.0 == id)
+                .map(|x| x.1)
+                .sum::<f64>();
+        }
+        assert_eq!(rows[k].cells[3], num(units, 0));
     }
 }

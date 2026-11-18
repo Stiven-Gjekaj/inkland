@@ -383,6 +383,7 @@ pub const TOOLS: &[ToolDef] = &[
     tool("cultures", "Cultures", "Edit", "Shift+C", true),
     tool("diplomacy", "Diplomacy", "Edit", "Shift+D", true),
     tool("emblems", "Emblems", "Edit", "Shift+Y", true),
+    tool("goods", "Goods", "Edit", "Shift+G", true),
     tool("heightmap", "Heightmap", "Edit", "Shift+H", true),
     tool("labels", "Labels", "Edit", "Shift+L", true),
     tool("markers", "Markers", "Edit", "Shift+K", true),
