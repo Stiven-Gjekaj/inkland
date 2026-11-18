@@ -1,8 +1,10 @@
 //! The PNG preview: a small raster of the SVG, so that an agent can look at
 //! the map without a browser.
 //!
-//! The preview finds fonts in the system and in the given directories. The
-//! SVG names its fonts by family; it never embeds them. A family that the
+//! The preview finds fonts in the system, in the given directories, and in
+//! the fonts that inkland has in its program: the free fonts (SIL Open Font
+//! License) that the style presets and the print defaults name. The SVG
+//! names its fonts by family; it never embeds them. A family that the
 //! preview cannot find gives a warning, and the preview uses a fallback.
 
 use std::path::Path;
@@ -18,9 +20,41 @@ pub struct Preview {
 /// the desktop app loads them one time and keeps the database.
 pub type FontDb = Arc<resvg::usvg::fontdb::Database>;
 
-/// Load the system fonts and the fonts in `font_dirs`.
+/// The font files in the program, from `assets/fonts`. Each directory
+/// there has the license of its fonts.
+const BUNDLED: &[&[u8]] = &[
+    include_bytes!("../assets/fonts/almendrasc/AlmendraSC-Regular.ttf"),
+    include_bytes!("../assets/fonts/arimamadurai/ArimaMadurai-Bold.ttf"),
+    include_bytes!("../assets/fonts/arimamadurai/ArimaMadurai-Regular.ttf"),
+    include_bytes!("../assets/fonts/caladea/Caladea-Bold.ttf"),
+    include_bytes!("../assets/fonts/caladea/Caladea-BoldItalic.ttf"),
+    include_bytes!("../assets/fonts/caladea/Caladea-Italic.ttf"),
+    include_bytes!("../assets/fonts/caladea/Caladea-Regular.ttf"),
+    include_bytes!("../assets/fonts/cinzel/Cinzel[wght].ttf"),
+    include_bytes!("../assets/fonts/comfortaa/Comfortaa[wght].ttf"),
+    include_bytes!("../assets/fonts/eaglelake/EagleLake-Regular.ttf"),
+    include_bytes!("../assets/fonts/gloriahallelujah/GloriaHallelujah.ttf"),
+    include_bytes!("../assets/fonts/greatvibes/GreatVibes-Regular.ttf"),
+    include_bytes!("../assets/fonts/iceberg/Iceberg-Regular.ttf"),
+    include_bytes!("../assets/fonts/imfellenglish/IMFeENit28P.ttf"),
+    include_bytes!("../assets/fonts/imfellenglish/IMFeENrm28P.ttf"),
+    include_bytes!("../assets/fonts/imfellenglishsc/IMFeENsc28P.ttf"),
+    include_bytes!("../assets/fonts/lugrasimo/Lugrasimo-Regular.ttf"),
+    include_bytes!("../assets/fonts/orbitron/Orbitron[wght].ttf"),
+    include_bytes!("../assets/fonts/pirataone/PirataOne-Regular.ttf"),
+    include_bytes!("../assets/fonts/snowburstone/SnowburstOne-Regular.ttf"),
+    include_bytes!("../assets/fonts/tapestry/Tapestry-Regular.ttf"),
+    include_bytes!("../assets/fonts/underdog/Underdog-Regular.ttf"),
+    include_bytes!("../assets/fonts/unifrakturmaguntia/UnifrakturMaguntia-Book.ttf"),
+];
+
+/// Load the fonts in the program, the system fonts, and the fonts in
+/// `font_dirs`.
 pub fn font_db(font_dirs: &[&Path]) -> FontDb {
     let mut db = resvg::usvg::fontdb::Database::new();
+    for data in BUNDLED {
+        db.load_font_data(data.to_vec());
+    }
     db.load_system_fonts();
     for dir in font_dirs {
         db.load_fonts_dir(dir);
@@ -208,6 +242,49 @@ mod tests {
             families_in(svg),
             vec!["Almendra SC", "Cinzel", "Times New Roman"]
         );
+    }
+
+    #[test]
+    fn the_fonts_in_the_program_have_the_families_of_the_presets() {
+        // Only the fonts in the program, not the fonts of this system.
+        let mut db = resvg::usvg::fontdb::Database::new();
+        for data in BUNDLED {
+            db.load_font_data(data.to_vec());
+        }
+        assert_eq!(db.len(), BUNDLED.len());
+        let names: Vec<String> = db
+            .faces()
+            .flat_map(|f| f.families.iter().map(|(n, _)| n.to_ascii_lowercase()))
+            .collect();
+        for family in [
+            "Almendra SC",
+            "Arima Madurai",
+            "Caladea",
+            "Cinzel",
+            "Comfortaa",
+            "Eagle Lake",
+            "Gloria Hallelujah",
+            "Great Vibes",
+            "IM Fell English",
+            "IM Fell English SC",
+            "Iceberg",
+            "Lugrasimo",
+            "Orbitron",
+            "Pirata One",
+            "Snowburst One",
+            "Tapestry",
+            "Underdog",
+            "UnifrakturMaguntia",
+        ] {
+            assert!(names.contains(&family.to_ascii_lowercase()), "{family}");
+        }
+    }
+
+    #[test]
+    fn a_family_in_the_program_is_not_reported() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="10mm" viewBox="0 0 10 10"><text font-family="Lugrasimo" y="5">a</text></svg>"##;
+        let p = svg_to_png(svg, 64, &[], &["Lugrasimo", "Almendra SC"]).unwrap();
+        assert!(p.missing_fonts.is_empty(), "{:?}", p.missing_fonts);
     }
 
     #[test]
