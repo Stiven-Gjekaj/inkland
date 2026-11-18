@@ -205,7 +205,12 @@ Give `--world` or `--config`. An edit script:
 ```
 
 The commands are `set`, `unset`, `add_pin`, `remove_pin`, `move_pin`,
-`rename`, `brush`, and `remove_brush`. The output on stdout has `undo`: a
+`rename`, `brush`, `remove_brush`, `name_area`, and `remove_rename`.
+`name_area` gives a generated state, culture, religion, or province a name
+or arms, for example
+`{ "op": "name_area", "rename": { "kind": "state", "pin": "ostrey", "name": "Ostreya" } }`.
+Without `index`, it changes the entry of the same area, or adds one at the
+end. `remove_rename` removes the entry at `index`. The output on stdout has `undo`: a
 script that gives back the first file. The edited config must pass all
 config checks, else nothing is written.
 
