@@ -85,6 +85,12 @@ pub enum Command {
     },
     /// Remove the rename at `index`.
     RemoveRename { index: usize },
+    /// Insert a value into an array at a JSON Pointer that ends with an
+    /// index, for example `/world/notes/0`. The index can be the length of
+    /// the array. A missing array of the world part is made.
+    Insert { path: String, value: Value },
+    /// Remove the value at a JSON Pointer that ends with an array index.
+    Remove { path: String },
 }
 
 /// A list of commands in a file.
@@ -402,9 +408,74 @@ impl Command {
                     index: Some(*index),
                 }
             }
+            Command::Insert { path, value } => {
+                let (array_path, i) = split_index(path)?;
+                ensure_world_array(&mut v, &array_path);
+                let (parent, last) = parent_mut(&mut v, &array_path)?;
+                let items = array_of(parent, &last, path)?;
+                if i > items.len() {
+                    return Err(invalid(path, "the array index is too large"));
+                }
+                items.insert(i, value.clone());
+                Command::Remove { path: path.clone() }
+            }
+            Command::Remove { path } => {
+                let (array_path, i) = split_index(path)?;
+                let (parent, last) = parent_mut(&mut v, &array_path)?;
+                let items = array_of(parent, &last, path)?;
+                if i >= items.len() {
+                    return Err(invalid(path, "the array index is too large"));
+                }
+                let old = items.remove(i);
+                if let Some(key) = array_path.strip_prefix("/world/")
+                    && !key.contains('/')
+                {
+                    tidy(&mut v, key);
+                }
+                Command::Insert {
+                    path: path.clone(),
+                    value: old,
+                }
+            }
         };
         Ok((to_config(v)?, inverse))
     }
+}
+
+/// The array part and the index of a pointer like `/world/notes/3`.
+fn split_index(path: &str) -> Result<(String, usize), Error> {
+    let (array, last) = path
+        .rsplit_once('/')
+        .filter(|(a, _)| !a.is_empty())
+        .ok_or_else(|| invalid(path, "the path must end with an array index"))?;
+    let i = last
+        .parse()
+        .map_err(|_| invalid(path, "the path must end with an array index"))?;
+    Ok((array.to_owned(), i))
+}
+
+/// Make a missing list of the world part, for example `/world/notes`.
+fn ensure_world_array(v: &mut Value, array_path: &str) {
+    if let Some(key) = array_path.strip_prefix("/world/")
+        && !key.contains('/')
+    {
+        world_list_mut(v, key);
+    }
+}
+
+fn array_of<'a>(
+    parent: &'a mut Value,
+    last: &str,
+    path: &str,
+) -> Result<&'a mut Vec<Value>, Error> {
+    let target = match parent {
+        Value::Object(map) => map.get_mut(last),
+        Value::Array(items) => last.parse::<usize>().ok().and_then(|i| items.get_mut(i)),
+        _ => None,
+    };
+    target
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| invalid(path, "the path does not name an array"))
 }
 
 impl Script {
@@ -567,6 +638,53 @@ mod tests {
         assert!(none.world.renames.is_empty());
         assert!(to_value(&none)["world"].get("renames").is_none());
         assert!(Command::RemoveRename { index: 0 }.apply(&none).is_err());
+    }
+
+    #[test]
+    fn insert_and_remove_have_exact_inverses() {
+        let c = config();
+        let brush = json!({ "at": [10, 10], "radius": 5, "delta": 3 });
+        let add = Command::Insert {
+            path: "/world/brushes/0".into(),
+            value: brush.clone(),
+        };
+        undo_gives_back(&c, &add);
+        let (one, inv) = add.apply(&c).unwrap();
+        assert_eq!(
+            inv,
+            Command::Remove {
+                path: "/world/brushes/0".into()
+            }
+        );
+        assert_eq!(one.world.brushes.len(), 1);
+        let remove = Command::Remove {
+            path: "/world/brushes/0".into(),
+        };
+        undo_gives_back(&one, &remove);
+        let (back, _) = remove.apply(&one).unwrap();
+        assert_eq!(back, c);
+        assert!(to_value(&back)["world"].get("brushes").is_none());
+        // A pin list is an array too.
+        undo_gives_back(
+            &c,
+            &Command::Remove {
+                path: "/pins/points/1".into(),
+            },
+        );
+        for bad in ["/world/brushes/5", "/world/brushes/x", "/seed/0", "/"] {
+            assert!(
+                Command::Remove { path: bad.into() }.apply(&one).is_err(),
+                "{bad}"
+            );
+        }
+        assert!(
+            Command::Insert {
+                path: "/world/brushes/3".into(),
+                value: brush
+            }
+            .apply(&c)
+            .is_err()
+        );
     }
 
     #[test]
