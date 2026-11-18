@@ -443,6 +443,13 @@ impl<'a> Validator<'a> {
                 "min_line_width_pt must be more than 0",
             );
         }
+        if !(0.0..=1.0).contains(&c.render.relief.density) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/render/relief/density",
+                "relief density must be 0 to 1",
+            );
+        }
         for (i, r) in c.pins.regions.iter().enumerate() {
             let p = format!("/pins/regions/{i}");
             if let Some([lo, hi]) = r.height

@@ -279,7 +279,7 @@ fn write_relief(
 ) {
     use crate::decor::Symbol;
     // A symbol under a label is left out, so that the text stays clear.
-    let symbols: Vec<_> = crate::decor::relief(world, page, config.seed)
+    let symbols: Vec<_> = crate::decor::relief(world, page, config.seed, &config.render.relief)
         .into_iter()
         .filter(|(_, p)| !labels.covers(*p, 1.0))
         .collect();

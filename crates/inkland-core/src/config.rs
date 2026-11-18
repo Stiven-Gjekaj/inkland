@@ -1412,6 +1412,11 @@ pub struct Render {
     /// Rules for the labels of all variants.
     #[serde(default, skip_serializing_if = "LabelRules::is_default")]
     pub labels: LabelRules,
+    /// The relief symbols of `print-safe` mode: mountains, hills, trees,
+    /// marsh, and dunes. `colour` mode uses the style value
+    /// `relief.options.density` instead.
+    #[serde(default, skip_serializing_if = "ReliefOptions::is_default")]
+    pub relief: ReliefOptions,
 }
 
 /// Options of the layer `emblems`: the coats of arms of the states, the
@@ -1452,8 +1457,50 @@ impl Default for Render {
             layers: default_layers(),
             emblems: EmblemOptions::default(),
             labels: LabelRules::default(),
+            relief: ReliefOptions::default(),
         }
     }
+}
+
+/// The relief symbols of `print-safe` mode.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct ReliefOptions {
+    /// How dense the symbols are. 0 to 1. 1 is the full density. A smaller
+    /// value puts the symbols further apart: 0.25 shows about a quarter of
+    /// them. 0 shows none.
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub density: f64,
+    /// The symbol kinds to leave out: `mountain`, `hill`, `tree` (the
+    /// forest biomes), `marsh` (wetland), or `dune` (the deserts).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub hide: Vec<ReliefSymbol>,
+}
+
+impl Default for ReliefOptions {
+    fn default() -> Self {
+        Self {
+            density: 1.0,
+            hide: Vec::new(),
+        }
+    }
+}
+
+impl ReliefOptions {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// A kind of relief symbol of `print-safe` mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReliefSymbol {
+    Mountain,
+    Hill,
+    Tree,
+    Marsh,
+    Dune,
 }
 
 /// Rules for the labels. A name is "generated" when the config does not

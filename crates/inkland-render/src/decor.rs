@@ -179,7 +179,29 @@ fn symbol_of(world: &World, c: usize) -> Option<Symbol> {
 
 /// Place relief symbols: cells in a random order from the seed tree, each
 /// at least the spacing of its kind from the symbols before it.
-pub fn relief(world: &World, page: &Page, seed: u64) -> Vec<(Symbol, [f64; 2])> {
+pub fn relief(
+    world: &World,
+    page: &Page,
+    seed: u64,
+    opts: &inkland_core::config::ReliefOptions,
+) -> Vec<(Symbol, [f64; 2])> {
+    use inkland_core::config::ReliefSymbol;
+    if opts.density <= 0.0 {
+        return Vec::new();
+    }
+    // A density d keeps about d of the symbols: the spacing grows by
+    // 1 / sqrt(d), so the area of each symbol grows by 1 / d.
+    let scale = 1.0 / libm::sqrt(opts.density.min(1.0));
+    let hidden = |sym: Symbol| {
+        let kind = match sym {
+            Symbol::Mountain => ReliefSymbol::Mountain,
+            Symbol::Hill => ReliefSymbol::Hill,
+            Symbol::Tree => ReliefSymbol::Tree,
+            Symbol::Marsh => ReliefSymbol::Marsh,
+            Symbol::Dune => ReliefSymbol::Dune,
+        };
+        opts.hide.contains(&kind)
+    };
     let g = &world.grid;
     let mut rng = Rand::new(SeedTree::new(seed).part_rng(Layer::Decoration, "relief"));
     let mut order: Vec<(u64, usize)> = (0..g.len())
@@ -187,7 +209,7 @@ pub fn relief(world: &World, page: &Page, seed: u64) -> Vec<(Symbol, [f64; 2])> 
         .collect();
     order.sort();
     let [x0, y0, x1, y1] = page.view;
-    let bucket = 4.0;
+    let bucket = 4.0 * scale;
     let mut grid: Buckets = BTreeMap::new();
     let mut out = Vec::new();
     for (_, c) in order {
@@ -201,6 +223,9 @@ pub fn relief(world: &World, page: &Page, seed: u64) -> Vec<(Symbol, [f64; 2])> 
         let Some(sym) = symbol_of(world, c) else {
             continue;
         };
+        if hidden(sym) {
+            continue;
+        }
         // Jitter inside the cell, so that the symbols do not form rows.
         let j = (g.step_x.min(g.step_y)) * 0.3;
         let w = [p[0] + rng.uniform(-j, j), p[1] + rng.uniform(-j, j)];
@@ -214,7 +239,7 @@ pub fn relief(world: &World, page: &Page, seed: u64) -> Vec<(Symbol, [f64; 2])> 
             .any(|k| {
                 grid.get(&k).is_some_and(|v| {
                     v.iter().any(|(s, r)| {
-                        let gap = s.spacing().max(sym.spacing());
+                        let gap = s.spacing().max(sym.spacing()) * scale;
                         (r[0] - q[0]).powi(2) + (r[1] - q[1]).powi(2) < gap * gap
                     })
                 })
@@ -231,6 +256,42 @@ pub fn relief(world: &World, page: &Page, seed: u64) -> Vec<(Symbol, [f64; 2])> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_relief_options_thin_out_and_hide_the_symbols() {
+        use inkland_core::config::{Config, ReliefOptions, ReliefSymbol};
+        let c: Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 6, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 6000, "template": "pangea" },
+            "variants": [{ "name": "m", "page": { "w_mm": 300, "h_mm": 200 } }]
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let page = Page::new(&c, &c.variants[0]);
+        let run = |o: ReliefOptions| relief(&w, &page, c.seed, &o);
+        let count = |v: &[(Symbol, [f64; 2])], s: Symbol| v.iter().filter(|x| x.0 == s).count();
+        let full = run(ReliefOptions::default());
+        assert!(count(&full, Symbol::Tree) > 50);
+        let quarter = run(ReliefOptions {
+            density: 0.25,
+            ..Default::default()
+        });
+        let (a, b) = (full.len() as f64, quarter.len() as f64);
+        assert!(b > 0.1 * a && b < 0.45 * a, "{b} of {a}");
+        let no_trees = run(ReliefOptions {
+            hide: vec![ReliefSymbol::Tree],
+            ..Default::default()
+        });
+        assert_eq!(count(&no_trees, Symbol::Tree), 0);
+        assert!(count(&no_trees, Symbol::Mountain) + count(&no_trees, Symbol::Hill) > 0);
+        assert!(
+            run(ReliefOptions {
+                density: 0.0,
+                ..Default::default()
+            })
+            .is_empty()
+        );
+    }
 
     #[test]
     fn chaikin_keeps_the_ends_of_an_open_line() {

@@ -586,6 +586,21 @@ A reference to a pinned region.
 |---|---|---|---|---|
 | `region` | string | yes |  | The id of a region pin. |
 
+### ReliefOptions
+
+The relief symbols of `print-safe` mode.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `density` | number |  | `1.0` | How dense the symbols are. 0 to 1. 1 is the full density. A smaller value puts the symbols further apart: 0.25 shows about a quarter of them. 0 shows none. |
+| `hide` | array of [`ReliefSymbol`](#reliefsymbol) |  |  | The symbol kinds to leave out: `mountain`, `hill`, `tree` (the forest biomes), `marsh` (wetland), or `dune` (the deserts). |
+
+### ReliefSymbol
+
+A kind of relief symbol of `print-safe` mode.
+
+Type: `"mountain"`, `"hill"`, `"tree"`, `"marsh"`, `"dune"`
+
 ### RenameEntry
 
 A name or arms for a generated area. The entry finds its area by a point: the area of its kind that holds the cell at `at`, or at the point pin `pin`. Give exactly one of `at` and `pin`.
@@ -615,6 +630,7 @@ Render options for all variants.
 | `layers` | array of [`LayerName`](#layername) |  | see the type | Layers to draw. In `print-safe` mode the layers are drawn in this order, from bottom to top. In `colour` mode the renderer draws them in the layer order of Azgaar's Fantasy Map Generator. A layer that is only for `colour` mode draws nothing in `print-safe` mode. |
 | `min_line_width_pt` | number |  | `0.5` | Smallest permitted line width, in points. |
 | `mode` | [`RenderMode`](#rendermode) |  | `"print-safe"` | Render mode. `print-safe` is black on white only. `colour` draws the map as Azgaar's Fantasy Map Generator does, with the style in `style`. |
+| `relief` | [`ReliefOptions`](#reliefoptions) |  |  | The relief symbols of `print-safe` mode: mountains, hills, trees, marsh, and dunes. `colour` mode uses the style value `relief.options.density` instead. |
 | `style` | [`StyleName`](#stylename) |  |  | The style preset of `colour` mode. A preset gives the colours, the line widths, the fonts, and the effects of each layer. The presets come from Azgaar's Fantasy Map Generator. `print-safe` mode does not use it. |
 | `style_overrides` | object |  |  | Changes to the style preset, for `colour` mode. Each key is the path of one value in the style tree of Azgaar's Fantasy Map Generator, for example `ocean.groups.base.attrs.fill` or `relief.options.density`. Each value is a string, a number, a boolean, or `null`. `null` removes the attribute. `docs/STYLES.md` gives the tree. |
 

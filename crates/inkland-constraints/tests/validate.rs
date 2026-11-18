@@ -548,3 +548,11 @@ fn renames_need_one_reference_and_valid_arms() {
     }));
     assert_eq!(codes(&good), vec![]);
 }
+
+#[test]
+fn a_relief_density_out_of_range_is_refused() {
+    let c = with(json!({ "render": { "relief": { "density": 1.5 } } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/render/relief/density");
+    let c = with(json!({ "render": { "relief": { "density": 0.4, "hide": ["tree"] } } }));
+    assert_eq!(codes(&c), vec![]);
+}
