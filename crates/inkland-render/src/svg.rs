@@ -339,7 +339,7 @@ fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Varian
                 Some(k) => format!("river-{}", config.pins.rivers[k].id),
                 None => format!("river-{}", r.id),
             };
-            let d = path_data(page, &r.points, false);
+            let d = river_curve(page, &r.points);
             (!d.is_empty()).then(|| (id, d, line_mm(river_width_pt(r.width, mm_per_px, min))))
         })
         .collect();
@@ -634,6 +634,23 @@ fn write_places(
 
 /// Path data in page millimetres. Points that round to the same text as the
 /// point before them are left out.
+/// The smooth curve of a river line on the page: a Catmull-Rom curve with
+/// alpha 0.1, as FMG `getRiverPath` draws it. The curve passes through
+/// each point of the meandered line.
+fn river_curve(page: &Page, points: &[[f64; 2]]) -> String {
+    let mut pts: Vec<[f64; 2]> = Vec::with_capacity(points.len());
+    for &p in points {
+        let q = page.to_page(p);
+        if pts.last() != Some(&q) {
+            pts.push(q);
+        }
+    }
+    if pts.len() < 2 {
+        return String::new();
+    }
+    crate::fmg::geom::catmull_rom(&pts, 0.1)
+}
+
 fn path_data(page: &Page, points: &[[f64; 2]], closed: bool) -> String {
     let pts: &[[f64; 2]] = if closed && points.len() > 1 {
         &points[..points.len() - 1]
@@ -727,6 +744,17 @@ mod tests {
         let s = render(&w, &c, &c.variants[0]).svg;
         assert!(s.contains(&format!("stroke-width=\"{}\"", n(line_mm(2.0)))));
         assert!(!s.contains(&format!("stroke-width=\"{}\"", n(line_mm(COAST_WIDTH_PT)))));
+    }
+
+    #[test]
+    fn a_river_curve_passes_through_its_points() {
+        let c = config();
+        let page = Page::new(&c, &c.variants[0]);
+        let pts = [[10.0, 10.0], [10.0, 10.0], [30.0, 20.0], [50.0, 15.0]];
+        let d = river_curve(&page, &pts);
+        assert!(d.starts_with('M') && d.contains('C'), "{d}");
+        assert_eq!(d.matches('C').count(), 2, "{d}");
+        assert!(river_curve(&page, &pts[..2]).is_empty());
     }
 
     #[test]
