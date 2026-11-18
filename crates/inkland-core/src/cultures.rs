@@ -73,6 +73,9 @@ pub struct Culture {
     pub development: u32,
     /// A short code of the name.
     pub code: String,
+    /// The shield shape of its coats of arms (FMG `shield`). Empty for a
+    /// culture of the `random` set: the emblem stage draws its shape.
+    pub shield: String,
 }
 
 /// What the culture stage reads.
@@ -94,6 +97,7 @@ impl Input<'_> {
 /// A culture of the set before it has a center.
 struct Pick {
     name: String,
+    shield: &'static str,
     base: usize,
     odd: f64,
     development: u32,
@@ -103,6 +107,7 @@ struct Pick {
 fn of_def(d: &CultureDef) -> Pick {
     Pick {
         name: d.name.to_owned(),
+        shield: d.shield,
         base: d.base,
         odd: d.odd,
         development: d.development,
@@ -110,14 +115,30 @@ fn of_def(d: &CultureDef) -> Pick {
     }
 }
 
+/// The shields of the 10 cultures of the `english` set, in order.
+const ENGLISH_SHIELDS: [&str; 10] = [
+    "heater",
+    "wedged",
+    "swiss",
+    "oldFrench",
+    "swiss",
+    "spanish",
+    "hessen",
+    "fantasy5",
+    "fantasy4",
+    "fantasy1",
+];
+
 /// The cultures of the set (`getDefault`).
 fn defaults(set: &str, count: usize, rng: &mut Rand) -> Vec<Pick> {
     match set {
         "english" => {
             let chain = Chain::new(1);
-            (0..10)
-                .map(|_| Pick {
+            ENGLISH_SHIELDS
+                .iter()
+                .map(|&shield| Pick {
                     name: chain.get_base(rng, 5, 9, Some("")),
+                    shield,
                     base: 1,
                     odd: 1.0,
                     development: 36,
@@ -132,6 +153,7 @@ fn defaults(set: &str, count: usize, rng: &mut Rand) -> Vec<Pick> {
                 Pick {
                     development: name_development(&name),
                     name,
+                    shield: "",
                     base,
                     odd: 1.0,
                     sort: None,
@@ -264,6 +286,7 @@ pub fn generate(input: &Input, rng: &mut Rand) -> Vec<Culture> {
                 pick.development
             },
             code,
+            shield: pick.shield.to_owned(),
         });
     }
     out
@@ -493,6 +516,7 @@ mod tests {
         let mut r = rng();
         let pick = |name: &str| Pick {
             name: name.to_owned(),
+            shield: "heater",
             base: 0,
             odd: 1.0,
             development: 0,
@@ -523,6 +547,30 @@ mod tests {
         let english = defaults("english", 3, &mut r);
         assert_eq!(english.len(), 10);
         assert!(english.iter().all(|p| p.base == 1));
+        assert_eq!(english[0].shield, "heater");
+        assert_eq!(english[9].shield, "fantasy1");
+        assert!(
+            defaults("random", 2, &mut r)
+                .iter()
+                .all(|p| p.shield.is_empty())
+        );
+    }
+
+    #[test]
+    fn each_culture_of_a_set_has_the_shield_of_fmg() {
+        let mut r = rng();
+        let european = defaults("european", 15, &mut r);
+        assert_eq!(european[0].name, "Shwazen");
+        assert_eq!(european[0].shield, "swiss");
+        let dark = defaults("dark-fantasy", 34, &mut r);
+        assert_eq!(dark.last().map(|p| p.shield), Some("fantasy1"));
+        for set in crate::culture_sets::CULTURE_SETS {
+            assert!(
+                set.cultures.iter().all(|c| !c.shield.is_empty()),
+                "{}",
+                set.name
+            );
+        }
     }
 
     #[test]

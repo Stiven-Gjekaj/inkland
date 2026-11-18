@@ -61,6 +61,8 @@ pub type SortFn = fn(&SortCtx, usize) -> f64;
 /// One culture of a set.
 pub struct CultureDef {
     pub name: &'static str,
+    /// The shield shape of its coats of arms (FMG `shield`).
+    pub shield: &'static str,
     /// The index of the name base.
     pub base: usize,
     /// The chance that the culture is picked when the set has more cultures
@@ -148,6 +150,7 @@ pub fn name_development(name: &str) -> u32 {
 const EUROPEAN: [CultureDef; 15] = [
     CultureDef {
         name: "Shwazen",
+        shield: "swiss",
         base: 0,
         odd: 1.0,
         development: 36,
@@ -155,6 +158,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Angshire",
+        shield: "wedged",
         base: 1,
         odd: 1.0,
         development: 36,
@@ -162,6 +166,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Luari",
+        shield: "french",
         base: 2,
         odd: 1.0,
         development: 40,
@@ -169,6 +174,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Tallian",
+        shield: "horsehead",
         base: 3,
         odd: 1.0,
         development: 42,
@@ -176,6 +182,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Astellian",
+        shield: "spanish",
         base: 4,
         odd: 1.0,
         development: 36,
@@ -183,6 +190,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Slovan",
+        shield: "polish",
         base: 5,
         odd: 1.0,
         development: 32,
@@ -190,6 +198,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Norse",
+        shield: "heater",
         base: 6,
         odd: 1.0,
         development: 30,
@@ -197,6 +206,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Elladan",
+        shield: "boeotian",
         base: 7,
         odd: 1.0,
         development: 36,
@@ -204,6 +214,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Romian",
+        shield: "roman",
         base: 8,
         odd: 0.2,
         development: 36,
@@ -211,6 +222,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Soumi",
+        shield: "pavise",
         base: 9,
         odd: 1.0,
         development: 28,
@@ -218,6 +230,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Portuzian",
+        shield: "renaissance",
         base: 13,
         odd: 1.0,
         development: 36,
@@ -225,6 +238,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Vengrian",
+        shield: "horsehead2",
         base: 15,
         odd: 1.0,
         development: 33,
@@ -232,6 +246,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Turchian",
+        shield: "round",
         base: 16,
         odd: 0.05,
         development: 35,
@@ -239,6 +254,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Euskati",
+        shield: "oldFrench",
         base: 20,
         odd: 0.05,
         development: 30,
@@ -246,6 +262,7 @@ const EUROPEAN: [CultureDef; 15] = [
     },
     CultureDef {
         name: "Keltan",
+        shield: "oval",
         base: 22,
         odd: 0.05,
         development: 30,
@@ -256,6 +273,7 @@ const EUROPEAN: [CultureDef; 15] = [
 const ORIENTAL: [CultureDef; 13] = [
     CultureDef {
         name: "Koryo",
+        shield: "round",
         base: 10,
         odd: 1.0,
         development: 36,
@@ -263,6 +281,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Hantzu",
+        shield: "banner",
         base: 11,
         odd: 1.0,
         development: 42,
@@ -270,6 +289,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Yamoto",
+        shield: "round",
         base: 12,
         odd: 1.0,
         development: 35,
@@ -277,6 +297,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Turchian",
+        shield: "round",
         base: 16,
         odd: 1.0,
         development: 35,
@@ -284,6 +305,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Amazi",
+        shield: "oval",
         base: 17,
         odd: 0.2,
         development: 28,
@@ -291,6 +313,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Eurabic",
+        shield: "oval",
         base: 18,
         odd: 1.0,
         development: 40,
@@ -298,6 +321,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Efratic",
+        shield: "round",
         base: 23,
         odd: 0.1,
         development: 35,
@@ -305,6 +329,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Tehrani",
+        shield: "round",
         base: 24,
         odd: 1.0,
         development: 38,
@@ -312,6 +337,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Maui",
+        shield: "vesicaPiscis",
         base: 25,
         odd: 0.2,
         development: 12,
@@ -319,6 +345,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Carnatic",
+        shield: "round",
         base: 26,
         odd: 0.5,
         development: 33,
@@ -326,6 +353,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Vietic",
+        shield: "banner",
         base: 29,
         odd: 0.8,
         development: 32,
@@ -333,6 +361,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Guantzu",
+        shield: "banner",
         base: 30,
         odd: 0.5,
         development: 38,
@@ -340,6 +369,7 @@ const ORIENTAL: [CultureDef; 13] = [
     },
     CultureDef {
         name: "Ulus",
+        shield: "banner",
         base: 31,
         odd: 1.0,
         development: 26,
@@ -350,6 +380,7 @@ const ORIENTAL: [CultureDef; 13] = [
 const ANTIQUE: [CultureDef; 16] = [
     CultureDef {
         name: "Roman",
+        shield: "roman",
         base: 8,
         odd: 1.0,
         development: 24,
@@ -357,6 +388,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Roman",
+        shield: "roman",
         base: 8,
         odd: 1.0,
         development: 24,
@@ -364,6 +396,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Roman",
+        shield: "roman",
         base: 8,
         odd: 1.0,
         development: 24,
@@ -371,6 +404,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Roman",
+        shield: "roman",
         base: 8,
         odd: 1.0,
         development: 24,
@@ -378,6 +412,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Hellenic",
+        shield: "boeotian",
         base: 7,
         odd: 1.0,
         development: 23,
@@ -385,6 +420,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Hellenic",
+        shield: "boeotian",
         base: 7,
         odd: 1.0,
         development: 23,
@@ -392,6 +428,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Macedonian",
+        shield: "round",
         base: 7,
         odd: 0.5,
         development: 21,
@@ -399,6 +436,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Celtic",
+        shield: "round",
         base: 22,
         odd: 1.0,
         development: 18,
@@ -406,6 +444,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Germanic",
+        shield: "round",
         base: 0,
         odd: 1.0,
         development: 16,
@@ -413,6 +452,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Persian",
+        shield: "oval",
         base: 24,
         odd: 0.8,
         development: 21,
@@ -420,6 +460,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Scythian",
+        shield: "round",
         base: 24,
         odd: 0.5,
         development: 15,
@@ -427,6 +468,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Cantabrian",
+        shield: "oval",
         base: 20,
         odd: 0.5,
         development: 16,
@@ -434,6 +476,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Estian",
+        shield: "pavise",
         base: 9,
         odd: 0.2,
         development: 12,
@@ -441,6 +484,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Carthaginian",
+        shield: "oval",
         base: 42,
         odd: 0.3,
         development: 21,
@@ -448,6 +492,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Hebrew",
+        shield: "oval",
         base: 42,
         odd: 0.2,
         development: 19,
@@ -455,6 +500,7 @@ const ANTIQUE: [CultureDef; 16] = [
     },
     CultureDef {
         name: "Mesopotamian",
+        shield: "oval",
         base: 23,
         odd: 0.2,
         development: 19,
@@ -465,6 +511,7 @@ const ANTIQUE: [CultureDef; 16] = [
 const HIGH_FANTASY: [CultureDef; 17] = [
     CultureDef {
         name: "Quenian",
+        shield: "gondor",
         base: 33,
         odd: 1.0,
         development: 44,
@@ -472,6 +519,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Eldar",
+        shield: "noldor",
         base: 33,
         odd: 1.0,
         development: 46,
@@ -479,6 +527,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Trow",
+        shield: "hessen",
         base: 34,
         odd: 0.9,
         development: 36,
@@ -486,6 +535,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Lothian",
+        shield: "wedged",
         base: 34,
         odd: 0.3,
         development: 36,
@@ -493,6 +543,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Dunirr",
+        shield: "ironHills",
         base: 35,
         odd: 1.0,
         development: 50,
@@ -500,6 +551,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Khazadur",
+        shield: "erebor",
         base: 35,
         odd: 1.0,
         development: 53,
@@ -507,6 +559,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Kobold",
+        shield: "moriaOrc",
         base: 36,
         odd: 1.0,
         development: 18,
@@ -514,6 +567,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Uruk",
+        shield: "urukHai",
         base: 37,
         odd: 1.0,
         development: 18,
@@ -521,6 +575,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Ugluk",
+        shield: "moriaOrc",
         base: 37,
         odd: 0.5,
         development: 15,
@@ -528,6 +583,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Yotunn",
+        shield: "pavise",
         base: 38,
         odd: 0.7,
         development: 8,
@@ -535,6 +591,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Rake",
+        shield: "fantasy2",
         base: 39,
         odd: 0.7,
         development: 28,
@@ -542,6 +599,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Arago",
+        shield: "horsehead2",
         base: 40,
         odd: 0.7,
         development: 12,
@@ -549,6 +607,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Aj'Snaga",
+        shield: "fantasy1",
         base: 41,
         odd: 0.7,
         development: 22,
@@ -556,6 +615,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Anor",
+        shield: "fantasy5",
         base: 32,
         odd: 1.0,
         development: 36,
@@ -563,6 +623,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Dail",
+        shield: "roman",
         base: 32,
         odd: 1.0,
         development: 32,
@@ -570,6 +631,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Rohand",
+        shield: "round",
         base: 16,
         odd: 1.0,
         development: 30,
@@ -577,6 +639,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
     },
     CultureDef {
         name: "Dulandir",
+        shield: "easterling",
         base: 31,
         odd: 1.0,
         development: 34,
@@ -587,6 +650,7 @@ const HIGH_FANTASY: [CultureDef; 17] = [
 const DARK_FANTASY: [CultureDef; 34] = [
     CultureDef {
         name: "Angshire",
+        shield: "heater",
         base: 1,
         odd: 1.0,
         development: 36,
@@ -594,6 +658,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Enlandic",
+        shield: "heater",
         base: 1,
         odd: 1.0,
         development: 35,
@@ -601,6 +666,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Westen",
+        shield: "heater",
         base: 1,
         odd: 1.0,
         development: 35,
@@ -608,6 +674,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Nortumbic",
+        shield: "heater",
         base: 1,
         odd: 1.0,
         development: 33,
@@ -615,6 +682,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Mercian",
+        shield: "heater",
         base: 1,
         odd: 1.0,
         development: 35,
@@ -622,6 +690,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Kentian",
+        shield: "heater",
         base: 1,
         odd: 1.0,
         development: 35,
@@ -629,6 +698,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Norse",
+        shield: "oldFrench",
         base: 6,
         odd: 0.7,
         development: 30,
@@ -636,6 +706,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Schwarzen",
+        shield: "gonfalon",
         base: 0,
         odd: 0.3,
         development: 36,
@@ -643,6 +714,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Luarian",
+        shield: "oldFrench",
         base: 2,
         odd: 0.3,
         development: 40,
@@ -650,6 +722,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Hetallian",
+        shield: "oval",
         base: 3,
         odd: 0.3,
         development: 42,
@@ -657,6 +730,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Astellian",
+        shield: "spanish",
         base: 4,
         odd: 0.3,
         development: 36,
@@ -664,6 +738,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Kiswaili",
+        shield: "vesicaPiscis",
         base: 28,
         odd: 0.05,
         development: 28,
@@ -671,6 +746,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Yoruba",
+        shield: "vesicaPiscis",
         base: 21,
         odd: 0.05,
         development: 27,
@@ -678,6 +754,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Koryo",
+        shield: "round",
         base: 10,
         odd: 0.05,
         development: 36,
@@ -685,6 +762,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Hantzu",
+        shield: "banner",
         base: 11,
         odd: 0.05,
         development: 42,
@@ -692,6 +770,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Yamoto",
+        shield: "round",
         base: 12,
         odd: 0.05,
         development: 35,
@@ -699,6 +778,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Guantzu",
+        shield: "banner",
         base: 30,
         odd: 0.05,
         development: 38,
@@ -706,6 +786,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Ulus",
+        shield: "banner",
         base: 31,
         odd: 0.05,
         development: 26,
@@ -713,6 +794,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Turan",
+        shield: "round",
         base: 16,
         odd: 0.05,
         development: 30,
@@ -720,6 +802,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Amazi",
+        shield: "round",
         base: 17,
         odd: 0.05,
         development: 28,
@@ -727,6 +810,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Eurabic",
+        shield: "round",
         base: 18,
         odd: 0.05,
         development: 40,
@@ -734,6 +818,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Slovan",
+        shield: "round",
         base: 5,
         odd: 0.05,
         development: 32,
@@ -741,6 +826,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Keltan",
+        shield: "vesicaPiscis",
         base: 22,
         odd: 0.1,
         development: 30,
@@ -748,6 +834,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Elladan",
+        shield: "boeotian",
         base: 7,
         odd: 0.2,
         development: 36,
@@ -755,6 +842,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Romian",
+        shield: "roman",
         base: 8,
         odd: 0.2,
         development: 36,
@@ -762,6 +850,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Eldar",
+        shield: "fantasy5",
         base: 33,
         odd: 0.5,
         development: 46,
@@ -769,6 +858,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Trow",
+        shield: "hessen",
         base: 34,
         odd: 0.8,
         development: 36,
@@ -776,6 +866,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Durinn",
+        shield: "erebor",
         base: 35,
         odd: 0.8,
         development: 53,
@@ -783,6 +874,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Kobblin",
+        shield: "moriaOrc",
         base: 36,
         odd: 0.8,
         development: 18,
@@ -790,6 +882,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Uruk",
+        shield: "urukHai",
         base: 37,
         odd: 0.8,
         development: 18,
@@ -797,6 +890,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Yotunn",
+        shield: "pavise",
         base: 38,
         odd: 0.8,
         development: 8,
@@ -804,6 +898,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Drake",
+        shield: "fantasy2",
         base: 39,
         odd: 0.9,
         development: 28,
@@ -811,6 +906,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Rakhnid",
+        shield: "horsehead2",
         base: 40,
         odd: 0.9,
         development: 12,
@@ -818,6 +914,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
     },
     CultureDef {
         name: "Aj'Snaga",
+        shield: "fantasy1",
         base: 41,
         odd: 0.9,
         development: 22,
@@ -828,6 +925,7 @@ const DARK_FANTASY: [CultureDef; 34] = [
 const WORLD: [CultureDef; 33] = [
     CultureDef {
         name: "Shwazen",
+        shield: "hessen",
         base: 0,
         odd: 0.7,
         development: 36,
@@ -835,6 +933,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Angshire",
+        shield: "heater",
         base: 1,
         odd: 1.0,
         development: 36,
@@ -842,6 +941,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Luari",
+        shield: "oldFrench",
         base: 2,
         odd: 0.6,
         development: 40,
@@ -849,6 +949,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Tallian",
+        shield: "horsehead2",
         base: 3,
         odd: 0.6,
         development: 42,
@@ -856,6 +957,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Astellian",
+        shield: "spanish",
         base: 4,
         odd: 0.6,
         development: 36,
@@ -863,6 +965,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Slovan",
+        shield: "round",
         base: 5,
         odd: 0.7,
         development: 32,
@@ -870,6 +973,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Norse",
+        shield: "heater",
         base: 6,
         odd: 0.7,
         development: 30,
@@ -877,6 +981,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Elladan",
+        shield: "boeotian",
         base: 7,
         odd: 0.7,
         development: 36,
@@ -884,6 +989,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Romian",
+        shield: "roman",
         base: 8,
         odd: 0.7,
         development: 36,
@@ -891,6 +997,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Soumi",
+        shield: "pavise",
         base: 9,
         odd: 0.3,
         development: 28,
@@ -898,6 +1005,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Koryo",
+        shield: "round",
         base: 10,
         odd: 0.1,
         development: 36,
@@ -905,6 +1013,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Hantzu",
+        shield: "banner",
         base: 11,
         odd: 0.1,
         development: 42,
@@ -912,6 +1021,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Yamoto",
+        shield: "round",
         base: 12,
         odd: 0.1,
         development: 35,
@@ -919,6 +1029,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Portuzian",
+        shield: "spanish",
         base: 13,
         odd: 0.4,
         development: 36,
@@ -926,6 +1037,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Nawatli",
+        shield: "square",
         base: 14,
         odd: 0.1,
         development: 18,
@@ -933,6 +1045,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Vengrian",
+        shield: "wedged",
         base: 15,
         odd: 0.2,
         development: 33,
@@ -940,6 +1053,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Turchian",
+        shield: "round",
         base: 16,
         odd: 0.2,
         development: 35,
@@ -947,6 +1061,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Amazi",
+        shield: "round",
         base: 17,
         odd: 0.1,
         development: 28,
@@ -954,6 +1069,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Eurabic",
+        shield: "round",
         base: 18,
         odd: 0.2,
         development: 40,
@@ -961,6 +1077,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Inuk",
+        shield: "square",
         base: 19,
         odd: 0.05,
         development: 6,
@@ -968,6 +1085,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Euskati",
+        shield: "spanish",
         base: 20,
         odd: 0.05,
         development: 30,
@@ -975,6 +1093,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Yoruba",
+        shield: "vesicaPiscis",
         base: 21,
         odd: 0.05,
         development: 27,
@@ -982,6 +1101,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Keltan",
+        shield: "vesicaPiscis",
         base: 22,
         odd: 0.05,
         development: 30,
@@ -989,6 +1109,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Efratic",
+        shield: "diamond",
         base: 23,
         odd: 0.05,
         development: 35,
@@ -996,6 +1117,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Tehrani",
+        shield: "round",
         base: 24,
         odd: 0.1,
         development: 38,
@@ -1003,6 +1125,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Maui",
+        shield: "round",
         base: 25,
         odd: 0.05,
         development: 12,
@@ -1010,6 +1133,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Carnatic",
+        shield: "round",
         base: 26,
         odd: 0.05,
         development: 33,
@@ -1017,6 +1141,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Inqan",
+        shield: "square",
         base: 27,
         odd: 0.05,
         development: 20,
@@ -1024,6 +1149,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Kiswaili",
+        shield: "vesicaPiscis",
         base: 28,
         odd: 0.1,
         development: 28,
@@ -1031,6 +1157,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Vietic",
+        shield: "banner",
         base: 29,
         odd: 0.1,
         development: 32,
@@ -1038,6 +1165,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Guantzu",
+        shield: "banner",
         base: 30,
         odd: 0.1,
         development: 38,
@@ -1045,6 +1173,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Ulus",
+        shield: "banner",
         base: 31,
         odd: 0.1,
         development: 26,
@@ -1052,6 +1181,7 @@ const WORLD: [CultureDef; 33] = [
     },
     CultureDef {
         name: "Levent",
+        shield: "oval",
         base: 42,
         odd: 0.2,
         development: 35,
