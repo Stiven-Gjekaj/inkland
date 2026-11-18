@@ -510,6 +510,8 @@ fn burgs(
             port: truthy(b.get("port")),
             capital_of: if capital { state } else { None },
             custom_kind: None,
+            coa: None,
+            state_coa: None,
         });
     }
     Ok((points, skipped))

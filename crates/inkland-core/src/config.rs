@@ -190,6 +190,16 @@ pub struct World {
     /// Number of religions.
     #[serde(default = "default_religions")]
     pub religions: u32,
+    /// The shield shape of the coats of arms: `culture` (the shield of the
+    /// culture of each item, as Azgaar's Fantasy Map Generator does),
+    /// `state` (the shield of the state), `random` (a random shield for
+    /// each culture), or one shield name for all, for example `heater`,
+    /// `spanish`, `round`, or `banner`.
+    #[serde(
+        default = "default_emblem_shape",
+        skip_serializing_if = "is_default_emblem_shape"
+    )]
+    pub emblem_shape: String,
     /// Options for places that generation adds.
     #[serde(default)]
     pub places: PlaceOptions,
@@ -230,6 +240,7 @@ impl Default for World {
             towns: Towns::default(),
             provinces_ratio: default_provinces_ratio(),
             religions: default_religions(),
+            emblem_shape: default_emblem_shape(),
             places: PlaceOptions::default(),
             brushes: Vec::new(),
         }
@@ -470,6 +481,19 @@ pub struct PointPin {
     /// Name of the kind. Required when `kind` is `custom`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_kind: Option<String>,
+    /// The coat of arms of this place, in the JSON shape of Azgaar's
+    /// Fantasy Map Generator. It replaces the generated arms, and the
+    /// generated arms of a province with this place as its seat take from
+    /// it. Without `shield`, the arms get the generated shield shape. An
+    /// overlay place does not use it. Default: generated arms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coa: Option<crate::emblems::Coa>,
+    /// The coat of arms of the state that this place is the capital of
+    /// (`capital_of`), in the same shape as `coa`. The generated arms of the
+    /// places and provinces of the state take from it. Default: generated
+    /// arms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_coa: Option<crate::emblems::Coa>,
 }
 
 /// Kinds of places.
@@ -1252,6 +1276,14 @@ fn default_growth_rate() -> f64 {
 fn default_states() -> u32 {
     5
 }
+fn default_emblem_shape() -> String {
+    "culture".to_owned()
+}
+
+fn is_default_emblem_shape(v: &str) -> bool {
+    v == "culture"
+}
+
 fn default_provinces_ratio() -> u8 {
     20
 }

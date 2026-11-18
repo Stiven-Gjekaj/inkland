@@ -282,6 +282,19 @@ impl<'a> Validator<'a> {
         if let inkland_core::config::Template::Raster { raster } = &w.template {
             self.raster(raster);
         }
+        let shape = w.emblem_shape.as_str();
+        if !["culture", "state", "random"].contains(&shape)
+            && !inkland_core::emblems::is_shield(shape)
+        {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/emblem_shape",
+                format!(
+                    "there is no shield shape {shape:?}; use culture, state, random, or a shield: {}",
+                    inkland_core::emblems::shield_names().collect::<Vec<_>>().join(", ")
+                ),
+            );
+        }
         match inkland_core::culture_sets::culture_set(&w.culture_set) {
             None => {
                 self.err(
@@ -493,6 +506,22 @@ impl<'a> Validator<'a> {
                 format!("{path}/custom_kind"),
                 "a place of kind custom needs custom_kind",
             );
+        }
+        if pin.state_coa.is_some() && pin.capital_of.is_none() {
+            self.err(
+                ErrorCode::CoaInvalid,
+                format!("{path}/state_coa"),
+                "state_coa needs capital_of: only a capital gives arms to a state",
+            );
+        }
+        for (key, coa) in [("coa", &pin.coa), ("state_coa", &pin.state_coa)] {
+            for f in coa.iter().flat_map(inkland_core::emblems::validate) {
+                self.err(
+                    ErrorCode::CoaInvalid,
+                    format!("{path}/{key}{}", f.path),
+                    f.message,
+                );
+            }
         }
     }
 

@@ -64,6 +64,22 @@ A title cartouche.
 |---|---|---|---|---|
 | `title` | string | yes |  | The title text. |
 
+### Charge
+
+A charge: a figure at one or more positions.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `charge` | string | yes |  | The charge, for example `mullet`, `crossHummetty`, or `inescutcheon`. |
+| `divided` | [`Divided`](#divided) |  |  | With a division: as `divided` of an ordinary. |
+| `p` | string | yes |  | The positions on the shield: one letter for each copy. `a` to `i` are a grid of 3 x 3 from the top left, `e` is the center, `j` to `q` are smaller grids, `y` is the canton, `z` the base, and `A` to `L` go around the border. |
+| `reversed` | [`Flag`](#flag) |  |  | `1` or `true`: upside down. |
+| `sinister` | [`Flag`](#flag) |  |  | `1` or `true`: turned to face the other side. |
+| `size` | number |  |  | The size. Default: 1. |
+| `t` | string | yes |  | The tincture. |
+| `t2` | string |  |  | The second tincture of a charge with more colours. |
+| `t3` | string |  |  | The third tincture of a charge with more colours. |
+
 ### Circle
 
 A circle.
@@ -83,6 +99,18 @@ Climate options.
 | `latitude_range` | array of 2 number |  | `[30.0,55.0]` | Latitude of the south edge and of the north edge, in degrees. |
 | `wind` | array of 6 number |  |  | Winds, one for each 30 degree latitude band from 90 north to 90 south: the direction to which the wind blows, in degrees clockwise from north. Default: `[225, 45, 225, 315, 135, 315]`. |
 
+### Coa
+
+A coat of arms, in the JSON shape of Azgaar's Fantasy Map Generator.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `charges` | array of [`Charge`](#charge) |  |  | The charges, from bottom to top. |
+| `division` | [`Division`](#division) |  |  | The division of the field. |
+| `ordinaries` | array of [`Ordinary`](#ordinary) |  |  | The ordinaries, from bottom to top. |
+| `shield` | string |  |  | The shield shape, for example `heater`, `spanish`, or `round`. Default: `heater`. |
+| `t1` | string | yes |  | The tincture of the field: a metal (`argent`, `or`), a colour (`gules`, `azure`, `sable`, `purpure`, `vert`, ...), a stain (`murrey`, `sanguine`, `tenné`), or a pattern `<pattern>-<tincture>-<tincture>[-<size>]`, for example `vair-azure-argent` or `semy_of_mullet-or-azure-small`. |
+
 ### CoastlineDetail
 
 Coastline detail.
@@ -91,6 +119,22 @@ One of:
 
 - `"smooth"`: Cut the corners of the cell edges.
 - `"fractal"`: Add the fractal detail of Azgaar's Fantasy Map Generator.
+
+### Divided
+
+The part of a division that an ordinary or a charge is drawn on.
+
+Type: `"field"`, `"division"`, `"counter"`
+
+### Division
+
+The division of the field.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `division` | string | yes |  | The division, for example `perPale`, `perFess`, or `perCross`. |
+| `line` | string |  |  | The line of partition, for example `straight`, `wavy`, or `embattled`. Default: `straight`. |
+| `t` | string | yes |  | The tincture of the second part. |
 
 ### Extras
 
@@ -121,6 +165,15 @@ A feature that an overlay adds. Give exactly one of `at`, `polyline`, and `polyg
 Kinds of overlay features.
 
 Type: `"ruin"`, `"battle-site"`, `"border"`, `"wall"`, `"custom"`
+
+### Flag
+
+A flag of FMG: a boolean, or the number 0 or 1.
+
+One of:
+
+- boolean
+- integer: 0 or 1.
 
 ### FontSizes
 
@@ -236,6 +289,17 @@ One of:
 - `"vignette"`: A dark edge around the map. Only `colour` mode.
 - `"legend"`: A legend box. Only `colour` mode.
 
+### Ordinary
+
+An ordinary: a band, a cross, a border, and so on.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `divided` | [`Divided`](#divided) |  |  | With a division: `field` draws it only on the field, `division` only on the second part, `counter` in the tincture of the other part. |
+| `line` | string |  |  | The line of its edges. Default: `straight`. |
+| `ordinary` | string | yes |  | The ordinary, for example `pale`, `fess`, `bend`, `chief`, `cross`, `bordure`, or `canton`. |
+| `t` | string | yes |  | The tincture. |
+
 ### Origin
 
 The corner of the origin.
@@ -314,11 +378,13 @@ A place at exact coordinates.
 |---|---|---|---|---|
 | `at` | array of 2 number | yes |  | Position `[x, y]`, in units. The place is put here exactly. |
 | `capital_of` | string |  |  | Name of a state. The state forms around this place, its capital. |
+| `coa` | [`Coa`](#coa) |  |  | The coat of arms of this place, in the JSON shape of Azgaar's Fantasy Map Generator. It replaces the generated arms, and the generated arms of a province with this place as its seat take from it. Without `shield`, the arms get the generated shield shape. An overlay place does not use it. Default: generated arms. |
 | `custom_kind` | string |  |  | Name of the kind. Required when `kind` is `custom`. |
 | `id` | string | yes |  | Identifier: lower-case letters and digits, words joined by `-`. Unique across all pins. |
 | `kind` | [`PlaceKind`](#placekind) | yes |  | Kind of place. |
 | `name` | string |  |  | Name of the place. Default: a generated name. |
 | `port` | boolean |  | `false` | `true`: the cell of the place touches the sea or a lake. |
+| `state_coa` | [`Coa`](#coa) |  |  | The coat of arms of the state that this place is the capital of (`capital_of`), in the same shape as `coa`. The generated arms of the places and provinces of the state take from it. Default: generated arms. |
 
 ### Raster
 
@@ -487,6 +553,7 @@ Generation options.
 | `climate` | [`Climate`](#climate) |  |  | Climate options. |
 | `culture_set` | string |  | `"european"` | Name of the culture set: `world`, `european`, `oriental`, `english`, `antique`, `high-fantasy`, `dark-fantasy`, or `random`. |
 | `cultures` | integer |  | `6` | Number of cultures. |
+| `emblem_shape` | string |  |  | The shield shape of the coats of arms: `culture` (the shield of the culture of each item, as Azgaar's Fantasy Map Generator does), `state` (the shield of the state), `random` (a random shield for each culture), or one shield name for all, for example `heater`, `spanish`, `round`, or `banner`. |
 | `growth_rate` | number |  | `1.0` | How far cultures and states grow. 0.1 to 2. Cultures and states stop at a total cost that this value multiplies. |
 | `jitter` | number |  |  | How far each point of the first grid can move from its lattice position, as a fraction of half the distance between neighbor points. 0 to 0.9. 0 gives a regular lattice. |
 | `lake_elevation_limit` | integer |  |  | A land low point becomes a lake when its water cannot reach other water through cells lower than its height plus this limit, on the height scale 0 to 100. 0 to 80. 80 makes no such lakes. |

@@ -437,3 +437,61 @@ fn each_layer_is_valid_in_each_mode() {
         assert_eq!(codes(&c), vec![], "{mode}");
     }
 }
+
+#[test]
+fn an_unknown_emblem_shape_is_refused() {
+    one(
+        &with(json!({ "world": { "emblem_shape": "kite2" } })),
+        ErrorCode::ValueOutOfRange,
+        "/world/emblem_shape",
+    );
+    assert_eq!(
+        codes(&with(json!({ "world": { "emblem_shape": "kite" } }))),
+        vec![]
+    );
+}
+
+#[test]
+fn valid_custom_arms_are_accepted() {
+    let c = with(json!({ "pins": { "points": [
+        { "id": "a", "kind": "city", "at": [10, 10], "capital_of": "Realm",
+          "coa": { "t1": "vair-azure-argent", "charges": [{ "charge": "crossPatonce", "t": "gules", "p": "e" }] },
+          "state_coa": { "t1": "or", "division": { "division": "perPale", "t": "sable", "line": "wavy" } } }
+    ] } }));
+    assert_eq!(codes(&c), vec![]);
+}
+
+#[test]
+fn custom_arms_with_an_unknown_tincture_are_refused() {
+    one(
+        &with(json!({ "pins": { "points": [
+            { "id": "a", "kind": "city", "at": [10, 10], "coa": { "t1": "blue" } }
+        ] } })),
+        ErrorCode::CoaInvalid,
+        "/pins/points/0/coa/t1",
+    );
+}
+
+#[test]
+fn state_arms_need_a_capital() {
+    one(
+        &with(json!({ "pins": { "points": [
+            { "id": "a", "kind": "city", "at": [10, 10], "state_coa": { "t1": "or" } }
+        ] } })),
+        ErrorCode::CoaInvalid,
+        "/pins/points/0/state_coa",
+    );
+}
+
+#[test]
+fn a_charge_without_art_is_refused() {
+    // The lion of FMG has a license that does not permit its use here.
+    one(
+        &with(json!({ "pins": { "points": [
+            { "id": "a", "kind": "city", "at": [10, 10],
+              "coa": { "t1": "or", "charges": [{ "charge": "lionRampant", "t": "gules", "p": "e" }] } }
+        ] } })),
+        ErrorCode::CoaInvalid,
+        "/pins/points/0/coa/charges/0/charge",
+    );
+}

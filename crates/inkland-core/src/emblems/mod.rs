@@ -1058,7 +1058,28 @@ pub fn assign(soc: &mut crate::society::Society, input: &Input) {
     let tree = crate::seed::SeedTree::new(input.config.seed);
     let mut rng = Rand::new(tree.part_rng(crate::seed::Layer::States, "emblems"));
     let mut g = Generator::new(&mut rng);
-    let shape = "culture";
+    let shape = input.config.world.emblem_shape.as_str();
+    let pins: std::collections::BTreeMap<&str, &crate::config::PointPin> = input
+        .config
+        .pins
+        .points
+        .iter()
+        .map(|p| (p.id.as_str(), p))
+        .collect();
+    let pin_of = |place: Option<&crate::society::Place>| {
+        place
+            .and_then(|p| p.pin.as_deref())
+            .and_then(|id| pins.get(id).copied())
+    };
+    // A custom coat of arms replaces the generated one. It keeps the
+    // generated shield when it has none.
+    let custom = |coa: Coa, given: Option<&Coa>| match given {
+        Some(c) => Coa {
+            shield: c.shield.clone().or(coa.shield),
+            ..c.clone()
+        },
+        None => coa,
+    };
 
     // A culture of the `random` set, or each culture with the shape
     // `random`, gets a random shield.
@@ -1097,7 +1118,11 @@ pub fn assign(soc: &mut crate::society::Society, input: &Input) {
         let kind = soc.states[i].kind.name();
         let mut coa = g.generate(&none, Some(kind));
         coa.shield = Some(shield_of(soc, soc.states[i].culture, crate::society::NONE));
-        soc.states[i].coa = Some(coa);
+        let capital = soc
+            .places
+            .get((soc.states[i].capital as usize).wrapping_sub(1));
+        let given = pin_of(capital).and_then(|p| p.state_coa.as_ref());
+        soc.states[i].coa = Some(custom(coa, given));
     }
 
     // Places (`defineEmblem`).
@@ -1127,7 +1152,8 @@ pub fn assign(soc: &mut crate::society::Society, input: &Input) {
         };
         let mut coa = g.generate(&parent, Some(kind));
         coa.shield = Some(shield_of(soc, p.culture, p.state));
-        soc.places[i].coa = Some(coa);
+        let given = pin_of(Some(p)).and_then(|x| x.coa.as_ref());
+        soc.places[i].coa = Some(custom(coa, given));
     }
 
     // Provinces (`Provinces.generate`).
@@ -1301,6 +1327,39 @@ mod tests {
         }))
         .unwrap();
         crate::world::World::build(&c).unwrap()
+    }
+
+    #[test]
+    fn custom_arms_replace_the_generated_arms() {
+        let c: crate::config::Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 5, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": "pangea", "emblem_shape": "round" },
+            "pins": { "points": [
+                { "id": "home", "kind": "city", "at": [200, 150], "capital_of": "Realm",
+                  "coa": { "t1": "or", "charges": [{ "charge": "mullet", "t": "azure", "p": "e" }] },
+                  "state_coa": { "t1": "gules", "shield": "spanish",
+                                 "ordinaries": [{ "ordinary": "fess", "t": "argent" }] } }
+            ] }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        let s = &w.society;
+        let home = &s.places[0];
+        let coa = home.coa.as_ref().unwrap();
+        assert_eq!(
+            (coa.t1.as_str(), coa.shield.as_deref()),
+            ("or", Some("round"))
+        );
+        let realm = s.states.iter().find(|x| x.name == "Realm").unwrap();
+        let coa = realm.coa.as_ref().unwrap();
+        assert_eq!(
+            (coa.t1.as_str(), coa.shield.as_deref()),
+            ("gules", Some("spanish"))
+        );
+        // Each other item has the one shape of the config.
+        for p in &s.places[1..] {
+            assert_eq!(p.coa.as_ref().unwrap().shield.as_deref(), Some("round"));
+        }
     }
 
     #[test]
