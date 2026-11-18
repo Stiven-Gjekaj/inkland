@@ -44,5 +44,6 @@ pub mod roads;
 pub mod routes;
 pub mod seed;
 pub mod society;
+pub mod stability;
 pub mod states;
 pub mod world;

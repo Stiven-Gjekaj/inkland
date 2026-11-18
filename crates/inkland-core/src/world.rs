@@ -86,6 +86,9 @@ pub struct World {
     pub markers: Vec<crate::markers::Marker>,
     /// Goods, markets, and the production run of one day.
     pub economy: crate::economy::Economy,
+    /// The stability of the states and their provinces, after the
+    /// military.
+    pub stability: crate::stability::Stability,
     /// Journeys: the routes of parties between places, as data. The last
     /// stage.
     pub journeys: Vec<crate::journeys::Journey>,
@@ -465,6 +468,8 @@ impl World {
             },
             &mut society,
         );
+        // FMG works out the stability on demand; inkland keeps it.
+        let stability = crate::stability::build(&society, &economy);
         let markers = crate::markers::generate(&crate::markers::Input {
             config,
             grid: &grid,
@@ -527,6 +532,7 @@ impl World {
             religions,
             markers,
             economy,
+            stability,
             journeys,
         })
     }
