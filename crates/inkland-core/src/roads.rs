@@ -927,6 +927,85 @@ mod tests {
         assert_eq!(e.code, crate::error::ErrorCode::RoadNoPath);
     }
 
+    /// The world and the pins of the full example config, at a cell count.
+    /// A lake or an inlet lies between its places at some counts.
+    fn full(cells: u32) -> Config {
+        serde_json::from_value(json!({
+            "version": 1, "seed": 42,
+            "units": { "name": "mile" },
+            "frame": { "width": 400, "height": 300 },
+            "world": {
+                "cells": cells, "template": "continents", "sea_level": 20,
+                "climate": { "latitude_range": [30, 55] },
+                "cultures": 6, "culture_set": "european", "states": 5, "towns": "auto",
+                "religions": 4, "places": { "min_distance_from_pins": 6 }
+            },
+            "pins": {
+                "points": [
+                    { "id": "ostrey", "kind": "city", "at": [120, 88] },
+                    { "id": "harrowgate", "kind": "town", "at": [180, 120] },
+                    { "id": "saltmouth", "kind": "city", "at": [24, 200], "port": true,
+                      "capital_of": "The Coast" },
+                    { "id": "brannock-ford", "kind": "village", "at": [150, 150] },
+                    { "id": "old-tower", "kind": "fortress", "at": [230, 60] },
+                    { "id": "standing-stone", "kind": "custom", "custom_kind": "monolith",
+                      "at": [300, 250] }
+                ],
+                "regions": [
+                    { "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300] },
+                    { "id": "spine", "kind": "mountains", "box": [200, 40, 260, 140], "edge": 8 },
+                    { "id": "downs", "kind": "hills", "circle": { "at": [300, 160], "r": 25 },
+                      "height": [35, 50] },
+                    { "id": "greyfens", "kind": "marsh",
+                      "polygon": [[60, 170], [110, 160], [120, 210], [70, 220]] },
+                    { "id": "mere", "kind": "lake", "box": [320, 40, 340, 60], "landlocked": true }
+                ],
+                "rivers": [
+                    { "id": "brann", "source": { "region": "spine" },
+                      "through": [[180, 100], { "place": "brannock-ford" }],
+                      "mouth": { "region": "greyfens" } },
+                    { "id": "salt", "source": { "region": "downs" },
+                      "mouth": { "place": "saltmouth" } }
+                ],
+                "roads": [
+                    { "id": "kings-road", "from": "ostrey", "to": "harrowgate",
+                      "via": [[150, 100]], "target_length": 72, "tolerance": 0.05 }
+                ]
+            }
+        }))
+        .unwrap()
+    }
+
+    fn check_full(cells: u32) {
+        let w = World::build(&full(cells)).unwrap_or_else(|e| panic!("{cells} cells: {e:?}"));
+        let r = pinned(&w, 0);
+        assert!(
+            (r.length - 72.0).abs() <= 72.0 * 0.05,
+            "{cells} cells: length {}",
+            r.length
+        );
+        assert_eq!(*r.points.first().unwrap(), [120.0, 88.0]);
+        assert_eq!(*r.points.last().unwrap(), [180.0, 120.0]);
+    }
+
+    #[test]
+    fn the_full_road_is_found_where_water_cut_it() {
+        // Water cut the road at 14000, 16000, 25000, and 45000 cells, and
+        // made it too long at 8000 and 55000 cells.
+        for cells in [8_000, 14_000, 16_000, 25_000, 45_000, 55_000, 60_000] {
+            check_full(cells);
+        }
+    }
+
+    /// Slow in a debug build: `cargo test --release -- --ignored`.
+    #[test]
+    #[ignore]
+    fn the_full_road_is_found_at_each_cell_count() {
+        for cells in (8_000..=60_000).step_by(1_000) {
+            check_full(cells);
+        }
+    }
+
     #[test]
     fn a_road_reports_where_it_crosses_a_pinned_river() {
         let c: Config = serde_json::from_value(json!({
