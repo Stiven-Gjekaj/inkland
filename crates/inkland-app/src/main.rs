@@ -1973,8 +1973,20 @@ fn main() -> Result<(), slint::PlatformError> {
             .add_filter("inkland edit script", &["json"])
             .set_file_name("edits.json");
         if let Some(path) = dialog.save_file() {
-            let text = c.state.borrow().editor.script_json();
-            c.write(&path, &text, "edit script");
+            let (text, needs_config) = {
+                let st = c.state.borrow();
+                (st.editor.script_json(), st.editor.script_needs_config())
+            };
+            if c.write(&path, &text, "edit script") && needs_config {
+                c.message(
+                    &format!(
+                        "saved the edit script to {}; it edits variants, overlays, or render \
+                         options, so replay it with inkland edit --config",
+                        path.display()
+                    ),
+                    false,
+                );
+            }
         }
     });
     a.on_quit(|| {

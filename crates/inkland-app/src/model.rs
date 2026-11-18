@@ -300,6 +300,13 @@ impl Editor {
         text
     }
 
+    /// `true` if the edit script changes a value that a `world.json` does
+    /// not keep: a variant, an overlay, or a render option. Such a script
+    /// replays with `inkland edit --config`, not with `--world`.
+    pub fn script_needs_config(&self) -> bool {
+        !inkland::world_script_errors(&self.history.script()).is_empty()
+    }
+
     /// The text of the current config file.
     pub fn config_json(&self) -> String {
         let mut text =
@@ -417,6 +424,10 @@ mod tests {
                 Box::new(|e| e.set_crop(0, Some([0.0, 0.0, 190.0, 150.0]))),
             ),
             (
+                "crop the second variant",
+                Box::new(|e| e.set_crop(1, Some([0.0, 0.0, 90.0, 150.0]))),
+            ),
+            (
                 "add variant",
                 Box::new(|e| {
                     e.add_variant(0, Some([20.0, 20.0, 120.0, 95.0]))
@@ -465,9 +476,13 @@ mod tests {
         assert_eq!(e.history.script().commands.len(), actions().len());
 
         let script = e.script_json();
-        // The config file: `inkland edit --config`.
+        // The config file: `inkland edit --config`. It replays the edits of
+        // each variant, also of the second variant.
+        assert!(e.script_needs_config());
         let (replayed, _) = inkland::edit_config(&start, &script).unwrap();
         assert_eq!(&replayed, e.config());
+        assert_eq!(replayed.variants[1].name, "west");
+        assert_eq!(replayed.variants[1].crop, Some([0.0, 0.0, 90.0, 150.0]));
         assert_eq!(
             serde_json::to_string_pretty(&replayed).unwrap() + "\n",
             e.config_json(),
@@ -501,6 +516,21 @@ mod tests {
         // config.
         let cli = inkland::generate(&replayed, None).unwrap();
         assert_eq!(cli.variants, app.variants);
+    }
+
+    #[test]
+    fn only_an_edit_outside_the_world_part_needs_the_config_file() {
+        let mut e = Editor::new(config());
+        assert!(!e.script_needs_config());
+        e.move_pin("harrow", [130.0, 70.0]).unwrap();
+        assert!(!e.script_needs_config(), "a world file keeps the pins");
+        e.set_crop(1, Some([0.0, 0.0, 90.0, 150.0])).unwrap();
+        assert!(
+            e.script_needs_config(),
+            "a world file has no second variant"
+        );
+        assert!(e.undo().unwrap());
+        assert!(!e.script_needs_config());
     }
 
     #[test]
