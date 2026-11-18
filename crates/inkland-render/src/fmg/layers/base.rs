@@ -529,7 +529,11 @@ pub fn heightmap(s: &mut String, ctx: &Ctx) {
         if !ocean && !matches!(contours.as_str(), "" | "off") {
             contour_lines(s, ctx, &p, &h);
         }
+        let draw_hachures = !matches!(hachures.as_str(), "" | "off");
         if contours == "only" || hachures == "only" {
+            if draw_hachures {
+                height_hachures(s, ctx, &p, ocean);
+            }
             continue;
         }
         let scheme = height_scheme(
@@ -589,8 +593,98 @@ pub fn heightmap(s: &mut String, ctx: &Ctx) {
             level += skip;
         }
         s.push_str("</g>\n");
+        if draw_hachures {
+            height_hachures(s, ctx, &p, ocean);
+        }
     }
     s.push_str("</g>\n");
+}
+
+/// Hachures down the slopes of the land or of the sea floor
+/// (`drawHeightmap` with `getHachures`).
+fn height_hachures(s: &mut String, ctx: &Ctx, p: &[&str], ocean: bool) {
+    let w = ctx.world;
+    let g = &w.base.grid;
+    let st = &ctx.style;
+    let px = ctx.px;
+    let heights: Vec<f64> = (0..g.len())
+        .map(|c| {
+            (w.base.heights[c] - w.sea_level + 20.0)
+                .clamp(0.0, 100.0)
+                .round()
+        })
+        .collect();
+    let neighbors: Vec<Vec<usize>> = g
+        .edge_cells
+        .iter()
+        .map(|e| {
+            e.iter()
+                .filter(|&&o| o != OUTSIDE)
+                .map(|&o| o as usize)
+                .collect()
+        })
+        .collect();
+    // The three cells around each inner vertex.
+    let mut around: Vec<Vec<usize>> = vec![Vec::new(); g.vertices.len()];
+    for (c, poly) in g.polygons.iter().enumerate() {
+        for &v in poly {
+            around[v as usize].push(c);
+        }
+    }
+    let triangles: Vec<[usize; 3]> = around
+        .iter()
+        .filter_map(|cells| <[usize; 3]>::try_from(cells.as_slice()).ok())
+        .collect();
+    // Smoothed twice: a calm fall line.
+    let smooth =
+        super::hachures::smooth(&super::hachures::smooth(&heights, &neighbors), &neighbors);
+    let points: Vec<[f64; 2]> = g.points.iter().map(|&q| ctx.p(q)).collect();
+    let k = px.from_world_px([1.0, 0.0])[0] - px.from_world_px([0.0, 0.0])[0];
+    let find = |x: f64, y: f64| {
+        let q = px.page.to_world([x * px.mm, y * px.mm]);
+        let inside = (0.0..=g.width).contains(&q[0]) && (0.0..=g.height).contains(&q[1]);
+        inside.then(|| g.find_cell(q[0], q[1]))
+    };
+    let thresholds: Vec<f64> = if ocean {
+        (1..5).rev().map(|v| f64::from(v) * 4.0).collect()
+    } else {
+        (6..25).map(|v| f64::from(v) * 4.0).collect()
+    };
+    let in_band = |h: f64| if ocean { h < 20.0 } else { h >= 20.0 };
+    let params = super::hachures::Params {
+        points: &points,
+        heights: &smooth,
+        neighbors: &neighbors,
+        triangles: &triangles,
+        spacing: g.lattice.spacing * px.unit_px * k,
+        find_cell: &find,
+        in_band: &in_band,
+        thresholds: &thresholds,
+        density: st.option_f64(p, "hachures.density").unwrap_or(1.0),
+        length: st.option_f64(p, "hachures.length").unwrap_or(1.0),
+        width: st.option_f64(p, "hachures.width").unwrap_or(1.0),
+        unit: k,
+    };
+    let part = if ocean {
+        "hachures-ocean"
+    } else {
+        "hachures-land"
+    };
+    let mut rng = Rand::new(SeedTree::new(ctx.config.seed).part_rng(Layer::Decoration, part));
+    let d = super::hachures::hachures(&params, &mut rng);
+    if d.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        s,
+        "<g class=\"heightmap-hachures\" fill=\"{}\" fill-rule=\"nonzero\" opacity=\"{}\" mask=\"url(#{})\"><path d=\"{d}\"/></g>",
+        crate::extras::xml(
+            &st.option_str(p, "hachures.color")
+                .unwrap_or_else(|| "#000000".into())
+        ),
+        n(st.option_f64(p, "hachures.opacity").unwrap_or(0.65)),
+        if ocean { "water" } else { "land" }
+    );
 }
 
 /// Contour lines of the land heights (`heightmap-contours.ts`, simpler):

@@ -563,6 +563,20 @@ fn zones_draw_with_the_hatches_of_fmg() {
 }
 
 #[test]
+fn heights_of_the_ink_and_cinderwood_styles_are_hachures() {
+    for style in [StyleName::Ink, StyleName::Cinderwood] {
+        let svg = render_with(&[LayerName::Heightmap], style);
+        assert!(svg.contains("<g class=\"heightmap-hachures\""), "{style:?}");
+        // The mode "only" draws no height tints.
+        assert!(!svg.contains("<g id=\"land-heights\""), "{style:?}");
+        parse_and_draw(&svg);
+    }
+    let default = render_with(&[LayerName::Heightmap], StyleName::Default);
+    assert!(!default.contains("heightmap-hachures"));
+    assert!(default.contains("<g id=\"land-heights\""));
+}
+
+#[test]
 fn lakes_of_the_ink_style_have_ripples() {
     let ink = render_with(&[LayerName::Lakes], StyleName::Ink);
     assert!(ink.contains("<mask id=\"lake-ripples-"));
