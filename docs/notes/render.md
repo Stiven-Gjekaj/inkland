@@ -23,11 +23,11 @@ These notes describe `render.mode: "colour"`. The code is in
 
 | Layer | FMG source | Notes |
 |---|---|---|
-| ocean | `draw-ocean.ts`, `ocean-generator.ts`, `coastal-waves.ts`, `draw-coastal-bands.ts` | Base colour, depth rings on the first grid, waves, coastal bands. No bitmap pattern. |
+| ocean | `draw-ocean.ts`, `ocean-generator.ts`, `coastal-waves.ts`, `draw-coastal-bands.ts` | Base colour, depth rings on the first grid, the bitmap pattern of the style, waves, coastal bands. |
 | landmass | `draw-landmass.ts` | A rect through the land mask. |
-| texture | `draw-texture.ts` | Draws nothing: the textures are bitmaps. |
-| heightmap | `heightmap/draw-heightmap.ts` | Height tints of the first grid in the scheme of the style. Contours are simpler: a line each 4 height units. No hachures. |
-| lakes | `draw-lakes.ts` | Groups by lake type, through the water mask. No ripples. |
+| texture | `draw-texture.ts` | The paper texture of the style. The SVG holds the image as a data URI. |
+| heightmap | `heightmap/draw-heightmap.ts` | Height tints of the first grid in the scheme of the style. Contours are simpler: a line each 4 height units. Hachures as FMG, but the outer row of cells has none: the grid has no boundary points. |
+| lakes | `draw-lakes.ts`, `lake-ripples.ts` | Groups by lake type, through the water mask. The ripples of the style, with a mask that keeps them off the shore. |
 | coastline | `draw-coastline.ts`, `coastline-generator.ts` | Fractal detail as FMG, with the FMG noise and path builder. |
 | biomes, states, provinces, cultures, religions | `draw-*.ts`, `isoline-fills.ts` | Cell areas with a water gap stroke, through the land mask. States have a blurred halo. |
 | zones | `draw-zones.ts`, `hatches.ts` | The zones of `World::zones`, filled with the FMG hatch patterns. |
@@ -44,7 +44,7 @@ These notes describe `render.mode: "colour"`. The code is in
 | journeys | `draw-journeys.ts` | Catmull-Rom curves (alpha 0.5) of the segments, with start dots and arrows. |
 | rulers | `draw-measurers.ts` | The default ruler with its length in config units. |
 | cells, grid, coordinates | `draw-cells.ts`, `draw-grid.ts`, `draw-coordinates.ts` | Also in print-safe mode. |
-| temperature, precipitation | `draw-temperature.ts`, `draw-precipitation.ts` | First grid. No wind arrows. |
+| temperature, precipitation | `draw-temperature.ts`, `draw-precipitation.ts` | First grid. The wind arrows of `getWinds`. |
 | population, markers | `draw-population.ts`, `draw-markers.ts` | Read `fmg::data`. |
 | emblems | `draw-emblems.ts`, `renderers/emblems/*.ts` | Sizes, poles, collision, and hidden groups of FMG. See `docs/notes/emblems.md`. |
 | compass | `index.html` | The FMG rose with its lines, through the water mask. |
