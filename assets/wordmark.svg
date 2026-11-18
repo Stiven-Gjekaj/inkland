@@ -9,8 +9,11 @@
       <stop offset="1" stop-color="#a0703f"/>
     </linearGradient>
   </defs>
+  <!-- The rose and the word are centered on the canvas, on the visible
+       edges that Chrome draws with Georgia Italic. The middle of the word
+       is on the middle line of the rose. -->
   <!-- A compass rose: four long points and four short points. -->
-  <g transform="translate(90 90)">
+  <g transform="translate(167.75 90)">
     <circle r="62" fill="none" stroke="#a0703f" stroke-width="2"/>
     <circle r="54" fill="none" stroke="#a0703f" stroke-width="1" stroke-dasharray="3 4"/>
     <g fill="url(#ink)">
@@ -33,5 +36,5 @@
     </g>
     <circle r="5" fill="#f2e8d5" stroke="#1e3a5f" stroke-width="1.5"/>
   </g>
-  <text x="190" y="122" font-family="Georgia, 'Palatino Linotype', 'Book Antiqua', serif" font-size="112" font-style="italic" letter-spacing="2" fill="url(#ink)">inkland</text>
+  <text x="267.75" y="131.6" font-family="Georgia, 'Palatino Linotype', 'Book Antiqua', serif" font-size="112" font-style="italic" letter-spacing="2" fill="url(#ink)">inkland</text>
 </svg>
