@@ -9,6 +9,7 @@
 //! - `map`: the world data that journeys read.
 //! - `path`: the pathfinding over land, routes, rivers, and water.
 //! - `places`: the place that names a cell.
+//! - `story`: the story journey of a party.
 //!
 //! Journeys read the world. They never change it.
 
@@ -16,6 +17,7 @@ pub mod lore;
 pub mod map;
 pub mod path;
 pub mod places;
+pub mod story;
 pub mod transports;
 
 pub use transports::{Domain, MAX_HOURS_PER_DAY, Transport};
