@@ -86,6 +86,9 @@ pub struct World {
     pub markers: Vec<crate::markers::Marker>,
     /// Goods, markets, and the production run of one day.
     pub economy: crate::economy::Economy,
+    /// Journeys: the routes of parties between places, as data. The last
+    /// stage.
+    pub journeys: Vec<crate::journeys::Journey>,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -462,6 +465,20 @@ impl World {
             sea_routes: &sea_routes,
             pin_cells: &pin_cells,
         });
+        // The journeys run last, as in FMG (`Journeys.generate`). Later
+        // stages go before them.
+        let journeys = crate::journeys::generate(&crate::journeys::Input {
+            config,
+            grid: &grid,
+            features: &features,
+            biomes: &biomes,
+            temperature: &temperature,
+            rivers: &rivers,
+            names: &names,
+            society: &society,
+            roads: &roads,
+            sea_routes: &sea_routes,
+        });
         Ok(World {
             seed: config.seed,
             width: w,
@@ -496,6 +513,7 @@ impl World {
             religions,
             markers,
             economy,
+            journeys,
         })
     }
 

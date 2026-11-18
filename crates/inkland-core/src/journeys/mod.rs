@@ -11,6 +11,9 @@
 //! - `places`: the place that names a cell.
 //! - `story`: the story journey of a party.
 //!
+//! On a new map FMG adds one random journey (`Journeys.generate`): a story
+//! journey, else a plain trip between two notable places.
+//!
 //! Journeys read the world. They never change it.
 
 pub mod lore;
@@ -20,7 +23,16 @@ pub mod places;
 pub mod story;
 pub mod transports;
 
+pub use map::{Input, Map};
 pub use transports::{Domain, MAX_HOURS_PER_DAY, Transport};
+
+use crate::rand::Rand;
+use crate::seed::{Layer, SeedTree};
+use path::Pathfinder;
+use story::Story;
+
+/// The burgs of the fallback journey come from this many notable burgs.
+const FALLBACK_POOL_SIZE: usize = 6;
 
 /// A point of a journey path: a position in world units and its cell
 /// (FMG `JourneyPoint`).
@@ -90,6 +102,96 @@ pub struct Journey {
     pub color: String,
     pub segments: Vec<Segment>,
     pub totals: Totals,
+}
+
+/// The journeys of a new map: one random journey, or none when the map
+/// has fewer than two places with a path between them
+/// (`Journeys.generate`).
+pub fn generate(input: &Input) -> Vec<Journey> {
+    let map = Map::new(input);
+    let mut rng = Rand::new(SeedTree::new(input.config.seed).part_rng(Layer::Journeys, "story"));
+    let ratio = distance_unit_ratio(&input.config.units.name);
+    random_journey(&map, &mut rng, 1, ratio)
+        .into_iter()
+        .collect()
+}
+
+/// A story journey, else the fallback journey, with the id `id`
+/// (`addRandom`).
+pub fn random_journey(map: &Map, rng: &mut Rand, id: u32, ratio: f64) -> Option<Journey> {
+    let story = story::generate(map, map, rng).or_else(|| fallback(map))?;
+    let mut journey = Journey {
+        id,
+        name: story.name,
+        kind: story.kind,
+        color: crate::colors::cardinal_color(id as usize - 1).to_string(),
+        segments: story.segments,
+        totals: Totals::default(),
+    };
+    finish(&mut journey, ratio);
+    Some(journey)
+}
+
+/// One leg in one domain between the most notable burgs: the capitals,
+/// else the burgs with the most people (`buildFallbackJourney`).
+pub fn fallback(map: &Map) -> Option<Story> {
+    if map.burgs.len() < 2 {
+        return None;
+    }
+    let capitals: Vec<&map::Burg> = map.burgs.iter().filter(|b| b.capital).collect();
+    let mut ranked = if capitals.len() >= 2 {
+        capitals
+    } else {
+        let mut all: Vec<&map::Burg> = map.burgs.iter().collect();
+        all.sort_by(|a, b| b.population.total_cmp(&a.population));
+        all
+    };
+    ranked.truncate(FALLBACK_POOL_SIZE);
+    let ports: Vec<&map::Burg> = ranked.iter().copied().filter(|b| b.port).collect();
+    let segment = fallback_leg(map, &ranked, Domain::Land)
+        .or_else(|| fallback_leg(map, &ports, Domain::Water))?;
+    Some(Story {
+        name: segment.name.clone(),
+        kind: lore::DEFAULT_JOURNEY_TYPE,
+        segments: vec![segment],
+    })
+}
+
+/// The first pair of burgs in `pool` with a path that is valid for the
+/// domain (`findFallbackLeg`).
+fn fallback_leg(map: &Map, pool: &[&map::Burg], domain: Domain) -> Option<Segment> {
+    let transport = transports::by_domain(domain)?;
+    for (i, a) in pool.iter().enumerate() {
+        for b in &pool[i + 1..] {
+            let (from, to) = (a.cell, b.cell);
+            if !map.is_valid_endpoint(from, domain) || !map.is_valid_endpoint(to, domain) {
+                continue;
+            }
+            let r = map.find_path(from, to, domain, false);
+            if r.error.is_some()
+                || r.points.len() < 2
+                || !Pathfinder::is_valid_path(map, &r.points, domain)
+            {
+                continue;
+            }
+            return Some(Segment {
+                id: 1,
+                name: format!("{} \u{2192} {}", a.name, b.name),
+                from,
+                to,
+                transport: transport.name,
+                speed: transport.speed,
+                distance: r.distance,
+                points: r.points,
+                avoid_roads: false,
+                duration: None,
+                hours: 0.0,
+                elapsed_hours: 0.0,
+                note: None,
+            });
+        }
+    }
+    None
 }
 
 /// Rounding of a duration: from 10 days, only days show; from 10 hours,
@@ -422,6 +524,74 @@ mod tests {
         );
         assert_eq!(t.hours, 5.0);
         assert_eq!(t.avg_speed, 2.0);
+    }
+
+    #[test]
+    fn a_new_world_has_one_journey_between_its_places() {
+        for seed in [5, 11, 23] {
+            let (_, w, m) = map::tests::world_map(seed);
+            assert_eq!(w.journeys.len(), 1);
+            let j = &w.journeys[0];
+            assert_eq!(j.id, 1);
+            assert_eq!(j.color, "#1f77b4");
+            assert!(!j.name.is_empty() && !j.name.contains('{'), "{}", j.name);
+            let place_cells: Vec<usize> = w.society.places.iter().map(|p| p.cell).collect();
+            let s = &j.segments;
+            assert!(!s.is_empty());
+            assert!(place_cells.contains(&s[0].from));
+            assert!(place_cells.contains(&s[s.len() - 1].to));
+            for (k, seg) in s.iter().enumerate() {
+                assert_eq!(seg.id as usize, k + 1);
+                assert!(!seg.name.contains('{'), "{}", seg.name);
+                assert_eq!(seg.points[0].cell, seg.from);
+                assert_eq!(seg.points[seg.points.len() - 1].cell, seg.to);
+                for p in &seg.points {
+                    assert_eq!(w.grid.find_cell(p.at[0], p.at[1]), p.cell);
+                }
+                let domain = transports::domain(seg.transport);
+                assert!(m.is_valid_path(&seg.points, domain));
+                assert!((path::path_length(&seg.points) - seg.distance).abs() < 1e-9);
+                assert_eq!(seg.hours, segment_time(seg, distance_unit_ratio("mile")));
+                assert!(seg.elapsed_hours >= seg.hours);
+            }
+            for w2 in s.windows(2) {
+                assert_eq!(w2[1].from, w2[0].to);
+            }
+            assert_eq!(j.totals, totals(s, distance_unit_ratio("mile")));
+            assert!(j.totals.distance > 0.0 && j.totals.days > 0.0);
+        }
+    }
+
+    #[test]
+    fn the_same_config_gives_the_same_journey() {
+        let (c, w, _) = map::tests::world_map(11);
+        let again = crate::world::World::build(&c).unwrap();
+        assert_eq!(w.journeys, again.journeys);
+    }
+
+    #[test]
+    fn the_fallback_joins_two_capitals_over_land() {
+        let (_, w, m) = map::tests::world_map(5);
+        let story = fallback(&m).expect("a fallback journey");
+        assert_eq!(story.kind, "Travel");
+        let seg = &story.segments[0];
+        assert!(seg.name.contains(" \u{2192} "));
+        let domain = transports::domain(seg.transport);
+        assert!(m.is_valid_endpoint(seg.from, domain) && m.is_valid_endpoint(seg.to, domain));
+        assert!(m.is_valid_path(&seg.points, domain));
+        let capitals: Vec<usize> = w
+            .society
+            .places
+            .iter()
+            .filter(|p| p.capital)
+            .map(|p| p.cell)
+            .collect();
+        if capitals.len() >= 2 {
+            assert!(capitals.contains(&seg.from) && capitals.contains(&seg.to));
+        }
+        let mut lone = m;
+        lone.burgs.truncate(1);
+        assert!(fallback(&lone).is_none());
     }
 
     #[test]
