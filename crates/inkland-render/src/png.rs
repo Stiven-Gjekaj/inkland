@@ -354,13 +354,19 @@ mod tests {
             face.families.iter().any(|(name, _)| name.contains("Emoji"))
                 && db
                     .with_face_data(face.id, |data, index| {
-                        ttf_parser::Face::parse(data, index)
-                            .is_ok_and(|f| f.glyph_index(volcano).is_some())
+                        // resvg draws the color glyphs of sbix and COLR
+                        // fonts, but not of CBDT fonts.
+                        ttf_parser::Face::parse(data, index).is_ok_and(|f| {
+                            f.glyph_index(volcano).is_some()
+                                && (f.tables().sbix.is_some() || f.tables().colr.is_some())
+                        })
                     })
                     .unwrap_or(false)
         });
         if !has_emoji_font {
-            eprintln!("This system has no emoji font with the volcano. The test checks nothing.");
+            eprintln!(
+                "This system has no sbix or COLR emoji font with the volcano. The test checks nothing."
+            );
             return;
         }
         let draw = |text: char| {
