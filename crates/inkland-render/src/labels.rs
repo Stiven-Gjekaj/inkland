@@ -927,6 +927,12 @@ pub fn place_with(
         let generated = world.names.rivers.get(i);
         // A pinned river with a name has a required label. Another river of
         // the type `river` has an optional label with its generated name.
+        // A pinned river with its source and its mouth outside the view only
+        // goes through it and can show only a short part, so its label is
+        // optional, as the label of a state with its capital outside the
+        // view.
+        let ends_in_view = r.points.first().is_some_and(|&p| in_view(p))
+            || r.points.last().is_some_and(|&p| in_view(p));
         let (key, name, required) = match r.course {
             Some(k) => {
                 let pin = &config.pins.rivers[k];
@@ -934,7 +940,7 @@ pub fn place_with(
                     continue;
                 }
                 match name_of("river", &pin.id, pin.name.as_deref()) {
-                    Some(n) => (pin.id.clone(), n, true),
+                    Some(n) => (pin.id.clone(), n, ends_in_view),
                     None => match generated {
                         Some(g) if !g.name.is_empty() => (pin.id.clone(), g.name.clone(), false),
                         _ => continue,
@@ -1597,6 +1603,40 @@ mod tests {
             }
             Geometry::Point { .. } => panic!("a river label follows a path"),
         }
+    }
+
+    #[test]
+    fn a_river_that_only_goes_through_the_view_has_an_optional_label() {
+        let pins = json!({ "pins": {
+            "points": [{ "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150] }],
+            "regions": [
+                { "id": "hills", "kind": "mountains", "box": [40, 100, 90, 200] },
+                { "id": "sea", "kind": "sea", "box": [330, 0, 400, 300] }
+            ],
+            "rivers": [{ "id": "brann", "name": "Brann", "source": { "region": "hills" }, "mouth": { "region": "sea" } }]
+        }});
+        let (w, mut c) = world(5, "pangea", pins);
+        let r = &w.rivers[w.rivers.iter().position(|r| r.course == Some(0)).unwrap()];
+        let (a, b) = (r.points[0], r.points[r.points.len() - 1]);
+        // A crop between the source and the mouth, with a part of the river.
+        let mid = r.points[r.points.len() / 2];
+        let crop = [mid[0] - 20.0, mid[1] - 15.0, mid[0] + 20.0, mid[1] + 15.0];
+        let inside =
+            |p: [f64; 2]| p[0] >= crop[0] && p[0] <= crop[2] && p[1] >= crop[1] && p[1] <= crop[3];
+        assert!(!inside(a) && !inside(b), "the ends are outside the crop");
+        c.variants[0].crop = Some(crop);
+        // A label too large for any map, so that it is never placed.
+        c.render.font_sizes_pt.river = 400.0;
+        let required = |c: &Config| {
+            let page = Page::new(c, &c.variants[0]);
+            let labels = place(&w, c, &c.variants[0], &page);
+            let u = labels.unplaced.iter().find(|u| u.id == "label-river-brann");
+            u.expect("unplaced").required
+        };
+        assert!(!required(&c));
+        // The full map has the source and the mouth: the label is required.
+        c.variants[0].crop = None;
+        assert!(required(&c));
     }
 
     #[test]
