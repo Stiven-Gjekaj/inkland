@@ -67,6 +67,31 @@ pub fn empty_font_db() -> FontDb {
     Arc::new(resvg::usvg::fontdb::Database::new())
 }
 
+/// The fallback font for a character that the font of a text does not
+/// have. An emoji font comes first. The marker icons of FMG are emoji, and a
+/// browser draws them with an emoji font. The default fallback can select a
+/// font that draws a box for each character, for example "LastResort" on
+/// macOS.
+fn emoji_first_fallback() -> resvg::usvg::FallbackSelectionFn<'static> {
+    use resvg::usvg::FontResolver;
+    let default = FontResolver::default_fallback_selector();
+    Box::new(move |c, exclude, db| {
+        let emoji = db
+            .faces()
+            .filter(|face| !exclude.contains(&face.id))
+            .filter(|face| face.families.iter().any(|(name, _)| name.contains("Emoji")))
+            .filter(|face| {
+                db.with_face_data(face.id, |data, index| {
+                    ttf_parser::Face::parse(data, index).is_ok_and(|f| f.glyph_index(c).is_some())
+                })
+                .unwrap_or(false)
+            })
+            .map(|face| face.id)
+            .min();
+        emoji.or_else(|| default(c, exclude, db))
+    })
+}
+
 /// A parsed SVG, ready to render many times at different scales.
 pub struct Scene {
     tree: resvg::usvg::Tree,
@@ -112,6 +137,10 @@ impl Scene {
         missing.dedup();
         let opt = usvg::Options {
             fontdb: Arc::clone(db),
+            font_resolver: usvg::FontResolver {
+                select_font: usvg::FontResolver::default_font_selector(),
+                select_fallback: emoji_first_fallback(),
+            },
             ..Default::default()
         };
         let tree =
@@ -315,5 +344,45 @@ mod tests {
         assert_eq!(&png[1..4], b"PNG");
         assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 30);
         assert!(rgba_to_png(vec![0; 8], 30, 30).is_err());
+    }
+
+    #[test]
+    fn a_marker_emoji_draws_with_an_emoji_font() {
+        let db = font_db(&[]);
+        let volcano = '\u{1F30B}';
+        let has_emoji_font = db.faces().any(|face| {
+            face.families.iter().any(|(name, _)| name.contains("Emoji"))
+                && db
+                    .with_face_data(face.id, |data, index| {
+                        ttf_parser::Face::parse(data, index)
+                            .is_ok_and(|f| f.glyph_index(volcano).is_some())
+                    })
+                    .unwrap_or(false)
+        });
+        if !has_emoji_font {
+            eprintln!("This system has no emoji font with the volcano. The test checks nothing.");
+            return;
+        }
+        let draw = |text: char| {
+            let svg = format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><text x="20" y="20" font-size="24" text-anchor="middle" dominant-baseline="central">{text}</text></svg>"##
+            );
+            let scene = Scene::parse(&svg, &db, &[]).unwrap();
+            scene
+                .render_rgba(40, 40, 1.0, [0.0, 0.0], [255, 255, 255])
+                .unwrap()
+        };
+        // A private use character has no glyph: it draws as a box or not
+        // at all.
+        let missing = draw('\u{E000}');
+        let emoji = draw(volcano);
+        assert_ne!(emoji, missing);
+        // A color emoji has pixels that are not grey.
+        assert!(
+            emoji
+                .chunks(4)
+                .any(|p| p[0].abs_diff(p[1]) > 40 || p[1].abs_diff(p[2]) > 40),
+            "the volcano has no color"
+        );
     }
 }

@@ -31,7 +31,9 @@ libm = "0.2"
 flate2 = "1"
 proptest = "1"
 roxmltree = "0.21"
-resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts"] }
+# "raster-images" draws the bitmap glyphs of a color emoji font.
+resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts", "raster-images"] }
+ttf-parser = "0.25"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
