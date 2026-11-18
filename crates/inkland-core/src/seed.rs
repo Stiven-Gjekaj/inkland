@@ -28,11 +28,15 @@ pub enum Layer {
     Decoration,
     Religions,
     Markers,
+    Economy,
+    Military,
+    Zones,
+    Journeys,
 }
 
 impl Layer {
     /// All layers, in a fixed order.
-    pub const ALL: [Layer; 13] = [
+    pub const ALL: [Layer; 17] = [
         Layer::Terrain,
         Layer::Climate,
         Layer::Rivers,
@@ -46,6 +50,10 @@ impl Layer {
         Layer::Decoration,
         Layer::Religions,
         Layer::Markers,
+        Layer::Economy,
+        Layer::Military,
+        Layer::Zones,
+        Layer::Journeys,
     ];
 
     /// The name of the layer. The seed derivation uses this name, so it
@@ -65,6 +73,10 @@ impl Layer {
             Layer::Decoration => "decoration",
             Layer::Religions => "religions",
             Layer::Markers => "markers",
+            Layer::Economy => "economy",
+            Layer::Military => "military",
+            Layer::Zones => "zones",
+            Layer::Journeys => "journeys",
         }
     }
 }
