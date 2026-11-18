@@ -201,3 +201,34 @@ fn line_widths_round_up() {
     assert_eq!(up(1.42), "1.42");
     assert_eq!(up(2.0), "2");
 }
+
+#[test]
+fn each_charge_renders_in_colour_and_with_hatching() {
+    let hatched = Look {
+        hatching: true,
+        min_line: 3.0,
+    };
+    let opts = crate::checks::CheckOptions {
+        min_line_width_pt: 0.5,
+        fonts_allowed: Vec::new(),
+    };
+    for (i, name) in charge_names().enumerate() {
+        let c = coa(&format!(
+            r#"{{"t1":"azure","charges":[{{"charge":"{name}","t":"or","t2":"gules","t3":"argent","p":"e","size":1.5}}],"shield":"heater"}}"#
+        ));
+        let svg = document(&c, &format!("coa-c{i}"), &Look::COLOUR, 200.0);
+        let before = render_png(&document(
+            &coa(r#"{"t1":"azure","shield":"heater"}"#),
+            &format!("coa-c{i}"),
+            &Look::COLOUR,
+            200.0,
+        ));
+        // The charge changes the picture.
+        assert_ne!(render_png(&svg), before, "{name}");
+        let svg = document(&c, &format!("coa-ch{i}"), &hatched, 200.0);
+        for r in crate::checks::check_svg(&svg, &opts) {
+            assert!(r.pass, "{name}: {} {:?}", r.name, r.details);
+        }
+        render_png(&svg);
+    }
+}

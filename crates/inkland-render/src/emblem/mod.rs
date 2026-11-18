@@ -412,7 +412,9 @@ fn scoped(prefix: &str, id: &str) -> String {
 /// the file without the outer `<svg>` and the metadata, with the classes
 /// of FMG (`secondary`, `tertiary`, `pseudostroke`, `background`) changed
 /// to fills. With hatching, each colour becomes black or white, the
-/// elements with an opacity go, and the lines get the width of the use.
+/// elements with an opacity and the gradients, masks, and filters go, a
+/// fill from a gradient becomes white, and the lines get the width of the
+/// use.
 fn charge_markup(file: &str, prefix: &str, t2: &str, t3: &str, look: &Look) -> String {
     let start = file
         .find("<svg")
@@ -458,6 +460,19 @@ fn charge_markup(file: &str, prefix: &str, t2: &str, t3: &str, look: &Look) -> S
             continue;
         }
         let mut t = tag.to_owned();
+        // Print has no gradients, masks, or filters: leave out their
+        // definitions.
+        if look.hatching
+            && matches!(
+                name.as_str(),
+                "linearGradient" | "radialGradient" | "mask" | "filter"
+            )
+        {
+            if !self_closing {
+                skip = Some(depth - 1);
+            }
+            continue;
+        }
         if look.hatching {
             let faint = ["opacity", "fill-opacity", "stroke-opacity"]
                 .iter()
@@ -523,7 +538,21 @@ fn charge_markup(file: &str, prefix: &str, t2: &str, t3: &str, look: &Look) -> S
                     t = add_attr(&t, key, "#000");
                 }
             }
-            for key in ["stroke-width", "opacity", "fill-opacity", "stroke-opacity"] {
+            // A fill from a gradient becomes white, a stroke black.
+            for (key, plain) in [("fill", "#fff"), ("stroke", "#000")] {
+                if attr(&t, key).is_some_and(|v| v.starts_with("url(")) {
+                    t = drop_attr(&t, key);
+                    t = add_attr(&t, key, plain);
+                }
+            }
+            for key in [
+                "stroke-width",
+                "opacity",
+                "fill-opacity",
+                "stroke-opacity",
+                "mask",
+                "filter",
+            ] {
                 t = drop_attr(&t, key);
             }
         }
