@@ -96,6 +96,10 @@ pub struct Drainage {
     pub receiver: Vec<usize>,
     /// The water of each cell (FMG `cells.fl`), a whole number.
     pub flux: Vec<f64>,
+    /// The water of the smaller rivers at each confluence (FMG
+    /// `cells.conf`): the sum of the water of all rivers that flow in,
+    /// without the largest one. 0 for a cell that is not a confluence.
+    pub confluence: Vec<f64>,
 }
 
 /// The water data of one lake (FMG lake fields).
@@ -692,6 +696,8 @@ pub fn generate(input: &Input) -> Output {
         raws = locked;
     }
 
+    let confluence = confluence_flux(grid, &raws, &|c| is_land_cell(input, c), &h, &fl);
+
     // Cell owners after the merge: the first river that claims a land cell.
     let mut owner = vec![0u32; n];
     for raw in &raws {
@@ -895,11 +901,67 @@ pub fn generate(input: &Input) -> Output {
             elevation,
             receiver,
             flux: fl,
+            confluence,
         },
         rivers,
         lakes,
         heights,
     }
+}
+
+/// `true` for a land cell of the river cells, where -1 is the frame edge.
+fn is_land_cell(input: &Input, c: i64) -> bool {
+    c >= 0 && input.heights[c as usize] >= input.sea_level
+}
+
+/// The water of the smaller rivers at each confluence (FMG
+/// `calculateConfluenceFlux`). A land cell is a confluence when two rivers
+/// claim it. A river claims its cells, then the cell that it flows into
+/// (FMG `defineRivers` and `mergeLocked`). At a confluence, the flux of
+/// the higher neighbors on a river adds up, without the largest one.
+fn confluence_flux(
+    grid: &Grid,
+    raws: &[Raw],
+    land: &dyn Fn(i64) -> bool,
+    h: &[f64],
+    fl: &[f64],
+) -> Vec<f64> {
+    let n = grid.len();
+    let mut r = vec![0u32; n];
+    let mut mark = vec![false; n];
+    let mut claim = |c: i64, id: u32| {
+        if !land(c) {
+            return;
+        }
+        let c = c as usize;
+        if r[c] != 0 && r[c] != id {
+            mark[c] = true;
+        } else {
+            r[c] = id;
+        }
+    };
+    for raw in raws {
+        for &c in &raw.cells[..raw.cells.len() - 1] {
+            claim(c, raw.id);
+        }
+    }
+    for raw in raws {
+        claim(*raw.cells.last().expect("a river has cells"), raw.id);
+    }
+    (0..n)
+        .map(|i| {
+            if !mark[i] {
+                return 0.0;
+            }
+            let mut influx: Vec<f64> = grid
+                .neighbors(i)
+                .filter(|&c| r[c] != 0 && h[c] > h[i])
+                .map(|c| fl[c])
+                .collect();
+            influx.sort_by(|a, b| b.total_cmp(a));
+            u16(influx.iter().skip(1).sum())
+        })
+        .collect()
 }
 
 /// The cell with the lowest height; the first one of equal cells.
@@ -1346,6 +1408,43 @@ mod tests {
         assert_eq!(out.drainage.receiver[b], NONE);
         assert!(out.drainage.elevation[a] > out.drainage.elevation[b]);
         assert_eq!(out.rivers[0].mouth, Mouth::Sink);
+    }
+
+    #[test]
+    fn a_confluence_holds_the_water_of_the_smaller_rivers() {
+        let g = grid();
+        let h = dome(&g);
+        let (_, out) = run(&g, &h, &[]);
+        let d = &out.drainage;
+        let joins: Vec<usize> = out
+            .rivers
+            .iter()
+            .filter_map(|r| match r.mouth {
+                Mouth::Join(j) => Some(j),
+                _ => None,
+            })
+            .collect();
+        assert!(d.confluence.iter().any(|&c| c > 0.0));
+        for c in 0..g.len() {
+            if d.confluence[c] == 0.0 {
+                continue;
+            }
+            // Only a cell where a river ends on another river.
+            assert!(joins.contains(&c), "cell {c}");
+            // FMG adds the water of each higher neighbor on a river, also
+            // one that does not flow into the cell, without the largest.
+            let mut higher: Vec<f64> = g
+                .neighbors(c)
+                .filter(|&m| out.rivers.iter().any(|r| r.cells.contains(&m)))
+                .map(|m| d.flux[m])
+                .collect();
+            higher.sort_by(|a, b| b.total_cmp(a));
+            assert!(
+                d.confluence[c] <= higher.iter().skip(1).sum::<f64>(),
+                "cell {c}"
+            );
+            assert_eq!(d.confluence[c].fract(), 0.0);
+        }
     }
 
     #[test]
