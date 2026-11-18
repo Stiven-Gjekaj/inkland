@@ -782,3 +782,19 @@ fn empty_legend_boxes_add_nothing_to_the_legend() {
     let w = world_with(|w| w.legends.clear());
     assert_eq!(render_world(&w, &layers), svg);
 }
+
+#[test]
+fn the_new_layers_draw_nothing_in_print_safe_mode() {
+    use LayerName::*;
+    let new = [Zones, Goods, Markets, Trade, Military, Journeys, Rulers];
+    for l in new {
+        assert!(!l.is_print_safe(), "{l:?}");
+    }
+    let mut c = base_config();
+    c.render.mode = RenderMode::PrintSafe;
+    c.render.layers = vec![Coast];
+    let base = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    c.render.layers.extend(new);
+    let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert_eq!(svg, base);
+}
