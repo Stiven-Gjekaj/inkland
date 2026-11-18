@@ -87,6 +87,7 @@ const IMPLEMENTED: &[&str] = &[
     "cells",
     "emblems",
     "diplomacy",
+    "notes",
     "markers",
     "military",
 ];
@@ -1186,6 +1187,16 @@ impl Controller {
         let w = open(d.get_diplomacy());
         l.set_relations(rows(w, &|w| ov::relation_rows(w, selected)));
         g.set_chronicle(s(w.map(ov::chronicle_text).unwrap_or_default()));
+        let w = open(d.get_notes());
+        let notes = w.map(ov::note_rows).unwrap_or_default();
+        // As in FMG, the first note shows when no note is selected.
+        let mut sel = g.get_selected_note();
+        if !notes.iter().any(|r| r.id == sel.as_str()) {
+            sel = s(notes.first().map_or("", |r| r.id.as_str()));
+            g.set_selected_note(sel.clone());
+        }
+        l.set_notes(table(notes));
+        g.set_note_text(s(w.map(|w| ov::note_text(w, &sel)).unwrap_or_default()));
         let w = open(d.get_markers());
         l.set_markers(rows(w, &ov::marker_rows));
         let sel = g.get_selected_marker();

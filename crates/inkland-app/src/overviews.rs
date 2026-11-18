@@ -231,6 +231,35 @@ pub fn marker_text(world: &World, id: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The row id of a note: its type and its id.
+fn note_id(n: &inkland_core::annotations::Note) -> String {
+    format!("{}:{}", n.kind, n.id)
+}
+
+/// The Notes Editor of FMG: the list of the notes, with the type and the
+/// name of the item.
+pub fn note_rows(world: &World) -> Vec<Row> {
+    inkland_core::annotations::notes(world)
+        .iter()
+        .map(|n| {
+            row(
+                note_id(n),
+                vec![crate::catalog::title_case(n.kind), n.name.clone()],
+                false,
+            )
+        })
+        .collect()
+}
+
+/// The text of the note with the row id `id`: the name, then the note.
+pub fn note_text(world: &World, id: &str) -> String {
+    inkland_core::annotations::notes(world)
+        .iter()
+        .find(|n| note_id(n) == id)
+        .map(|n| format!("{}\n\n{}", n.name, n.note))
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,5 +354,20 @@ mod tests {
             assert_eq!(marker_text(&w, &r.id), m.legend.clone().unwrap_or_default());
         }
         assert_eq!(marker_text(&w, "no-such-marker"), "");
+    }
+
+    #[test]
+    fn the_note_rows_list_the_notes_and_give_their_text() {
+        let (_, w) = world();
+        let notes = inkland_core::annotations::notes(&w);
+        let rows = note_rows(&w);
+        assert_eq!(rows.len(), notes.len());
+        assert!(!rows.is_empty(), "the world has notes");
+        for (r, n) in rows.iter().zip(&notes) {
+            assert_eq!(r.id, format!("{}:{}", n.kind, n.id));
+            assert_eq!(r.cells[1], n.name);
+            assert!(note_text(&w, &r.id).ends_with(&n.note));
+        }
+        assert_eq!(note_text(&w, "zone:none"), "");
     }
 }

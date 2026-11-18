@@ -388,7 +388,7 @@ pub const TOOLS: &[ToolDef] = &[
     tool("markers", "Markers", "Edit", "Shift+K", true),
     tool("military", "Military", "Edit", "Shift+M", true),
     tool("namesbase", "Namesbase", "Edit", "Shift+N", false),
-    tool("notes", "Notes", "Edit", "Shift+O", false),
+    tool("notes", "Notes", "Edit", "Shift+O", true),
     tool("provinces", "Provinces", "Edit", "Shift+P", true),
     tool("regions", "Regions", "Edit", "Shift+Z", true),
     tool("religions", "Religions", "Edit", "Shift+R", true),

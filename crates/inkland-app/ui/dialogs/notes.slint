@@ -1,0 +1,34 @@
+// The Notes Editor of FMG: the notes (legends) of the regiments, the
+// markers, and the zones of the shown world, and the text of the selected
+// note. It does not edit, because the config has no notes.
+
+import { Theme, Label, Table, TextBox, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component NotesDialog inherits Dialog {
+    id: "notes";
+    title: "Notes Editor";
+    content-width: 440px;
+    pos-x: 460px;
+    pos-y: 70px;
+    Table {
+        header: ["Type", "Name"];
+        widths: [80px, 310px];
+        rows: Lists.notes;
+        selected: AppState.selected-note;
+        list-height: 180px;
+        select(id) => {
+            AppState.selected-note = id;
+            Actions.selection-changed();
+        }
+    }
+    TextBox {
+        text: AppState.note-text;
+        box-height: 160px;
+    }
+    Tip {
+        dialog: true;
+        text: "The world writes these notes. Notes: " + Lists.notes.length + ".";
+    }
+}
