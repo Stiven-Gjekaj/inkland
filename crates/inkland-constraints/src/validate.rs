@@ -1142,7 +1142,8 @@ impl<'a> Validator<'a> {
             for (j, b, sb) in regions.iter().skip(a_i + 1) {
                 let [alo, ahi] = a.height_range();
                 let [blo, bhi] = b.height_range();
-                let disjoint = ahi < blo || bhi < alo;
+                // A region with a higher priority rules where they overlap.
+                let disjoint = (ahi < blo || bhi < alo) && a.priority == b.priority;
                 if disjoint && sa.overlaps(sb) {
                     self.err(
                         ErrorCode::RegionConflict,

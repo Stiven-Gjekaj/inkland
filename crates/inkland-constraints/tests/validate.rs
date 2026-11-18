@@ -556,3 +556,15 @@ fn a_relief_density_out_of_range_is_refused() {
     let c = with(json!({ "render": { "relief": { "density": 0.4, "hide": ["tree"] } } }));
     assert_eq!(codes(&c), vec![]);
 }
+
+#[test]
+fn overlapping_regions_with_other_priorities_may_have_disjoint_ranges() {
+    let regions = |priority: i32| {
+        with(json!({ "pins": { "regions": [
+            { "id": "low", "kind": "plains", "height": [22, 30], "box": [10, 10, 200, 200] },
+            { "id": "hills", "kind": "hills", "height": [40, 50], "box": [50, 50, 90, 90], "priority": priority }
+        ] } }))
+    };
+    one(&regions(0), ErrorCode::RegionConflict, "/pins/regions/1");
+    assert_eq!(codes(&regions(1)), vec![]);
+}

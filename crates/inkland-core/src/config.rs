@@ -1075,6 +1075,13 @@ pub struct RegionPin {
     /// at a frame edge. `true`: an inland sea or a large lake.
     #[serde(default)]
     pub landlocked: bool,
+    /// Where regions overlap, only the regions with the highest priority
+    /// set the height range of a cell. Regions with the same priority share
+    /// it: the cell gets a height in all of their ranges. Give an inner
+    /// region a higher priority than the region around it, for example hills
+    /// in a lowland. Default 0.
+    #[serde(default, skip_serializing_if = "is_zero_i32")]
+    pub priority: i32,
     /// Name of the area, for its label.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -1964,6 +1971,10 @@ fn default_cells() -> u32 {
 fn default_jitter() -> f64 {
     0.9
 }
+fn is_zero_i32(v: &i32) -> bool {
+    *v == 0
+}
+
 fn is_default_jitter(v: &f64) -> bool {
     *v == default_jitter()
 }

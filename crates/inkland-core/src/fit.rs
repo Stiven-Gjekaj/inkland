@@ -6,8 +6,8 @@
 //! specific code.
 //!
 //! Regions: each cell whose site is inside a region gets a height in the
-//! range of the region. Where regions overlap, the cell gets a height in all
-//! of their ranges. The template height is scaled into the range, so the
+//! range of the region. Where regions overlap, the regions with the highest
+//! `priority` rule, and the cell gets a height in all of their ranges. The template height is scaled into the range, so the
 //! terrain keeps its form. `forest` and `desert` regions without a `height`
 //! only make sure of land. Outside a region with an `edge`, the heights blend
 //! from the region to the free terrain over the edge width.
@@ -100,6 +100,16 @@ pub fn effective_range(region: &RegionPin, sea_level: f64) -> [f64; 2] {
     }
 }
 
+/// The regions that set the range of a cell: of the regions that hold it,
+/// the ones with the highest priority.
+fn ruling<'r, 'a>(inside: Vec<&'r FitRegion<'a>>) -> Vec<&'r FitRegion<'a>> {
+    let top = inside.iter().map(|r| r.pin.priority).max();
+    inside
+        .into_iter()
+        .filter(|r| Some(r.pin.priority) == top)
+        .collect()
+}
+
 /// A whole-number height in the range.
 fn put(v: f64, [lo, hi]: [f64; 2]) -> f64 {
     v.trunc().clamp(lo.ceil(), hi.floor().max(lo.ceil()))
@@ -109,7 +119,7 @@ fn put(v: f64, [lo, hi]: [f64; 2]) -> f64 {
 pub fn apply_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], sea_level: f64) {
     for c in 0..grid.len() {
         let p = grid.points[c];
-        let inside: Vec<&FitRegion> = regions.iter().filter(|r| r.contains(p)).collect();
+        let inside = ruling(regions.iter().filter(|r| r.contains(p)).collect());
         if let Some(first) = inside.first() {
             let range = inside.iter().skip(1).fold(first.range, |[lo, hi], r| {
                 [lo.max(r.range[0]), hi.min(r.range[1])]
@@ -145,7 +155,7 @@ pub fn apply_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], se
 pub fn clamp_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], sea_level: f64) {
     for c in 0..grid.len() {
         let p = grid.points[c];
-        let inside: Vec<&FitRegion> = regions.iter().filter(|r| r.contains(p)).collect();
+        let inside = ruling(regions.iter().filter(|r| r.contains(p)).collect());
         let Some(first) = inside.first() else {
             continue;
         };
@@ -266,6 +276,34 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use serde_json::json;
+
+    #[test]
+    fn a_region_with_a_higher_priority_rules_where_regions_overlap() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 2, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": "pangea" },
+            "pins": { "regions": [
+                { "id": "lowland", "kind": "plains", "height": [22, 34], "box": [40, 30, 260, 170] },
+                { "id": "wolds", "kind": "hills", "height": [40, 50], "box": [120, 70, 180, 130], "priority": 1 }
+            ] }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        let inside =
+            |b: [f64; 4], p: [f64; 2]| p[0] >= b[0] && p[0] <= b[2] && p[1] >= b[1] && p[1] <= b[3];
+        let (mut wolds, mut low) = (0, 0);
+        for (cell, &p) in w.grid.points.iter().enumerate() {
+            let h = w.heights[cell];
+            if inside([120.0, 70.0, 180.0, 130.0], p) {
+                assert!((40.0..=50.0).contains(&h), "wolds {h}");
+                wolds += 1;
+            } else if inside([40.0, 30.0, 260.0, 170.0], p) {
+                assert!((22.0..=34.0).contains(&h), "lowland {h}");
+                low += 1;
+            }
+        }
+        assert!(wolds > 10 && low > 10);
+    }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {
         let c: Config = serde_json::from_value(json!({

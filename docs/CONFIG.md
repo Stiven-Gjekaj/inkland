@@ -577,6 +577,7 @@ An area with a forced kind of terrain. Give exactly one of `polygon`, `box`, and
 | `landlocked` | boolean |  | `false` | Only for `sea` and `lake`. `false`: a `sea` must connect to the ocean at a frame edge. `true`: an inland sea or a large lake. |
 | `name` | string |  |  | Name of the area, for its label. |
 | `polygon` | array of array of 2 number |  |  | Outline `[[x, y], ...]`, in units. 3 or more points. The outline must not cross itself. |
+| `priority` | integer |  |  | Where regions overlap, only the regions with the highest priority set the height range of a cell. Regions with the same priority share it: the cell gets a height in all of their ranges. Give an inner region a higher priority than the region around it, for example hills in a lowland. Default 0. |
 
 ### RegionRef
 
