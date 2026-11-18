@@ -195,6 +195,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## The icon font of the desktop app
+
+`crates/inkland-app/ui/fonts/fmg-icons.ttf` is the icon font of Azgaar's
+Fantasy Map Generator (`src/assets/icons.css`), converted from WOFF2 to TTF
+with no other change. It is a Fontello build of Font Awesome glyphs, and
+FMG gives the Font Awesome license for it.
+
+- Font Awesome Free, Copyright (c) Fonticons, Inc.
+  (<https://fontawesome.com>).
+- The font: SIL Open Font License 1.1. The icons: CC BY 4.0
+  (<https://creativecommons.org/licenses/by/4.0/>).
+- `crates/inkland-app/ui/fonts/OFL.txt` holds the license text.
+
 ## Font metrics
 
 `crates/inkland-render/src/metrics_data.rs` holds numbers from four font
