@@ -4,6 +4,7 @@
 
 pub mod checks;
 pub mod decor;
+pub mod emblem;
 pub mod extras;
 pub mod fmg;
 pub mod labels;
