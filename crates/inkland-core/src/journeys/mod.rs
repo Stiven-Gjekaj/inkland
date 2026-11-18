@@ -52,8 +52,12 @@ pub struct Segment {
     pub from: usize,
     /// The end cell.
     pub to: usize,
-    /// The name of the transport (see `transports::TRANSPORTS`).
-    pub transport: &'static str,
+    /// The name of the transport.
+    pub transport: String,
+    /// The travel domain of the transport.
+    pub domain: Domain,
+    /// The hours of travel that one day sustains, for this transport.
+    pub hours_per_day: f64,
     /// The speed in km/h. A stay has a speed of 0.
     pub speed: f64,
     /// The length of the path, in world units. A stay has a distance of 0.
@@ -160,7 +164,7 @@ pub fn fallback(map: &Map) -> Option<Story> {
 /// The first pair of burgs in `pool` with a path that is valid for the
 /// domain (`findFallbackLeg`).
 fn fallback_leg(map: &Map, pool: &[&map::Burg], domain: Domain) -> Option<Segment> {
-    let transport = transports::by_domain(domain)?;
+    let transport = transports::by_domain(&map.transports, domain)?;
     for (i, a) in pool.iter().enumerate() {
         for b in &pool[i + 1..] {
             let (from, to) = (a.cell, b.cell);
@@ -179,7 +183,9 @@ fn fallback_leg(map: &Map, pool: &[&map::Burg], domain: Domain) -> Option<Segmen
                 name: format!("{} \u{2192} {}", a.name, b.name),
                 from,
                 to,
-                transport: transport.name,
+                transport: transport.name.clone(),
+                domain: transport.domain,
+                hours_per_day: transports::resolve_hours_per_day(transport),
                 speed: transport.speed,
                 distance: r.distance,
                 points: r.points,
@@ -227,7 +233,7 @@ pub fn distance_unit_ratio(unit: &str) -> f64 {
 /// `true` for a halt. The domain of the transport decides, not the speed
 /// (`isStaySegment`).
 pub fn is_stay(segment: &Segment) -> bool {
-    transports::domain(segment.transport) == Domain::Stay
+    segment.domain == Domain::Stay
 }
 
 /// The length of a segment in units. A stay covers no ground
@@ -285,10 +291,7 @@ pub fn elapsed_hours(hours: f64, hours_per_day: f64) -> f64 {
 /// The calendar hours of a segment at the travel day of its transport
 /// (`getSegmentElapsedHours`).
 pub fn segment_elapsed_hours(segment: &Segment, ratio: f64) -> f64 {
-    elapsed_hours(
-        segment_time(segment, ratio),
-        transports::hours_per_day(segment.transport),
-    )
+    elapsed_hours(segment_time(segment, ratio), segment.hours_per_day)
 }
 
 /// Set `hours` and `elapsed_hours` of each segment, and the totals of the
@@ -403,13 +406,16 @@ pub fn format_travel_time_full(elapsed: f64) -> String {
 mod tests {
     use super::*;
 
-    fn seg(distance: f64, speed: f64, transport: &'static str) -> Segment {
+    fn seg(distance: f64, speed: f64, transport: &str) -> Segment {
+        let list = transports::default_transports();
         Segment {
             id: 1,
             name: "s".into(),
             from: 0,
             to: 1,
-            transport,
+            transport: transport.to_owned(),
+            domain: transports::domain(&list, transport),
+            hours_per_day: transports::hours_per_day(&list, transport),
             speed,
             distance,
             points: Vec::new(),
@@ -548,7 +554,8 @@ mod tests {
                 for p in &seg.points {
                     assert_eq!(w.grid.find_cell(p.at[0], p.at[1]), p.cell);
                 }
-                let domain = transports::domain(seg.transport);
+                let domain = transports::domain(&w.transports, &seg.transport);
+                assert_eq!(domain, seg.domain);
                 assert!(m.is_valid_path(&seg.points, domain));
                 assert!((path::path_length(&seg.points) - seg.distance).abs() < 1e-9);
                 assert_eq!(seg.hours, segment_time(seg, distance_unit_ratio("mile")));
@@ -576,7 +583,7 @@ mod tests {
         assert_eq!(story.kind, "Travel");
         let seg = &story.segments[0];
         assert!(seg.name.contains(" \u{2192} "));
-        let domain = transports::domain(seg.transport);
+        let domain = seg.domain;
         assert!(m.is_valid_endpoint(seg.from, domain) && m.is_valid_endpoint(seg.to, domain));
         assert!(m.is_valid_path(&seg.points, domain));
         let capitals: Vec<usize> = w

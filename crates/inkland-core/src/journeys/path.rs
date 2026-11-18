@@ -521,6 +521,7 @@ pub(crate) mod tests {
     pub(crate) fn blank(p: Vec<[f64; 2]>, c: Vec<Vec<usize>>) -> Map {
         let n = p.len();
         Map {
+            transports: crate::journeys::transports::default_transports(),
             width: 1000.0,
             height: 1000.0,
             p,

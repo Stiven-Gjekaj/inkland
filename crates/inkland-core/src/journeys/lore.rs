@@ -1365,7 +1365,7 @@ pub const ARCHETYPES: [Archetype; 18] = [
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::journeys::transports::{self, TRANSPORTS};
+    use crate::journeys::transports::{self, default_transports};
     use std::collections::BTreeSet;
 
     /// The modern types stay in the list for the user. Generation never
@@ -1386,7 +1386,8 @@ mod tests {
         for a in &ARCHETYPES {
             for (domain, weights) in a.transports {
                 for (name, _) in *weights {
-                    let t = transports::get(name);
+                    let list = default_transports();
+                    let t = transports::get(&list, name);
                     assert_eq!(t.map(|t| t.domain), Some(*domain), "{}: {name}", a.key);
                 }
             }
@@ -1410,11 +1411,12 @@ mod tests {
             .flat_map(|a| a.transports.iter().flat_map(|t| t.1.iter().map(|w| w.0)))
             .collect();
         assert!(named.iter().all(|n| !MODERN.contains(n)));
-        let unused: Vec<&str> = TRANSPORTS
+        let list = default_transports();
+        let unused: Vec<&str> = list
             .iter()
-            .filter(|t| t.domain != Domain::Stay && !MODERN.contains(&t.name))
-            .filter(|t| !named.contains(t.name))
-            .map(|t| t.name)
+            .filter(|t| t.domain != Domain::Stay && !MODERN.contains(&t.name.as_str()))
+            .filter(|t| !named.contains(t.name.as_str()))
+            .map(|t| t.name.as_str())
             .collect();
         assert!(unused.is_empty(), "{unused:?}");
     }

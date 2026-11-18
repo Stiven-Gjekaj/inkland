@@ -40,7 +40,7 @@ struct Leg<'a> {
     from: &'a Burg,
     to: &'a Burg,
     domain: Domain,
-    transport: &'static Transport,
+    transport: &'a Transport,
     avoid_roads: bool,
     points: Vec<Point>,
     distance: f64,
@@ -360,8 +360,9 @@ impl<'a, P: Pathfinder> Gen<'a, '_, P> {
     /// The rolled transport of the party, else another transport it
     /// names, else the slowest transport of the domain
     /// (`resolveTransport`).
-    fn resolve_transport(&mut self, a: &Archetype, domain: Domain) -> Option<&'static Transport> {
-        let in_domain: Vec<&'static Transport> = transports::in_domain(domain).collect();
+    fn resolve_transport(&mut self, a: &Archetype, domain: Domain) -> Option<&'a Transport> {
+        let in_domain: Vec<&'a Transport> =
+            transports::in_domain(&self.map.transports, domain).collect();
         if in_domain.is_empty() {
             return None;
         }
@@ -454,7 +455,8 @@ impl<'a, P: Pathfinder> Gen<'a, '_, P> {
     fn build_segments(&mut self, a: &Archetype, legs: &[Leg<'a>]) -> Vec<Segment> {
         // FMG lets the user remove the stay transport; the list of inkland
         // always has it.
-        let stay = transports::by_domain(Domain::Stay).expect("the transports have a stay");
+        let stay = transports::by_domain(&self.map.transports, Domain::Stay)
+            .expect("the transports have a stay");
         let mut plans: Vec<Plan> = Vec::new();
         for (index, leg) in legs.iter().enumerate() {
             let harbor_wait = leg.domain == Domain::Water && self.rng.p(HARBOR_WAIT_CHANCE);
@@ -589,7 +591,9 @@ impl<'a, P: Pathfinder> Gen<'a, '_, P> {
             name,
             from: cell,
             to: cell,
-            transport: stay.name,
+            transport: stay.name.clone(),
+            domain: stay.domain,
+            hours_per_day: transports::resolve_hours_per_day(stay),
             speed: 0.0,
             distance: 0.0,
             points: vec![self.map.point(cell)],
@@ -780,7 +784,9 @@ fn make_travel(leg: &Leg, slice: Slice, name: String) -> Segment {
         name,
         from: slice.points[0].cell,
         to: slice.points[slice.points.len() - 1].cell,
-        transport: leg.transport.name,
+        transport: leg.transport.name.clone(),
+        domain: leg.transport.domain,
+        hours_per_day: transports::resolve_hours_per_day(leg.transport),
         speed: leg.transport.speed,
         distance: slice.distance,
         points: slice.points,
@@ -905,7 +911,10 @@ mod tests {
             assert!(s.len() <= MAX_SEGMENTS);
             lengths.push(s.len());
             for stay in s.iter().filter(|x| x.speed == 0.0) {
-                assert_eq!(transports::domain(stay.transport), Domain::Stay);
+                assert_eq!(
+                    transports::domain(&m.transports, &stay.transport),
+                    Domain::Stay
+                );
                 assert!(stay.duration.unwrap() > 0.0);
                 assert_eq!(stay.distance, 0.0);
                 assert_eq!(stay.from, stay.to);
@@ -915,7 +924,10 @@ mod tests {
             for t in travel {
                 assert!(t.points.len() > 1);
                 assert!(t.distance > 0.0);
-                assert_eq!(Some(t.speed), transports::get(t.transport).map(|x| x.speed));
+                assert_eq!(
+                    Some(t.speed),
+                    transports::get(&m.transports, &t.transport).map(|x| x.speed)
+                );
                 assert_eq!(t.points[0].cell, t.from);
                 assert_eq!(t.points[t.points.len() - 1].cell, t.to);
             }
@@ -936,7 +948,7 @@ mod tests {
                 continue;
             }
             for s in j.segments.iter().filter(|s| !is_stay(s)) {
-                if transports::domain(s.transport) == Domain::Air {
+                if transports::domain(&m.transports, &s.transport) == Domain::Air {
                     air += 1;
                 } else {
                     ground += 1;
@@ -956,7 +968,7 @@ mod tests {
         for _ in 0..40 {
             let j = generate(&m, &Straight, &mut r).unwrap();
             names.insert(j.name);
-            kinds.extend(j.segments.iter().map(|s| s.transport));
+            kinds.extend(j.segments.iter().map(|s| s.transport.clone()));
         }
         assert!(names.len() > 10, "{names:?}");
         assert!(kinds.len() > 2, "{kinds:?}");

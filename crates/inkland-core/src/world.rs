@@ -88,6 +88,8 @@ pub struct World {
     pub economy: crate::economy::Economy,
     /// The roster of military units (FMG `options.military`).
     pub military_units: Vec<crate::military::Unit>,
+    /// The transports of the journeys (FMG `options.transports`).
+    pub transports: Vec<crate::journeys::Transport>,
     /// The stability of the states and their provinces, after the
     /// military.
     pub stability: crate::stability::Stability,
@@ -515,6 +517,7 @@ impl World {
         // The journeys run last, as in FMG (`Journeys.generate`). Later
         // stages go before them.
         let measurers = crate::annotations::default_ruler(&grid, &features, society.cells.px);
+        let transports = crate::journeys::transports::default_transports();
         let journeys = crate::journeys::generate(&crate::journeys::Input {
             config,
             grid: &grid,
@@ -526,6 +529,7 @@ impl World {
             society: &society,
             roads: &roads,
             sea_routes: &sea_routes,
+            transports: &transports,
         });
         Ok(World {
             seed: config.seed,
@@ -562,6 +566,7 @@ impl World {
             markers,
             economy,
             military_units,
+            transports,
             stability,
             zones,
             journeys,

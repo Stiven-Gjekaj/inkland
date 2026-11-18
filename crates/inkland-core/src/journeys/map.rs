@@ -34,6 +34,8 @@ pub struct Burg {
 
 /// The cells, routes, and places that journeys read.
 pub struct Map {
+    /// The transports that a party can take.
+    pub transports: Vec<super::Transport>,
     /// The size of the map, in world units.
     pub width: f64,
     pub height: f64,
@@ -91,6 +93,7 @@ pub struct Input<'a> {
     pub society: &'a Society,
     pub roads: &'a [Road],
     pub sea_routes: &'a [Road],
+    pub transports: &'a [super::Transport],
 }
 
 /// The name of the neutral lands in FMG (`states[0].name`).
@@ -183,6 +186,7 @@ impl Map {
             .collect();
 
         Map {
+            transports: input.transports.to_vec(),
             width: input.config.frame.width,
             height: input.config.frame.height,
             p: grid.points.clone(),
@@ -258,6 +262,7 @@ pub(crate) mod tests {
             society: &w.society,
             roads: &w.roads,
             sea_routes: &w.sea_routes,
+            transports: &w.transports,
         });
         (c, w, m)
     }
