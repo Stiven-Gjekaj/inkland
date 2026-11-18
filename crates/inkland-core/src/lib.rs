@@ -29,6 +29,7 @@ pub mod journeys;
 pub mod lakes;
 pub mod markers;
 pub mod meander;
+pub mod military;
 pub mod names;
 pub mod num;
 pub mod overlay;

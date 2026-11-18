@@ -133,6 +133,8 @@ pub struct State {
     pub alert: f64,
     /// Taxes, fee, tariffs, budget, and treasury (FMG `economy`).
     pub economy: crate::economy::finance::StateFinance,
+    /// The regiments of the state, largest first (FMG `military`).
+    pub military: Vec<crate::military::Regiment>,
 }
 
 impl Default for State {
@@ -160,6 +162,7 @@ impl Default for State {
             campaigns: Vec::new(),
             alert: 1.0,
             economy: crate::economy::finance::StateFinance::default(),
+            military: Vec::new(),
         }
     }
 }

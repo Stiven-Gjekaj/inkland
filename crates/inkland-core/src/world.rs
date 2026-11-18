@@ -451,6 +451,20 @@ impl World {
             },
             &mut society,
         );
+        // The military (FMG `Military.generate`), after the taxes.
+        let era = crate::markers::era(config.seed);
+        crate::military::generate(
+            &crate::military::Input {
+                config,
+                grid: &grid,
+                features: &features,
+                biomes: &biomes,
+                religions: &religions,
+                economy: &economy,
+                era: &era,
+            },
+            &mut society,
+        );
         let markers = crate::markers::generate(&crate::markers::Input {
             config,
             grid: &grid,
