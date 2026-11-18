@@ -90,6 +90,7 @@ pub const LAYERS: &[LayerDef] = &[
     ),
     layer("ice", "Ice", Some('j'), Layer("ice")),
     layer("goods", "Goods", Some('g'), Layer("goods")),
+    layer("markets", "Markets", None, Layer("markets")),
     layer(
         "precipitation",
         "Precipitation",

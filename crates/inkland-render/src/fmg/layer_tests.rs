@@ -80,6 +80,7 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         Emblems => Some("emblems"),
         Zones => Some("zones"),
         Goods => Some("goods"),
+        Markets => Some("markets"),
         Texture | Ice | Population | Markers | Features => None,
         Coast | Regions | Roads | Places => None,
     }
@@ -585,4 +586,25 @@ fn goods_draw_the_cells_the_places_and_the_deposits() {
 
     let empty = world_with(|w| w.economy.goods.clear());
     assert!(!render_world(&empty, &[LayerName::Goods]).contains("<g id=\"goods\""));
+}
+
+#[test]
+fn markets_draw_their_areas_and_pins() {
+    let svg = render_with(&[LayerName::Markets], StyleName::Default);
+    let w = world();
+    assert!(svg.contains("<g id=\"markets\" fill-opacity=\"0.03\""));
+    for m in &w.economy.markets {
+        assert!(
+            svg.contains(&format!("<g id=\"market-{}\">", m.id)),
+            "{}",
+            m.id
+        );
+        assert!(svg.contains(&format!("<clipPath id=\"market-clip-{}\">", m.id)));
+    }
+    // A pin with the scales glyph of the style, radius 5 and stroke 5 / 8.
+    assert!(svg.contains("stroke-width=\"0.63\"/><use href=\"#glyph-2696-fe0f\""));
+    assert!(svg.contains("<symbol id=\"glyph-2696-fe0f\""));
+    parse_and_draw(&svg);
+    let empty = world_with(|w| w.economy.markets.clear());
+    assert!(!render_world(&empty, &[LayerName::Markets]).contains("<g id=\"markets\""));
 }

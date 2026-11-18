@@ -1175,6 +1175,10 @@ pub enum LayerName {
     /// deposit icons (FMG `goods`). Only `colour` mode. Draws nothing when
     /// the world has no economy.
     Goods,
+    /// The markets: the area of each market and a pin at its center (FMG
+    /// `markets`). Only `colour` mode. Draws nothing when the world has no
+    /// markets.
+    Markets,
     /// Precipitation. Only `colour` mode.
     Precipitation,
     /// Population. Only `colour` mode. Draws nothing when the world has no
@@ -1198,7 +1202,7 @@ pub enum LayerName {
 
 impl LayerName {
     /// All layer names, in the order of their declaration.
-    pub const ALL: [LayerName; 37] = [
+    pub const ALL: [LayerName; 38] = [
         LayerName::Coast,
         LayerName::Relief,
         LayerName::Rivers,
@@ -1228,6 +1232,7 @@ impl LayerName {
         LayerName::Coastline,
         LayerName::Ice,
         LayerName::Goods,
+        LayerName::Markets,
         LayerName::Precipitation,
         LayerName::Population,
         LayerName::Emblems,

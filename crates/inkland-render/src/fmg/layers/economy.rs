@@ -1,5 +1,5 @@
-//! Economy layers: goods (`draw-goods.ts`) and the trade traffic
-//! (`draw-trade-traffic.ts`).
+//! Economy layers: goods (`draw-goods.ts`), markets (`draw-markets.ts`),
+//! and the trade traffic (`draw-trade-traffic.ts`).
 //!
 //! FMG shows the goods that the user selects. inkland has no selection, so
 //! it draws the overview of FMG: each producing cell in the colour of its
@@ -8,7 +8,7 @@
 
 use super::super::Ctx;
 use super::super::color::Rgb;
-use super::super::geom::{catmull_rom, n};
+use super::super::geom::{self, basis_closed, catmull_rom, n};
 use super::super::icons;
 use inkland_core::world::World;
 use std::collections::BTreeMap;
@@ -569,6 +569,95 @@ pub fn goods(s: &mut String, ctx: &Ctx) {
         );
     }
     s.push_str("</g>\n");
+    s.push_str("</g>\n");
+}
+
+/// Markets (`drawMarkets`): the area of each market with a border in a
+/// darker colour, and a pin with an icon at its center place.
+pub fn markets(s: &mut String, ctx: &Ctx) {
+    let w = ctx.world;
+    let e = &w.economy;
+    if e.markets.is_empty() {
+        return;
+    }
+    let st = &ctx.style;
+    let size = st.option_f64(&["markets"], "size").unwrap_or(4.0);
+    let base_icon = st.option_f64(&["markets"], "iconSize").unwrap_or(5.0);
+    let icon = st.option_str(&["markets"], "icon").unwrap_or_default();
+    // FMG adds 1 / zoom; the map is drawn at zoom 1.
+    let radius = (size + 1.0).max(2.0);
+    let icon_size = (base_icon + 1.0).max(2.0);
+    let stroke_width = radius / 8.0;
+    // A pin: a triangle with its tip on the center place, and the icon in
+    // its incircle.
+    let half_width = radius * 3f64.sqrt();
+    let pin_height = radius * 3.0;
+    let paint = if icons::glyph_text(&icon).is_some() {
+        " fill=\"currentColor\""
+    } else {
+        ""
+    };
+    let rings = geom::rings(w, &|c| e.cell_market.get(c).copied().unwrap_or(0));
+    let _ = writeln!(s, "<g id=\"markets\"{}>", ctx.attrs(&["markets"], &[]));
+    for m in &e.markets {
+        let fill = if m.color.is_empty() {
+            "#dababf"
+        } else {
+            m.color.as_str()
+        };
+        super::super::hatches::ensure(ctx, fill);
+        let stroke = Rgb::parse(fill).map_or_else(|| "#000000".to_owned(), |c| c.darker(1.0).hex());
+        let fill = crate::extras::xml(fill);
+        let _ = write!(s, "<g id=\"market-{}\">", m.id);
+        if let Some(list) = rings.get(&m.id) {
+            let d: String = list
+                .iter()
+                .map(|ring| {
+                    let pts: Vec<[f64; 2]> = geom::ring_points(w, ring)
+                        .into_iter()
+                        .map(|p| ctx.p(p))
+                        .collect();
+                    basis_closed(&pts)
+                })
+                .collect();
+            let clip = format!("market-clip-{}", m.id);
+            ctx.def(
+                &clip,
+                format!("<clipPath id=\"{clip}\"><path d=\"{d}\"/></clipPath>"),
+            );
+            let _ = write!(
+                s,
+                "<path d=\"{d}\" fill=\"{fill}\" stroke=\"none\"/><path d=\"{d}\" fill=\"none\" stroke=\"{stroke}\" clip-path=\"url(#{clip})\"/>"
+            );
+        }
+        if let Some(center) = w.society.places.get((m.center as usize).wrapping_sub(1)) {
+            let [x, y] = ctx.p(center.at);
+            let top = y - pin_height;
+            let _ = write!(
+                s,
+                "<path d=\"M{},{}L{},{}L{},{}Z\" fill=\"{fill}\" fill-opacity=\"1\" stroke=\"{stroke}\" stroke-width=\"{}\"/>",
+                n(x),
+                n(y),
+                n(x - half_width),
+                n(top),
+                n(x + half_width),
+                n(top),
+                n(stroke_width)
+            );
+            if !icon.is_empty() {
+                let _ = write!(
+                    s,
+                    "<use href=\"#{}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill-opacity=\"1\"{paint}/>",
+                    crate::extras::xml(&icon),
+                    n(x - icon_size / 2.0),
+                    n(y - 2.0 * radius - icon_size / 2.0),
+                    n(icon_size),
+                    n(icon_size)
+                );
+            }
+        }
+        s.push_str("</g>\n");
+    }
     s.push_str("</g>\n");
 }
 

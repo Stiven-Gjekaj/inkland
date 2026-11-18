@@ -41,6 +41,7 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         BurgIcons => marks::burg_icons(s, ctx),
         Ice => marks::ice(s, ctx),
         Goods => economy::goods(s, ctx),
+        Markets => economy::markets(s, ctx),
         Emblems => marks::emblems(s, ctx),
         Markers => marks::markers(s, ctx),
         Features => marks::features(s, ctx),
