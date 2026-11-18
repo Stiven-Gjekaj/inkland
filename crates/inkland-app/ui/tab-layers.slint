@@ -1,5 +1,6 @@
 // The Layers tab: the variant, and a button for each map layer. A layer
-// that the renderer does not have is grey and cannot be clicked.
+// that is off is dim, as in FMG. A layer that the renderer does not have
+// cannot be clicked.
 
 import { Theme, MenuButton, Heading, Select, Tip } from "theme.slint";
 import { AppState, Actions, Lists } from "globals.slint";
@@ -42,6 +43,6 @@ export component LayersTab inherits VerticalLayout {
         }
     }
     Tip {
-        text: "Click to show or hide a layer. A grey layer is not in the renderer yet.";
+        text: "Click to show or hide a layer. A dim layer is off.";
     }
 }
