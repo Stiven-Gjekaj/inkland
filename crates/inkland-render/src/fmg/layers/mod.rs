@@ -4,6 +4,7 @@ pub(crate) mod areas;
 mod base;
 mod decor;
 pub(crate) mod economy;
+mod hachures;
 mod lines;
 pub(crate) mod marks;
 mod military;
