@@ -9,7 +9,8 @@
 //!
 //! A first argument `--name NAME` gives the table the name `NAME` in place
 //! of `FONTS`. The cap height is the larger of the cap height of the font
-//! and the top of its `H`.
+//! and the top of its `H`. A path can end in `#wght=900` to measure a
+//! variable font at that weight.
 //!
 //! The table holds the advance width of each character from U+0020 to
 //! U+024F, the cap height, and the descender. A width of 0 means that the
@@ -39,10 +40,22 @@ fn main() {
     let _ = writeln!(out, "pub const {name}: [FontMetrics; {}] = [", args.len());
     for arg in &args {
         let (family, path) = arg.split_once('=').expect("argument is Family=path");
+        let (path, axis) = match path.split_once('#') {
+            Some((p, a)) => (p, a.split_once('=')),
+            None => (path, None),
+        };
         let data = std::fs::read(path).expect("font file can be read");
         let font = FontRef::new(&data).expect("font file can be parsed");
-        let m = font.metrics(Size::unscaled(), LocationRef::default());
-        let glyphs = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+        let location = match axis {
+            Some((tag, value)) => {
+                let value: f32 = value.parse().expect("axis value is a number");
+                font.axes().location([(tag, value)])
+            }
+            None => font.axes().location::<[(&str, f32); 0]>([]),
+        };
+        let at = LocationRef::from(&location);
+        let m = font.metrics(Size::unscaled(), at);
+        let glyphs = font.glyph_metrics(Size::unscaled(), at);
         let charmap = font.charmap();
         // Some fonts give a wrong cap height. The top of `H` is the cap
         // height too; the table keeps the larger of the two.
