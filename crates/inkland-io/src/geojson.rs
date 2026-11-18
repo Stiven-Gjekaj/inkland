@@ -13,8 +13,10 @@ use inkland_core::world::World;
 use serde_json::{Value, json};
 
 /// The layers of the export, in output order.
-pub const LAYERS: [&str; 15] = [
+pub const LAYERS: [&str; 18] = [
     "coast",
+    "lakes",
+    "ice",
     "rivers",
     "regions",
     "sea_routes",
@@ -29,6 +31,7 @@ pub const LAYERS: [&str; 15] = [
     "journeys",
     "measurers",
     "deposits",
+    "population",
 ];
 
 /// The number of points of a circle region.
@@ -96,6 +99,17 @@ fn cells_geometry(world: &World, inside: &dyn Fn(usize) -> bool) -> Option<Value
     }))
 }
 
+/// The FMG group of a feature: `freshwater`, `salt`, `ocean`, `sea`,
+/// `gulf`, `continent`, and others.
+fn feature_group(world: &World, id: u32) -> Option<&'static str> {
+    world
+        .names
+        .features
+        .iter()
+        .find(|n| n.id == id)
+        .map(|n| n.group)
+}
+
 /// Parse a list of layers `a,b,c`. An empty list or `None` gives all layers.
 pub fn parse_layers(text: Option<&str>) -> Result<Vec<&'static str>, Error> {
     let Some(text) = text.filter(|t| !t.trim().is_empty()) else {
@@ -147,7 +161,39 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
         for c in &world.coastlines {
             features.push(feature(
                 json!({ "type": "LineString", "coordinates": line(&c.points) }),
-                json!({ "layer": "coast", "id": c.id, "closed": c.closed }),
+                json!({ "layer": "coast", "id": c.id, "closed": c.closed,
+                        "land": c.land, "water": c.water,
+                        "water_kind": world.features.get(c.water).kind.name(),
+                        "water_group": feature_group(world, c.water) }),
+            ));
+        }
+    }
+    if has("lakes") {
+        let lakes = world
+            .features
+            .list
+            .iter()
+            .filter(|f| f.kind == inkland_core::features::FeatureKind::Lake);
+        for f in lakes {
+            let of_cell = &world.features.of_cell;
+            let Some(geometry) = cells_geometry(world, &|c| of_cell[c] == f.id) else {
+                continue;
+            };
+            let name = world.names.features.iter().find(|n| n.id == f.id);
+            features.push(feature(
+                geometry,
+                json!({ "layer": "lakes", "id": f.id, "group": feature_group(world, f.id),
+                        "name": name.and_then(|n| n.name.clone()), "cells": f.cells,
+                        "area": round(f.area, 3) }),
+            ));
+        }
+    }
+    if has("ice") {
+        for i in &world.ice {
+            features.push(feature(
+                json!({ "type": "Polygon", "coordinates": [line(&i.points)] }),
+                json!({ "layer": "ice", "id": i.id, "type": i.kind.name(),
+                        "size": i.size.map(|v| round(v, 3)) }),
             ));
         }
     }
@@ -373,6 +419,18 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
         }
     }
 
+    if has("population") {
+        for (c, &pop) in soc.cells.pop.iter().enumerate() {
+            if pop <= 0.0 {
+                continue;
+            }
+            features.push(feature(
+                json!({ "type": "Point", "coordinates": pt(world.grid.points[c]) }),
+                json!({ "layer": "population", "cell": c, "rural": round(pop, 3) }),
+            ));
+        }
+    }
+
     json!({
         "type": "FeatureCollection",
         "crs": { "type": "name", "properties": { "name": "inkland:local" } },
@@ -457,10 +515,52 @@ mod tests {
             .iter()
             .all(|f| f["properties"]["layer"] == "coast" || f["properties"]["layer"] == "roads"));
         assert_eq!(
-            parse_layers(Some("roads,lakes")).unwrap_err().code,
+            parse_layers(Some("roads,volcanoes")).unwrap_err().code,
             ErrorCode::CliUsage
         );
         assert_eq!(parse_layers(None).unwrap(), LAYERS);
+    }
+
+    #[test]
+    fn lakes_ice_and_population_have_their_kinds_and_values() {
+        let (w, c) = world();
+        let v = export(&w, &c, &["coast", "lakes", "ice", "population"]);
+        let feats = v["features"].as_array().unwrap();
+        let of = |layer: &'static str| {
+            feats
+                .iter()
+                .filter(move |f| f["properties"]["layer"] == layer)
+        };
+        // Each coast line names the kind and the group of its water.
+        for f in of("coast") {
+            let kind = f["properties"]["water_kind"].as_str().unwrap();
+            assert!(kind == "ocean" || kind == "lake", "{kind}");
+            assert!(f["properties"]["water_group"].is_string());
+        }
+        // Each lake of the world is a MultiPolygon with its group.
+        let lakes = w
+            .features
+            .list
+            .iter()
+            .filter(|f| f.kind == inkland_core::features::FeatureKind::Lake)
+            .count();
+        assert!(lakes > 0, "the test world has a lake");
+        assert_eq!(of("lakes").count(), lakes);
+        for f in of("lakes") {
+            assert_eq!(f["geometry"]["type"], "MultiPolygon");
+            assert!(f["properties"]["group"].is_string());
+        }
+        // Each glacier and iceberg is a closed polygon.
+        assert_eq!(of("ice").count(), w.ice.len());
+        for f in of("ice") {
+            let ring = f["geometry"]["coordinates"][0].as_array().unwrap();
+            assert_eq!(ring.first(), ring.last());
+        }
+        // One point for each cell with rural population.
+        let peopled = w.society.cells.pop.iter().filter(|&&p| p > 0.0).count();
+        assert!(peopled > 0);
+        assert_eq!(of("population").count(), peopled);
+        assert!(of("population").all(|f| f["properties"]["rural"].as_f64().unwrap() > 0.0));
     }
 
     #[test]
