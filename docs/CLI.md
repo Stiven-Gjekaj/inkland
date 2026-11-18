@@ -202,6 +202,12 @@ The checks: `no_opacity`, `no_masks_filters_rgba`, `black_and_white`,
 `min_line_width`, `all_text_is_text_elements`, `font_families_allowed`, and
 `deterministic_ids`. A failed check gives exit code 1.
 
+The `min_line_width` check measures each line as it is printed. It applies
+each transform and each view box, follows each `<use>` to its target, and
+measures the lines of a pattern at the scale of the shape that it fills. A
+root `<svg>` with a width in `mm`, `cm`, `in`, `pt`, or `pc` and a view box
+maps the view box to that width. In another root, one user unit is 1 mm.
+
 ## `inkland version`
 
 Print the version, the license, and the notice of the original program.
