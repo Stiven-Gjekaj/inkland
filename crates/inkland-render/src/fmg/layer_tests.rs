@@ -373,3 +373,82 @@ fn the_pole_of_a_square_is_its_center() {
     let [x, y] = geom::polylabel(&l, 0.5);
     assert!(x < 20.0 || y < 20.0, "{x} {y}");
 }
+
+/// Each placed label box, with the halo of its style, is inside the map
+/// area, in both modes and with each style preset.
+#[test]
+fn each_label_box_with_its_halo_stays_inside_the_map() {
+    let mut runs: Vec<(RenderMode, StyleName)> = vec![(RenderMode::PrintSafe, StyleName::Default)];
+    runs.extend(StyleName::ALL.iter().map(|&s| (RenderMode::Colour, s)));
+    for (mode, style) in runs {
+        let mut c = base_config();
+        c.render.mode = mode;
+        c.render.style = style;
+        let page = Page::new(&c, &c.variants[0]);
+        let labels = if mode == RenderMode::Colour {
+            place_labels(world(), &c, &c.variants[0], &page)
+        } else {
+            crate::labels::place(world(), &c, &c.variants[0], &page)
+        };
+        assert!(!labels.placed.is_empty(), "{style:?}");
+        let [mx, my, mw, mh] = page.map_rect();
+        let s = Style::with_overrides(style, &c.render.style_overrides);
+        for l in &labels.placed {
+            // The box keeps the halo of the style free around the glyphs.
+            let reach = if mode == RenderMode::Colour {
+                layers::text::halo(&s, style_group(l.group)) * l.size
+            } else {
+                0.0
+            };
+            let f = crate::metrics::FontMetrics::of(&l.family);
+            for b in &l.boxes {
+                let [x0, y0, x1, y1] = b.bounds();
+                assert!(
+                    x0 >= mx && y0 >= my && x1 <= mx + mw && y1 <= my + mh,
+                    "{style:?} {mode:?}: {} leaves the map",
+                    l.id
+                );
+                assert!(
+                    2.0 * b.h[1] >= f.cap(l.size) + 0.6 * f.descent(l.size) + 2.0 * reach - 1e-9,
+                    "{style:?}: {} has no room for its halo",
+                    l.id
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_label_outline_is_a_part_of_the_font_size() {
+    let s = Style::preset(StyleName::Atlas);
+    // A shadow of 3 px blur gives a stroke of 0.18 of the size.
+    let css = s.attr(&["labels", "city"], "style").unwrap();
+    assert!(css.contains("white 0px 0px 3px"), "{css}");
+    let (w, color) = layers::text::outline(&s, "city").unwrap();
+    assert!((w - 0.18).abs() < 1e-9);
+    assert_eq!(color.as_deref(), Some("white"));
+    assert!((layers::text::halo(&s, "city") - 0.09).abs() < 1e-9);
+    // An outline of the style is a part of the size of the group.
+    let mut o = Style::preset(StyleName::Atlas);
+    o.set("labels.groups.city.attrs.stroke-width", json!(0.6));
+    let (w, color) = layers::text::outline(&o, "city").unwrap();
+    assert!((w - 0.1).abs() < 1e-9, "{w}");
+    assert_eq!(color, None);
+    // Each label in the SVG has the stroke width of its own size.
+    let svg = render_with(&[LayerName::Labels], StyleName::Atlas);
+    let doc = roxmltree::Document::parse(&svg).unwrap();
+    let texts: Vec<_> = doc
+        .descendants()
+        .filter(|n| {
+            n.has_tag_name("text")
+                && n.attribute("id")
+                    .is_some_and(|i| i.starts_with("label-place-"))
+        })
+        .collect();
+    assert!(!texts.is_empty());
+    for t in texts {
+        let size: f64 = t.attribute("font-size").unwrap().parse().unwrap();
+        let width: f64 = t.attribute("stroke-width").unwrap().parse().unwrap();
+        assert!((width - 0.18 * size).abs() < 0.01, "{size} {width}");
+    }
+}

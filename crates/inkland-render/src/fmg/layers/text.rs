@@ -36,6 +36,31 @@ pub fn text_shadow(css: &str) -> Option<(String, f64)> {
     Some((color?, blur))
 }
 
+/// The outline of a label group of a style: the stroke width as a part of
+/// the font size, and the colour of a halo that the CSS shadow gives.
+/// `None` for a group without an outline and without a shadow.
+pub fn outline(style: &crate::fmg::style::Style, group: &str) -> Option<(f64, Option<String>)> {
+    let path = ["labels", group];
+    let stroke_w = style.attr_f64(&path, "stroke-width").unwrap_or(0.0);
+    if stroke_w > 0.0 {
+        // The size of the group in the original program, in pixels.
+        let fmg_size = style
+            .attr_f64(&path, "font-size")
+            .filter(|v| *v > 0.0)
+            .unwrap_or(5.0);
+        return Some((stroke_w / fmg_size, None));
+    }
+    let css = style.attr(&path, "style").unwrap_or_default();
+    let (color, blur) = text_shadow(&css)?;
+    Some((0.12 + 0.02 * blur.min(6.0), Some(color)))
+}
+
+/// How far the outline of a label group reaches out of the glyphs, as a
+/// part of the font size.
+pub fn halo(style: &crate::fmg::style::Style, group: &str) -> f64 {
+    outline(style, group).map_or(0.0, |(w, _)| w / 2.0)
+}
+
 /// The label groups of the style that the placed labels use, in a fixed
 /// order.
 const GROUPS: [&str; 10] = [
@@ -80,30 +105,21 @@ pub fn labels(s: &mut String, ctx: &Ctx) {
             continue;
         };
         let path = ["labels", group];
-        let css = ctx.style.attr(&path, "style").unwrap_or_default();
-        let size_px = list.iter().map(|l| l.size / k).fold(0.0, f64::max);
-        // The size of the group in the original program, in pixels.
-        let fmg_size = ctx
-            .style
-            .attr_f64(&path, "font-size")
-            .filter(|v| *v > 0.0)
-            .unwrap_or(5.0);
-        let grow = size_px / fmg_size;
-        let stroke_w = ctx.style.attr_f64(&path, "stroke-width").unwrap_or(0.0);
         let gid = kebab(group);
-        // The outline of the style, wider with the text. Without an
-        // outline, the shadow of the style becomes a halo of its colour.
-        let stroke = if stroke_w > 0.0 {
-            format!(" stroke-width=\"{}\"", n(stroke_w * grow))
-        } else if let Some((color, blur)) = text_shadow(&css) {
-            let width = (0.12 + 0.02 * blur.min(6.0)) * size_px;
-            format!(
-                " stroke=\"{}\" stroke-width=\"{}\" stroke-opacity=\"0.85\" stroke-linejoin=\"round\" paint-order=\"stroke\"",
-                xml(&color),
-                n(width)
-            )
-        } else {
-            String::new()
+        // The outline of the style, wider with the text: each label gets
+        // its own stroke width. Without an outline, the shadow of the style
+        // becomes a halo of its colour.
+        let outline = outline(&ctx.style, group);
+        let stroke_w = match &outline {
+            Some((_, None)) => 1.0,
+            _ => 0.0,
+        };
+        let stroke = match &outline {
+            Some((_, Some(color))) => format!(
+                " stroke=\"{}\" stroke-opacity=\"0.85\" stroke-linejoin=\"round\" paint-order=\"stroke\"",
+                xml(color)
+            ),
+            _ => String::new(),
         };
         let _ = writeln!(
             s,
@@ -130,7 +146,11 @@ pub fn labels(s: &mut String, ctx: &Ctx) {
             } else {
                 String::new()
             };
-            let font = format!("font-size=\"{}\"{spacing}", n(l.size / k));
+            let width = match &outline {
+                Some((w, _)) => format!(" stroke-width=\"{}\"", n(w * l.size / k)),
+                None => String::new(),
+            };
+            let font = format!("font-size=\"{}\"{spacing}{width}", n(l.size / k));
             match &l.geometry {
                 Geometry::Point {
                     x,

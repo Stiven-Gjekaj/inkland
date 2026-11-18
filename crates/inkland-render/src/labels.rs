@@ -22,7 +22,8 @@ use inkland_core::geom::Shape;
 use inkland_core::world::World;
 use std::collections::{BTreeMap, VecDeque};
 
-/// Free space around the text, for the halo.
+/// Free space around the text, for the halo of `print-safe` mode. A label
+/// with a wider halo gets more space (see `Look::halo`).
 const PAD: f64 = 0.3;
 /// Width of the white halo behind each label.
 pub const HALO_MM: f64 = 0.6;
@@ -273,18 +274,25 @@ fn symbol_radius(kind: PlaceKind, capital: bool) -> f64 {
     }
 }
 
+/// The free space around a text of `size` with a halo that reaches `halo`
+/// times the size out of the glyphs.
+fn pad_of(size: f64, halo: f64) -> f64 {
+    PAD + halo * size
+}
+
 /// The box of a text with its baseline at `y` and its anchor at `x`.
-fn text_box(x: f64, y: f64, anchor: &str, w: f64, f: &FontMetrics, size: f64) -> Obb {
+#[allow(clippy::too_many_arguments)]
+fn text_box(x: f64, y: f64, anchor: &str, w: f64, f: &FontMetrics, size: f64, pad: f64) -> Obb {
     let x0 = match anchor {
         "end" => x - w,
         "middle" => x - w / 2.0,
         _ => x,
     };
     Obb::rect(
-        x0 - PAD,
-        y - f.cap(size) - PAD,
-        x0 + w + PAD,
-        y + 0.6 * f.descent(size) + PAD,
+        x0 - pad,
+        y - f.cap(size) - pad,
+        x0 + w + pad,
+        y + 0.6 * f.descent(size) + pad,
     )
 }
 
@@ -295,13 +303,14 @@ fn point_candidates(
     text: &str,
     f: &FontMetrics,
     size: f64,
+    pad: f64,
 ) -> Vec<Candidate> {
     let w = f.width(text, size, 0.0);
     let (ch, dd) = (f.cap(size), 0.6 * f.descent(size));
     // Clear of the symbol box at the side, above, and below.
-    let side = r + PAD + 0.2;
-    let above = at[1] - r - 0.2 - PAD - dd;
-    let below = at[1] + r + 0.2 + PAD + ch;
+    let side = r + pad + 0.2;
+    let above = at[1] - r - 0.2 - pad - dd;
+    let below = at[1] + r + 0.2 + pad + ch;
     let [x, y] = at;
     let half = 0.5 * side;
     let spots: [(f64, f64, &'static str); 8] = [
@@ -318,7 +327,7 @@ fn point_candidates(
         .into_iter()
         .enumerate()
         .map(|(i, (bx, by, anchor))| Candidate {
-            boxes: vec![text_box(bx, by, anchor, w, f, size)],
+            boxes: vec![text_box(bx, by, anchor, w, f, size, pad)],
             geometry: Geometry::Point {
                 x: bx,
                 y: by,
@@ -370,6 +379,7 @@ fn area_candidates(
     text: &str,
     f: &FontMetrics,
     size: f64,
+    pad: f64,
     spread: (f64, f64),
 ) -> Vec<Candidate> {
     let g = &world.grid;
@@ -444,7 +454,7 @@ fn area_candidates(
                 // The middle of the run, moved so that the text stays in the map.
                 let mid = (ahead - back) / 2.0;
                 let mut centre = [q[0] + axis[0] * mid, q[1] + axis[1] * mid];
-                let half = w / 2.0 + PAD;
+                let half = w / 2.0 + pad;
                 let (lo, hi, k) = if turn == 0 {
                     (inner[0] + half, inner[2] - half, 0)
                 } else {
@@ -465,7 +475,7 @@ fn area_candidates(
                 let b = Obb {
                     c: centre,
                     u: axis,
-                    h: [half, (ch + dd) / 2.0 + PAD],
+                    h: [half, (ch + dd) / 2.0 + pad],
                 };
                 // The part of the label outside the area costs more.
                 let mut outside = 0;
@@ -542,6 +552,7 @@ fn sub_line(pts: &[[f64; 2]], acc: &[f64], s0: f64, s1: f64) -> Vec<[f64; 2]> {
 
 /// Candidates for a river label: straight parts of the river, inside the
 /// map. The text sits above the line and reads from left to right.
+#[allow(clippy::too_many_arguments)]
 fn river_candidates(
     line: &[[f64; 2]],
     inner: [f64; 4],
@@ -549,6 +560,7 @@ fn river_candidates(
     text: &str,
     f: &FontMetrics,
     size: f64,
+    pad: f64,
     spacing: f64,
 ) -> Vec<Candidate> {
     if line.len() < 2 {
@@ -601,7 +613,7 @@ fn river_candidates(
                             (p[1] + q[1]) / 2.0 + up[1] * lift,
                         ],
                         u,
-                        h: [l / 2.0 + PAD, (ch + dd) / 2.0 + PAD],
+                        h: [l / 2.0 + pad, (ch + dd) / 2.0 + pad],
                     }
                 })
                 .collect();
@@ -702,12 +714,17 @@ fn fixed_obstacles(
     (out, hideable)
 }
 
-/// The look of a label group: its font family and its letter case.
+/// The look of a label group: its font family, its letter case, and its
+/// halo.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Look {
     pub family: String,
     /// `true` for text in capital letters.
     pub upper: bool,
+    /// How far the halo reaches out of the glyphs, as a part of the font
+    /// size. The placer keeps this space free around the text, in addition
+    /// to the space for the halo of `print-safe` mode.
+    pub halo: f64,
 }
 
 impl Look {
@@ -745,6 +762,7 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
             fonts.labels.clone()
         },
         upper: false,
+        halo: 0.0,
     };
     place_with(world, config, variant, page, &style)
 }
@@ -832,6 +850,7 @@ pub fn place_with(
                 &text,
                 f,
                 size,
+                pad_of(size, look.halo),
             ),
             id,
             kind: Kind::Place,
@@ -881,7 +900,16 @@ pub fn place_with(
         let spacing = 0.1 * size;
         requests.push(Request {
             place: None,
-            candidates: river_candidates(&river_lines[i], inner, i, &name, f, size, spacing),
+            candidates: river_candidates(
+                &river_lines[i],
+                inner,
+                i,
+                &name,
+                f,
+                size,
+                pad_of(size, look.halo),
+                spacing,
+            ),
             id: format!("label-river-{key}"),
             kind: Kind::River,
             group: "river",
@@ -912,7 +940,17 @@ pub fn place_with(
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
             place: None,
-            candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.05, 0.3)),
+            candidates: area_candidates(
+                world,
+                page,
+                inner,
+                &area,
+                &name,
+                f,
+                size,
+                pad_of(size, look.halo),
+                (0.05, 0.3),
+            ),
             id: format!("label-lake-{}", n.id),
             kind: Kind::Region,
             group: "lake",
@@ -945,7 +983,17 @@ pub fn place_with(
             let f = FontMetrics::of(&look.family);
             requests.push(Request {
                 place: None,
-                candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.1, 0.6)),
+                candidates: area_candidates(
+                    world,
+                    page,
+                    inner,
+                    &area,
+                    &name,
+                    f,
+                    size,
+                    pad_of(size, look.halo),
+                    (0.1, 0.6),
+                ),
                 id: format!("label-water-{}", n.id),
                 kind: Kind::Region,
                 group: "ocean",
@@ -984,7 +1032,17 @@ pub fn place_with(
             .is_some_and(|p| in_view(p.at));
         requests.push(Request {
             place: None,
-            candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.15, 0.8)),
+            candidates: area_candidates(
+                world,
+                page,
+                inner,
+                &area,
+                &name,
+                f,
+                size,
+                pad_of(size, look.halo),
+                (0.15, 0.8),
+            ),
             id: format!("label-state-{}", st.id),
             kind: Kind::State,
             group: "state",
@@ -1018,7 +1076,17 @@ pub fn place_with(
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
             place: None,
-            candidates: area_candidates(world, page, inner, &area, &name, f, size, (0.05, 0.5)),
+            candidates: area_candidates(
+                world,
+                page,
+                inner,
+                &area,
+                &name,
+                f,
+                size,
+                pad_of(size, look.halo),
+                (0.05, 0.5),
+            ),
             id: format!("label-region-{}", pin.id),
             kind: Kind::Region,
             group: "region",
@@ -1047,14 +1115,32 @@ pub fn place_with(
                 if !in_view(at) {
                     continue;
                 }
-                point_candidates(page.to_page(at), FEATURE_RADIUS, &name, f, size)
+                point_candidates(
+                    page.to_page(at),
+                    FEATURE_RADIUS,
+                    &name,
+                    f,
+                    size,
+                    pad_of(size, look.halo),
+                )
             } else if let Some(line) = &feat.polyline {
                 let line: Vec<[f64; 2]> = line.iter().map(|&p| page.to_page(p)).collect();
-                river_candidates(&line, inner, usize::MAX, &name, f, size, 0.1 * size)
+                let pad = pad_of(size, look.halo);
+                river_candidates(&line, inner, usize::MAX, &name, f, size, pad, 0.1 * size)
             } else if let Some(poly) = &feat.polygon {
                 let shape = Shape::Polygon(poly.clone());
                 let area: Vec<bool> = (0..g.len()).map(|c| shape.contains(g.points[c])).collect();
-                area_candidates(world, page, inner, &area, &name, f, size, (0.05, 0.5))
+                area_candidates(
+                    world,
+                    page,
+                    inner,
+                    &area,
+                    &name,
+                    f,
+                    size,
+                    pad_of(size, look.halo),
+                    (0.05, 0.5),
+                )
             } else {
                 continue;
             };
@@ -1267,6 +1353,7 @@ mod tests {
         let look = |group: &'static str| Look {
             family: format!("Family {group}"),
             upper: group == "city",
+            halo: 0.0,
         };
         let labels = place_with(&w, &c, &c.variants[0], &page, &look);
         let ostrey = labels

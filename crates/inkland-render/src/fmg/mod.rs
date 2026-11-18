@@ -215,6 +215,7 @@ pub fn place_labels(world: &World, config: &Config, variant: &Variant, page: &Pa
                 .attr(&path, "font-family")
                 .unwrap_or_else(|| config.render.fonts.labels.clone()),
             upper: css.contains("uppercase"),
+            halo: layers::text::halo(&style, style_group(group)),
         }
     };
     crate::labels::place_with(world, config, variant, page, &look)

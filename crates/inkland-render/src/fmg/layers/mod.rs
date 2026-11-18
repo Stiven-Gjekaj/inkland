@@ -7,7 +7,7 @@ mod lines;
 pub(crate) mod marks;
 pub(crate) mod overlays;
 mod palette;
-mod text;
+pub(crate) mod text;
 
 pub use decor::boxes;
 pub use palette::Palette;
