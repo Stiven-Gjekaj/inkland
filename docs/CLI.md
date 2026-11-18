@@ -109,6 +109,14 @@ river, and road with their distances. The state, the province, and the
 nearest place have `coa`, the coat of arms. `nearest_river.side` is `left` or
 `right` as one looks downstream.
 
+`feature.group` is the FMG group of the feature: for example `ocean`, `sea`,
+`gulf`, `freshwater`, `salt`, `frozen`, `continent`, or `isle`. `coast` gives
+`distance` (1 for land next to water, then 2, 3, ...; -1 for water next to
+land, then -2, -3, ...), `haven` (the nearest water cell of a coastal land
+cell), and `harbor` (the number of water cells next to a land cell). `ice` is
+the glacier or iceberg over the point, with its id and type.
+`population` is the rural population of the cell.
+
 The output also gives the data of the economy and the story stages:
 `deposit` (the good of the cell), `market` (its id and the name of its
 center), `prosperity` (0 to 100, land only), `stability` (of the state and
@@ -127,7 +135,7 @@ inkland export --world out/world.json --format geojson --layers coast,rivers,roa
 |---|---|
 | `--world FILE` | The `world.json` of a generated world. |
 | `--format geojson` | The format. Only `geojson`. |
-| `--layers LIST` | The layers, separated by commas: `coast`, `rivers`, `regions`, `sea_routes`, `roads`, `places`, `markers`, `borders`, `zones`, `markets`, `trade`, `regiments`, `journeys`, `measurers`, `deposits`. Default: all. |
+| `--layers LIST` | The layers, separated by commas: `coast`, `lakes`, `ice`, `rivers`, `regions`, `sea_routes`, `roads`, `places`, `markers`, `borders`, `zones`, `markets`, `trade`, `regiments`, `journeys`, `measurers`, `deposits`, `population`. Default: all. |
 
 The coordinates are config units of the frame with 3 decimals, not WGS84.
 `crs` is `inkland:local`. Each feature has `layer`, an id, and, where they
@@ -136,6 +144,13 @@ of arms. `zones` and `markets` are MultiPolygons of their cells, with the
 holes in each outer ring. `trade` has one line for each route link that
 carries goods, with the units of the day. `regiments` and `deposits` are
 points. `journeys` has one line for each segment.
+
+A `coast` line names its land and water features, with `water_kind`
+(`ocean` or `lake`) and `water_group`. `lakes` are MultiPolygons of the
+cells of each lake, with the group, the name, the number of cells, and the
+area. `ice` has one Polygon for each glacier and iceberg, with its type and
+the size of an iceberg. `population` has one point for each cell with rural
+population.
 
 ## `inkland emblem`
 
