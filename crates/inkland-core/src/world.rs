@@ -290,6 +290,24 @@ impl World {
         };
         let courses = crate::courses::plan_courses(&plan, &mut heights)?;
 
+        // Each pinned road keeps a land path between its stops. The cells
+        // of the water regions stay water.
+        let keep_water: Vec<bool> = (0..grid.len())
+            .map(|c| {
+                regions
+                    .iter()
+                    .any(|r| r.pin.kind.is_water() && r.contains(grid.points[c]))
+            })
+            .collect();
+        crate::roads::keep_corridors(
+            &grid,
+            &mut heights,
+            sea_level,
+            config,
+            &pin_cells,
+            &keep_water,
+        );
+
         let features = Features::mark_pack(&grid, &heights, sea_level);
         for r in &regions {
             if r.pin.kind != RegionKind::Sea || r.pin.landlocked {

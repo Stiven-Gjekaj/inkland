@@ -4,6 +4,12 @@
 //! more on slopes, in wetland, and into a river cell (a bridge or a ford).
 //! A cell that a road already uses costs less, so roads share a path.
 //!
+//! A pinned road keeps a land corridor. Before the features are marked,
+//! `keep_corridors` makes the water cells on the straight legs of the
+//! road into land if no land path joins its stops, or if the shortest
+//! land path is longer than the tolerance permits. A pinned water region
+//! stays water.
+//!
 //! Pinned roads come first, in config order. A pinned road goes from its
 //! start place through its `via` points to its end place. With a
 //! `target_length`, a road that is too short gets a detour: a waypoint to
@@ -284,6 +290,72 @@ fn search_through(grid: &Grid, stops: &[usize], step: StepCost) -> Option<Vec<us
         }
     }
     Some(path)
+}
+
+/// Keep a land corridor for each pinned road, before the features are
+/// marked. A pinned road needs a land path between its stops. With a
+/// `target_length`, the shortest land path must also be short enough.
+/// If the terrain does not give this, the water cells on the straight
+/// legs between the stops become land at sea level. A cell where
+/// `keep_water` is `true` stays water. `place_cells` holds the cell of
+/// each pinned place, in config order.
+pub fn keep_corridors(
+    grid: &Grid,
+    heights: &mut [f64],
+    sea_level: f64,
+    config: &Config,
+    place_cells: &[usize],
+    keep_water: &[bool],
+) {
+    let place_cell = |id: &str| -> Option<usize> {
+        let i = config.pins.points.iter().position(|p| p.id == id)?;
+        place_cells.get(i).copied()
+    };
+    for pin in &config.pins.roads {
+        let mut stops = Vec::new();
+        let mut known = true;
+        let ids = std::iter::once(Waypoint::Place(pin.from.clone()))
+            .chain(pin.via.iter().cloned())
+            .chain(std::iter::once(Waypoint::Place(pin.to.clone())));
+        for w in ids {
+            match w {
+                Waypoint::Place(id) => match place_cell(&id) {
+                    Some(c) => stops.push(c),
+                    None => known = false,
+                },
+                Waypoint::Point(p) => stops.push(grid.find_cell(p[0], p[1])),
+            }
+        }
+        if !known {
+            // The road stage gives the error.
+            continue;
+        }
+        let land = |c: usize| heights[c] >= sea_level;
+        let step = |a: usize, b: usize| land(b).then(|| dist(grid.points[a], grid.points[b]));
+        let fixed = |c: usize| place_cells.contains(&c);
+        let needed = match search_through(grid, &stops, &step) {
+            None => true,
+            Some(cells) => pin.target_length.is_some_and(|t| {
+                line_length(&taut_line(grid, &cells, &fixed)) > t * (1.0 + pin.tolerance)
+            }),
+        };
+        if !needed {
+            continue;
+        }
+        for w in stops.windows(2) {
+            let (a, b) = (grid.points[w[0]], grid.points[w[1]]);
+            // Walk the leg in steps much shorter than a cell.
+            let spacing = (grid.width * grid.height / grid.len() as f64).sqrt();
+            let n = (dist(a, b) / (spacing / 8.0)).ceil().max(1.0) as usize;
+            for k in 0..=n {
+                let t = k as f64 / n as f64;
+                let c = grid.find_cell(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+                if heights[c] < sea_level && !keep_water[c] {
+                    heights[c] = sea_level;
+                }
+            }
+        }
+    }
 }
 
 /// Route all roads.
@@ -801,6 +873,58 @@ mod tests {
             assert_eq!(*r.points.first().unwrap(), [150.0, 120.0]);
             assert_eq!(*r.points.last().unwrap(), [22.0, 180.0]);
         }
+    }
+
+    /// Two halves of land with a strait between them, and a road from one
+    /// half to the other.
+    fn strait(regions: serde_json::Value, target: Option<f64>) -> Config {
+        let mut road = json!({ "id": "r", "from": "ostrey", "to": "harrowgate" });
+        if let Some(t) = target {
+            road["target_length"] = json!(t);
+            road["tolerance"] = json!(0.05);
+        }
+        serde_json::from_value(json!({
+            "version": 1, "seed": 11, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 4000,
+                       "template": { "steps": ["Add 35 all", "Strait 6 vertical 0 0"] } },
+            "pins": {
+                "points": [
+                    { "id": "ostrey", "kind": "city", "at": [60, 150] },
+                    { "id": "harrowgate", "kind": "town", "at": [340, 150] }
+                ],
+                "regions": regions,
+                "roads": [road]
+            }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_road_keeps_a_land_corridor_over_water() {
+        // Without the road, the strait cuts the land in two.
+        let mut c = strait(json!([]), None);
+        c.pins.roads.clear();
+        let w = World::build(&c).unwrap();
+        let (a, b) = (w.pin_cells[0], w.pin_cells[1]);
+        assert_ne!(w.features.of_cell[a], w.features.of_cell[b]);
+
+        for target in [None, Some(290.0)] {
+            let w = World::build(&strait(json!([]), target)).unwrap();
+            let r = pinned(&w, 0);
+            let ids: Vec<&str> = r.stops.iter().map(|s| s.place.as_str()).collect();
+            assert_eq!(ids, ["ostrey", "harrowgate"]);
+            assert!(r.cells.iter().all(|&c| w.features.is_land(c)));
+            if let Some(t) = target {
+                assert!((r.length - t).abs() <= t * 0.05, "length {}", r.length);
+            }
+        }
+    }
+
+    #[test]
+    fn a_road_does_not_cross_a_pinned_sea() {
+        let regions = json!([{ "id": "sea", "kind": "sea", "box": [150, 0, 250, 300] }]);
+        let e = World::build(&strait(regions, None)).unwrap_err();
+        assert_eq!(e.code, crate::error::ErrorCode::RoadNoPath);
     }
 
     #[test]
