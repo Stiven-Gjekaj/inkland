@@ -34,6 +34,9 @@ _A faithful remake of Azgaar's Fantasy Map Generator, with hard pins, print-safe
 > Colour mode draws each FMG layer with the 15 style presets.
 > [docs/PORT.md](docs/PORT.md) compares each stage with FMG, and says what
 > is not ported yet.
+> Version 1.1 adds the desktop app to the release packages. Its data
+> dialogs add markets, regiments, zones, journeys, measurers, and legend
+> boxes on the map.
 
 ---
 
@@ -138,10 +141,18 @@ The four maps come from one config: `fixtures/configs/full.json`.
 
 Download the package for your host from the
 [latest release](https://github.com/Stiven-Gjekaj/inkland/releases/latest).
-Each package holds the `inkland` binary, the licences, and the reference
-documents. `SHA256SUMS.txt` holds the checksum of each package.
+`SHA256SUMS.txt` holds the checksum of each package.
 
-The Linux package is one static binary with no runtime dependencies.
+| Package | What it holds |
+|---|---|
+| `inkland-<version>-<target>` | The `inkland` command line tool, the licences, and the reference documents |
+| `inkland-app-<version>-<target>` | The `inkland-app` desktop app, the licences, and `docs/APP.md` |
+
+The Linux package of the command line tool is one static binary with no
+runtime dependencies. The Linux app needs the system libraries of a
+desktop: fontconfig, freetype, xkbcommon, and X11 or Wayland.
+The app binaries are not signed. On macOS, remove the quarantine flag
+with `xattr -d com.apple.quarantine inkland-app` before the first start.
 
 To build from source, use Rust 1.100:
 
