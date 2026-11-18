@@ -120,6 +120,10 @@ fn path_length(grid: &Grid, cells: &[usize]) -> f64 {
         .sum()
 }
 
+/// The cost factor of a step into a cell of an earlier leg of the same
+/// road. A block can wall in a stop, so a reuse only costs more.
+const REUSE_COST: f64 = 4.0;
+
 struct Router<'a> {
     input: &'a Input<'a>,
     river_of: Vec<u32>,
@@ -158,8 +162,8 @@ impl Router<'_> {
         Some(c)
     }
 
-    /// The least-cost path from `from` to `to`, both included. Cells in
-    /// `avoid` are not used.
+    /// The least-cost path from `from` to `to`, both included. A step into
+    /// a cell of `avoid` costs `REUSE_COST` times more.
     fn route(&self, from: usize, to: usize, avoid: &[bool]) -> Option<Vec<usize>> {
         let grid = self.input.grid;
         let n = grid.len();
@@ -185,10 +189,12 @@ impl Router<'_> {
                 continue;
             }
             for m in grid.neighbors(c) {
-                if avoid[m] && m != to {
+                let Some(mut s) = self.step(c, m) else {
                     continue;
+                };
+                if avoid[m] && m != to {
+                    s *= REUSE_COST;
                 }
-                let Some(s) = self.step(c, m) else { continue };
                 let next = cost[c] + s;
                 if next < cost[m] {
                     cost[m] = next;
@@ -210,7 +216,8 @@ impl Router<'_> {
             for &c in &leg[1..] {
                 path.push(c);
             }
-            // A later leg does not go back over this leg.
+            // A later leg goes back over this leg only where no other way
+            // is near.
             for &c in &leg[..leg.len() - 1] {
                 avoid[c] = true;
             }
@@ -640,6 +647,61 @@ mod tests {
                 r.length
             );
         }
+    }
+
+    /// A book layout: a road from a city through a village on the coast to
+    /// a port.
+    fn book(cells: u32) -> Config {
+        serde_json::from_value(json!({
+            "version": 1, "seed": 1717, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": cells, "template": "pangea", "culture_set": "high-fantasy",
+                       "cultures": 5, "states": 4, "towns": 25,
+                       "places": { "min_distance_from_pins": 10 } },
+            "pins": {
+                "points": [
+                    { "id": "kingsholm", "kind": "city", "at": [150, 120], "capital_of": "The Kingdom" },
+                    { "id": "harbour", "kind": "city", "at": [22, 180], "port": true, "capital_of": "The Free Port" },
+                    { "id": "ford", "kind": "village", "at": [130, 200] },
+                    { "id": "old-keep", "kind": "fortress", "at": [230, 100] },
+                    { "id": "barrow", "kind": "ruin", "at": [300, 180] }
+                ],
+                "regions": [
+                    { "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300] },
+                    { "id": "grey-teeth", "kind": "mountains",
+                      "polygon": [[200, 40], [270, 50], [260, 130], [210, 120]], "edge": 12 },
+                    { "id": "wolds", "kind": "hills", "circle": { "at": [240, 220], "r": 30 },
+                      "height": [35, 50], "edge": 8 },
+                    { "id": "low-fen", "kind": "marsh",
+                      "polygon": [[60, 230], [100, 225], [105, 260], [65, 265]] }
+                ],
+                "rivers": [
+                    { "id": "dunn", "source": { "region": "grey-teeth" },
+                      "through": [{ "place": "kingsholm" }], "mouth": [19, 110] },
+                    { "id": "brann", "source": { "region": "wolds" },
+                      "through": [{ "place": "ford" }], "mouth": { "region": "low-fen" } },
+                    { "id": "corrin", "source": [120, 150], "mouth": { "place": "harbour" } },
+                    { "id": "tey", "source": [110, 260], "mouth": { "place": "harbour" } }
+                ],
+                "roads": [
+                    { "id": "kings-road", "from": "kingsholm", "to": "harbour", "via": ["ford"],
+                      "target_length": 240, "tolerance": 0.05 }
+                ]
+            }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_later_leg_can_go_back_over_an_earlier_leg() {
+        // At 50000 cells the first leg walls in the village. Before, the
+        // second leg could not leave it, and the build failed.
+        let w = World::build(&book(50_000)).unwrap();
+        let ids: Vec<&str> = pinned(&w, 0)
+            .stops
+            .iter()
+            .map(|s| s.place.as_str())
+            .collect();
+        assert_eq!(ids, ["kingsholm", "ford", "harbour"]);
     }
 
     #[test]
