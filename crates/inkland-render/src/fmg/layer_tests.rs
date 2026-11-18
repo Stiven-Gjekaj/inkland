@@ -769,3 +769,16 @@ fn markers_show_the_economy_kinds_with_the_icons_of_fmg() {
         assert!(svg[at..end].contains(&format!(">{icon}</text>")), "{kind}");
     }
 }
+
+#[test]
+fn empty_legend_boxes_add_nothing_to_the_legend() {
+    // Generation adds no legend box (`Legends.initiate`), so the legend
+    // layer draws only its own box of the area layer.
+    assert!(world().legends.is_empty());
+    let layers = [LayerName::States, LayerName::Legend];
+    let svg = render_with(&layers, StyleName::Default);
+    assert_eq!(svg.matches("<g id=\"legend\"").count(), 1);
+    assert!(!svg.contains("data-legend"));
+    let w = world_with(|w| w.legends.clear());
+    assert_eq!(render_world(&w, &layers), svg);
+}
