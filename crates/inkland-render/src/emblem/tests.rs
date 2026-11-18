@@ -194,3 +194,10 @@ fn the_same_arms_give_the_same_bytes() {
         document(c, "coa-a", &Look::COLOUR, 100.0)
     );
 }
+
+#[test]
+fn line_widths_round_up() {
+    assert_eq!(up(1.411), "1.42");
+    assert_eq!(up(1.42), "1.42");
+    assert_eq!(up(2.0), "2");
+}

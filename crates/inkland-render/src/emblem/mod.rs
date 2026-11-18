@@ -76,6 +76,13 @@ fn num(v: f64) -> String {
     format!("{r}")
 }
 
+/// A line width with at most 2 decimals, rounded up, so that it is never
+/// thinner than asked.
+fn up(v: f64) -> String {
+    let r = libm::ceil(v * 100.0 - 1e-9) / 100.0;
+    format!("{r}")
+}
+
 /// The shape of a shield, or `None`.
 pub fn shape(name: &str) -> Option<&'static Shape> {
     data::SHIELDS
@@ -311,7 +318,7 @@ impl Painter<'_> {
         let inner = if let Some(shape_name) = inescutcheon_shape(name, self.shield) {
             let path = shape(&shape_name).map_or(self.shield_path, |s| s.path);
             let w = width
-                .map(|w| format!(" stroke-width=\"{}\"", num(w)))
+                .map(|w| format!(" stroke-width=\"{}\"", up(w)))
                 .unwrap_or_default();
             format!("<path transform=\"translate(67 67) scale(.33)\" d=\"{path}\"{w}/>")
         } else {
@@ -668,7 +675,7 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
                 };
                 let (tr, _) = use_transform(c, at, sh.size);
                 let width = if look.hatching {
-                    format!(" stroke-width=\"{}\"", num(lw / use_scale))
+                    format!(" stroke-width=\"{}\"", up(lw / use_scale))
                 } else {
                     String::new()
                 };
@@ -698,7 +705,7 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
                 let _ = write!(
                     s,
                     "<path d=\"{path}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"{tr}/>",
-                    num(width + 2.0 * lw)
+                    up(width + 2.0 * lw)
                 );
                 if kind == "orle" {
                     let _ = write!(
@@ -721,7 +728,7 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
         if look.hatching {
             format!(
                 "<g fill=\"{fill}\" stroke=\"#000\" stroke-width=\"{}\">{content}</g>",
-                num(lw)
+                up(lw)
             )
         } else {
             format!("<g fill=\"{fill}\" stroke=\"none\" stroke-width=\"1\">{content}</g>")
@@ -781,7 +788,7 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
             let _ = write!(
                 body,
                 "<g fill=\"none\" stroke=\"#000\" stroke-width=\"{}\">{shape}</g>",
-                num(lw)
+                up(lw)
             );
         }
     }
@@ -812,7 +819,7 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
         format!(
             "<path d=\"{}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"/>",
             sh.path,
-            num(lw * 2.0)
+            up(lw * 2.0)
         )
     } else {
         let light = format!("{prefix}-backlight");
