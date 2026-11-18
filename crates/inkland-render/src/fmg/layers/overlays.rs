@@ -254,6 +254,7 @@ pub fn precipitation(s: &mut String, ctx: &Ctx) {
     let modifier = libm::pow(g.len() as f64 / 10_000.0, 0.25);
     let [vx0, vy0, vx1, vy1] = ctx.px.page.view;
     let _ = writeln!(s, "<g id=\"prec\"{}>", ctx.attrs(&["precipitation"], &[]));
+    wind_arrows(s, ctx);
     for c in 0..g.len() {
         let p = g.points[c];
         if !w.features.is_land(c) || w.precipitation[c] <= 0.0 {
@@ -270,6 +271,82 @@ pub fn precipitation(s: &mut String, ctx: &Ctx) {
             n(q[0]),
             n(q[1]),
             n(r)
+        );
+    }
+    s.push_str("</g>\n");
+}
+
+/// The arrows of the prevailing winds that enter the map
+/// (`drawWindDirections`). The positions and the font size are in the map
+/// pixels of the original program.
+fn wind_arrows(s: &mut String, ctx: &Ctx) {
+    let w = &ctx.world.base;
+    let g = &w.grid;
+    if g.is_empty() {
+        return;
+    }
+    let range = ctx.world.coordinates.latitude_range();
+    let winds = inkland_core::climate::winds(g, ctx.config, range);
+    let px = &ctx.px;
+    let (width, height) = (
+        ctx.config.frame.width * px.unit_px,
+        ctx.config.frame.height * px.unit_px,
+    );
+    let size = px.from_world_px([32.0, 0.0])[0] - px.from_world_px([0.0, 0.0])[0];
+    let mut arrows: Vec<([f64; 2], char)> = Vec::new();
+    let mean_y = |a: usize, b: usize| (g.points[a][1] + g.points[b][1]) / 2.0 * px.unit_px;
+    for tier in 0..6 {
+        let west: Vec<usize> = winds
+            .westerly
+            .iter()
+            .filter(|w| w.1 == tier)
+            .map(|w| w.0)
+            .collect();
+        if winds.westerly.len() > 1 && west.len() > 3 {
+            arrows.push(([20.0, mean_y(west[0], west[west.len() - 1])], '\u{21C9}'));
+        }
+        let east: Vec<usize> = winds
+            .easterly
+            .iter()
+            .filter(|w| w.1 == tier)
+            .map(|w| w.0)
+            .collect();
+        if winds.easterly.len() > 1 && east.len() > 3 {
+            arrows.push((
+                [width - 52.0, mean_y(east[0], east[east.len() - 1])],
+                '\u{21C7}',
+            ));
+        }
+    }
+    // The north is at the top of the frame unless the frame turns it.
+    let lat_top = inkland_core::climate::latitude_in(range, ctx.config, 0.0);
+    let lat_bottom = inkland_core::climate::latitude_in(range, ctx.config, ctx.config.frame.height);
+    let (north_y, south_y, down, up) = if lat_top >= lat_bottom {
+        (42.0, height - 20.0, '\u{21CA}', '\u{21C8}')
+    } else {
+        (height - 20.0, 42.0, '\u{21C8}', '\u{21CA}')
+    };
+    if winds.northerly > 0 {
+        arrows.push(([width / 2.0, north_y], down));
+    }
+    if winds.southerly > 0 {
+        arrows.push(([width / 2.0, south_y], up));
+    }
+    if arrows.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        s,
+        "<g id=\"wind\" font-size=\"{}\" stroke=\"none\">",
+        n(size)
+    );
+    for (at, symbol) in arrows {
+        let q = px.from_world_px(at);
+        let _ = writeln!(
+            s,
+            "<text x=\"{}\" y=\"{}\">{symbol}</text>",
+            n(q[0]),
+            n(q[1])
         );
     }
     s.push_str("</g>\n");

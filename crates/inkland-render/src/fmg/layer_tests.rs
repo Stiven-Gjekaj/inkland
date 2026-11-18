@@ -563,6 +563,41 @@ fn zones_draw_with_the_hatches_of_fmg() {
 }
 
 #[test]
+fn precipitation_draws_the_arrows_of_the_winds() {
+    let render = |wind: [f64; 6]| {
+        let mut c = base_config();
+        c.render.layers = vec![LayerName::Precipitation];
+        c.world.climate.wind = Some(wind);
+        crate::svg::render(world(), &c, &c.variants[0]).svg
+    };
+    let arrows = |svg: &str| -> Vec<char> {
+        let Some(group) = svg.split("<g id=\"wind\"").nth(1) else {
+            return Vec::new();
+        };
+        let group = group.split("</g>").next().unwrap_or("");
+        group
+            .split("\">")
+            .skip(1)
+            .filter_map(|t| t.chars().next())
+            .filter(|c| ('\u{21C7}'..='\u{21CA}').contains(c))
+            .collect()
+    };
+    // From the west in all tiers: arrows on the west edge only.
+    let west = render([90.0; 6]);
+    assert!(west.contains("<g id=\"wind\" font-size=\""));
+    let found = arrows(&west);
+    assert!(
+        !found.is_empty() && found.iter().all(|&c| c == '\u{21C9}'),
+        "{found:?}"
+    );
+    // From the north in all tiers: one arrow at the top.
+    assert_eq!(arrows(&render([180.0; 6])), vec!['\u{21CA}']);
+    // From the south: one arrow at the bottom.
+    assert_eq!(arrows(&render([0.0; 6])), vec!['\u{21C8}']);
+    parse_and_draw(&west);
+}
+
+#[test]
 fn a_zone_around_a_lake_covers_the_lake() {
     use inkland_core::features::FeatureKind;
     let w = world();
