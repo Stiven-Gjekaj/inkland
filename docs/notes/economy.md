@@ -102,9 +102,15 @@ markers, the overviews, and the output read them.
   Only the culture type multipliers of a good apply, because the defaults
   use only those. User adjustments are not in the config, so they are
   zero, as on a new FMG map.
-- The edit and regeneration functions of FMG (add a market, set taxes,
-  move a regiment, edit a journey) are not ported. The app shows these
-  data in read-only dialogs.
+- The edits of FMG are lists in the world part of the config, so each
+  edit comes back after a regeneration: `world.finance` (taxes, budget,
+  tariffs), `world.markets` (add, move, or remove a center),
+  `world.regiments` (add, change, move, split, or remove), `world.journeys`
+  (add or remove), `world.zones`, `world.notes`, `world.measurers`, and
+  `world.legends`. An entry finds a generated item by a point, not by its
+  id. The `insert` and `remove` edit commands change these lists. The app
+  dialogs remove zones, markets, and journeys, split regiments, and add
+  and remove notes.
 - The economy debug log is not ported.
 - The era of the calendar comes from the markers part of the seed tree,
   and the military uses the same era.
