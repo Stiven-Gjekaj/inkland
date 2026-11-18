@@ -58,6 +58,7 @@ With more than one error, the exit code comes from the most basic fault:
 | `WORLD_PARSE` | 2 | 0.1.0 | A world file is not a `world.json` of inkland, it has a format version that this version cannot read, or its config does not agree with its `world_hash`. |
 | `EDIT_SCRIPT_INVALID` | 2 | 0.1.0 | An edit script is not valid JSON, has a version other than 1, or has a command that `inkland edit` does not know. `details`: `line`, `column` for a JSON error. |
 | `COA_INVALID` | 2 | 0.1.0 | A coat of arms in the config (`coa` or `state_coa` of a point pin) names a tincture, a shield, a division, an ordinary, a line, a charge, or a position that does not exist, or `state_coa` is on a place without `capital_of`. The path points to the wrong value. |
+| `EDIT_OUTSIDE_WORLD` | 2 | 0.1.0 | `inkland edit --world` has a `set` or `unset` of `/overlays`, `/variants`, `/render`, or `/font_dirs`. A `world.json` keeps only the part of the config that makes the world, so the edit has no target. Replay the script with `--config`. The path is the pointer of the command. `details`: `command` (the index of the command, from 0). |
 | `PIN_OUTSIDE_FRAME` | 3 | 0.1.0 | A pin, a crop, or an overlay item is outside the frame. |
 | `PIN_IN_FORCED_SEA` | 3 | 0.1.0 | A place is inside a `sea` or `lake` region. `details`: `region`. |
 | `PIN_SAME_POSITION` | 3 | 0.1.0 | Two point pins have the same position. Each place needs its own cell. `details`: `other`. |
