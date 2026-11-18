@@ -25,6 +25,7 @@ pub mod heightmap;
 pub mod ice;
 pub mod lakes;
 pub mod markers;
+pub mod meander;
 pub mod names;
 pub mod num;
 pub mod overlay;
