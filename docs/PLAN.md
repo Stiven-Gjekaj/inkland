@@ -502,6 +502,13 @@ and the test that closes each milestone. We stop for a review after each one.
   order, to its end place. A step of a later leg into a cell of an earlier
   leg costs four times more. A later leg goes back over an earlier leg only
   where no other way is near. A block can wall in a stop.
+- A pinned road keeps a land corridor. Before the features are marked, the
+  generator looks for the shortest land path between the stops of the road.
+  If there is no path, or if the path is longer than the tolerance of the
+  target length permits, the water cells on the straight legs between the
+  stops become land at sea level. A lake or an inlet then does not cut the
+  road. The cells of a pinned water region stay water, so a road across a
+  pinned sea fails with `ROAD_NO_PATH`.
 - The line of a pinned road is taut: each point moves in its cell toward
   the middle of its neighbours, so that the line has no zigzag between the
   cell sites. The ends and the cells of places do not move. The length of
