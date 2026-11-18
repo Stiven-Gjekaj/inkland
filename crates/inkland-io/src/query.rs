@@ -67,6 +67,17 @@ pub fn parse_point(text: &str) -> Result<[f64; 2], Error> {
     Ok([x, y])
 }
 
+/// An owner with its coat of arms.
+fn with_coa(mut owner: Value, coa: Option<&inkland_core::emblems::Coa>) -> Value {
+    if let (Value::Object(map), Some(coa)) = (&mut owner, coa) {
+        map.insert(
+            "coa".to_owned(),
+            serde_json::to_value(coa).expect("arms convert to JSON"),
+        );
+    }
+    owner
+}
+
 /// The facts about the point `p` of a world.
 pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error> {
     if p[0] < 0.0 || p[1] < 0.0 || p[0] > world.width || p[1] > world.height {
@@ -118,6 +129,7 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
                 "port": pl.port,
                 "population": round(pl.population, 3),
                 "distance": round(d, 3),
+                "coa": pl.coa,
             })
         });
 
@@ -217,7 +229,10 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
         "precipitation": round(world.precipitation[c], 3),
         "regions": regions,
         "culture": owner(soc.cell_culture[c], &culture_name),
-        "state": owner(soc.cell_state[c], &state_name),
+        "state": with_coa(
+            owner(soc.cell_state[c], &state_name),
+            soc.states.iter().find(|x| x.id == soc.cell_state[c]).and_then(|x| x.coa.as_ref()),
+        ),
         "state_full_name": soc
             .states
             .iter()
@@ -226,7 +241,10 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
         "suitability": soc.cells.s[c],
         "population": round(soc.cells.pop[c], 3),
         "development": soc.development[c],
-        "province": owner(soc.cell_province[c], &province_name),
+        "province": with_coa(
+            owner(soc.cell_province[c], &province_name),
+            soc.provinces.iter().find(|x| x.id == soc.cell_province[c]).and_then(|x| x.coa.as_ref()),
+        ),
         "religion": world
             .religions
             .list
@@ -266,6 +284,9 @@ mod tests {
         assert_eq!(q["nearest_place"]["distance"], 0.0);
         assert_eq!(q["regions"], json!(["hills"]));
         assert!(q["state"]["name"].is_string());
+        assert!(q["state"]["coa"]["t1"].is_string());
+        assert!(q["province"]["coa"]["shield"].is_string());
+        assert!(q["nearest_place"]["coa"]["t1"].is_string());
         assert!(q["culture"]["id"].as_u64().unwrap() > 0);
         assert!(q["nearest_river"]["side"].is_string());
         assert!(q["biome"].is_string());

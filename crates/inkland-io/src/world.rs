@@ -182,6 +182,7 @@ fn culture_value(c: &inkland_core::cultures::Culture) -> Value {
         "expansionism": c.expansionism,
         "development": c.development,
         "code": c.code,
+        "shield": c.shield,
     })
 }
 
@@ -208,6 +209,7 @@ fn place_value(p: &inkland_core::society::Place) -> Value {
         "walls": p.walls,
         "shanty": p.shanty,
         "temple": p.temple,
+        "coa": p.coa,
     })
 }
 
@@ -230,6 +232,7 @@ fn state_value(st: &inkland_core::society::State) -> Value {
         "burgs": st.burgs,
         "rural": round(st.rural, 3),
         "urban": round(st.urban, 3),
+        "coa": st.coa,
     })
 }
 
@@ -243,6 +246,8 @@ fn province_value(pr: &inkland_core::society::Province) -> Value {
         "seat": pr.seat,
         "center": pr.center,
         "color": pr.color,
+        "wild": pr.wild,
+        "coa": pr.coa,
     })
 }
 
@@ -338,6 +343,18 @@ mod tests {
             assert_eq!(v[key].as_array().unwrap().len(), n, "{key}");
         }
         assert!(v["sea_routes"].is_array());
+        // Each state, province, and place has its coat of arms in the
+        // shape of FMG, and each culture its shield.
+        for key in ["states", "provinces", "places"] {
+            for x in v[key].as_array().unwrap() {
+                let coa: inkland_core::emblems::Coa =
+                    serde_json::from_value(x["coa"].clone()).expect("arms in the shape of FMG");
+                assert!(coa.shield.is_some(), "{key}");
+            }
+        }
+        for c in v["cultures"].as_array().unwrap() {
+            assert!(c["shield"].is_string());
+        }
         for p in v["places"].as_array().unwrap() {
             assert!(p["population"].as_f64().unwrap() > 0.0);
             assert!(p["group"].is_string());

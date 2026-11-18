@@ -192,6 +192,7 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
                     "shanty": p.shanty,
                     "temple": p.temple,
                     "state": state(p.state),
+                    "coa": p.coa,
                 }),
             ));
         }
@@ -297,6 +298,7 @@ mod tests {
             .find(|f| f["properties"]["pin"] == "ostrey")
             .unwrap();
         assert_eq!(place["geometry"]["coordinates"], json!([150.0, 150.0]));
+        assert!(place["properties"]["coa"]["t1"].is_string());
     }
 
     #[test]
