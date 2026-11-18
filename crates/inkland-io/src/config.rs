@@ -102,12 +102,23 @@ pub fn config_hash(config: &Config) -> String {
     format!("sha256:{hex}")
 }
 
+/// The top-level keys of a config that do not make the world. A
+/// `world.json` does not keep them.
+pub const NOT_WORLD_KEYS: [&str; 4] = ["overlays", "variants", "render", "font_dirs"];
+
+/// `true` if the value at a JSON Pointer of a config is in the part that
+/// makes the world, so a `world.json` keeps it.
+pub fn in_world_part(pointer: &str) -> bool {
+    let first = pointer.split('/').nth(1).map(unescape);
+    !first.is_some_and(|k| NOT_WORLD_KEYS.contains(&k.as_str()))
+}
+
 /// The part of a config that makes the world, as JSON: the config without
 /// its overlays, variants, render options, and font directories.
 pub fn world_config_value(config: &Config) -> Value {
     let mut v = serde_json::to_value(config).expect("a config always converts to JSON");
     if let Some(map) = v.as_object_mut() {
-        for key in ["overlays", "variants", "render", "font_dirs"] {
+        for key in NOT_WORLD_KEYS {
             map.remove(key);
         }
     }
@@ -198,6 +209,36 @@ fn set_pointer(root: &mut Value, o: &Override) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn in_world_part_follows_the_keys_of_the_world_config() {
+        for p in [
+            "/world/cells",
+            "/pins/points/0/at",
+            "/seed",
+            "/units/name",
+            "/",
+        ] {
+            assert!(in_world_part(p), "{p}");
+        }
+        for p in [
+            "/variants/1/crop",
+            "/variants",
+            "/render/style",
+            "/overlays/x",
+            "/font_dirs/0",
+        ] {
+            assert!(!in_world_part(p), "{p}");
+        }
+        // The keys that the check refuses are the keys that world.json drops.
+        let config = parse_config(MINIMAL, &[]).unwrap();
+        let full = serde_json::to_value(&config).unwrap();
+        let world = world_config_value(&config);
+        for key in full.as_object().unwrap().keys() {
+            let kept = world.get(key).is_some();
+            assert_eq!(kept, in_world_part(&format!("/{key}")), "{key}");
+        }
+    }
 
     const MINIMAL: &str =
         r#"{ "version": 1, "seed": 7, "frame": { "width": 400, "height": 300 } }"#;
