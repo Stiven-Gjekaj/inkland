@@ -7,6 +7,7 @@ use inkland::Command;
 use inkland_core::config::Config;
 use inkland_core::world::World;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 /// The command that inserts `value` at the end of the world list `key`.
 fn append(config: &Config, key: &str, value: Value) -> Command {
@@ -68,14 +69,7 @@ pub fn command(
             ))
         }
         ("regiments", "remove" | "split") => {
-            let (state, regiment) = id.split_once('-').ok_or_else(missing)?;
-            let r = soc
-                .states
-                .iter()
-                .filter(|s| s.id.to_string() == state)
-                .flat_map(|s| &s.military)
-                .find(|r| r.id.to_string() == regiment)
-                .ok_or_else(missing)?;
+            let r = regiment(world, id).ok_or_else(missing)?;
             Ok(append(config, "regiments", json!({ "at": r.at, op: true })))
         }
         ("journeys", "remove") => {
@@ -125,20 +119,46 @@ pub fn command(
                 })
             }
         }
+        ("regiments", "units") => {
+            let r = regiment(world, id).ok_or_else(missing)?;
+            let units = parse_units(text)?;
+            if units.is_empty() {
+                return Err("give the troops as unit=people".to_owned());
+            }
+            Ok(append(
+                config,
+                "regiments",
+                json!({ "at": r.at, "units": units }),
+            ))
+        }
+        ("finance", "tariffs") => {
+            let index: usize = id.parse().map_err(|_| missing())?;
+            let (at, k) = finance_entry(config, world, index).ok_or_else(missing)?;
+            let t = text.trim();
+            let rate = if t.eq_ignore_ascii_case("embargo") {
+                json!("embargo")
+            } else {
+                let v: f64 = t
+                    .parse()
+                    .map_err(|_| format!("{text:?} is not a number or embargo"))?;
+                json!(v)
+            };
+            let tariffs = json!([{ "rate": rate }]);
+            Ok(match k {
+                Some(k) => Command::Set {
+                    path: format!("/world/finance/{k}/tariffs"),
+                    value: tariffs,
+                },
+                None => append(config, "finance", json!({ "at": at, "tariffs": tariffs })),
+            })
+        }
         ("finance", field @ ("sales_tax" | "poll_tax" | "market_fee" | "military")) => {
             let index: usize = id.parse().map_err(|_| missing())?;
-            let state = soc.states.get(index).ok_or_else(missing)?;
             let v: f64 = text
                 .trim()
                 .parse()
                 .map_err(|_| format!("{text:?} is not a number"))?;
-            let at = world.grid.points[state.center];
-            let at = [crate::model::round2(at[0]), crate::model::round2(at[1])];
-            let k = config
-                .world
-                .finance
-                .iter()
-                .position(|f| f.at == Some(at) && f.pin.is_none());
+            let (at, k) = finance_entry(config, world, index).ok_or_else(missing)?;
             match (k, field) {
                 (Some(k), "military") if config.world.finance[k].budget.is_some() => {
                     Ok(Command::Set {
@@ -163,6 +183,249 @@ pub fn command(
             }
         }
         _ => Err(format!("{list} has no action {op:?}")),
+    }
+}
+
+/// The point at the center of the state `index`, and the finance entry of
+/// the config at that point, if one exists.
+fn finance_entry(
+    config: &Config,
+    world: &World,
+    index: usize,
+) -> Option<([f64; 2], Option<usize>)> {
+    let state = world.society.states.get(index)?;
+    let at = world.grid.points[state.center];
+    let at = [crate::model::round2(at[0]), crate::model::round2(at[1])];
+    let k = config
+        .world
+        .finance
+        .iter()
+        .position(|f| f.at == Some(at) && f.pin.is_none());
+    Some((at, k))
+}
+
+/// The regiment of the dialog id `state-regiment`.
+fn regiment<'a>(world: &'a World, id: &str) -> Option<&'a inkland_core::military::Regiment> {
+    let (state, regiment) = id.split_once('-')?;
+    world
+        .society
+        .states
+        .iter()
+        .filter(|s| s.id.to_string() == state)
+        .flat_map(|s| &s.military)
+        .find(|r| r.id.to_string() == regiment)
+}
+
+/// The troops of the text `Infantry=500, Archers=200`, by unit name.
+fn parse_units(text: &str) -> Result<BTreeMap<String, f64>, String> {
+    let mut units = BTreeMap::new();
+    for part in text.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let (name, people) = part
+            .split_once('=')
+            .ok_or_else(|| format!("{part:?} is not unit=people"))?;
+        let people: f64 = people
+            .trim()
+            .parse()
+            .map_err(|_| format!("{people:?} is not a number"))?;
+        units.insert(name.trim().to_owned(), people);
+    }
+    Ok(units)
+}
+
+/// A tool that adds or moves an item with points on the map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DrawTool {
+    /// A click adds a market at the nearest place.
+    Market,
+    /// A click moves the market of the dialog id to the nearest place.
+    MoveMarket,
+    /// A click adds a regiment of the state at the point.
+    Regiment,
+    /// A click moves the regiment of the dialog id.
+    MoveRegiment,
+    /// A click puts a legend box with its top left corner at the point.
+    Legend,
+    /// A line of points makes a journey through the stops.
+    Journey,
+    /// A line of points makes a measurer.
+    Measurer,
+    /// An outline makes a zone.
+    Zone,
+}
+
+impl DrawTool {
+    /// The tool of the id of a Tools tab button or a dialog button.
+    pub fn from_id(id: &str) -> Option<DrawTool> {
+        Some(match id {
+            "add-market" => DrawTool::Market,
+            "move-market" => DrawTool::MoveMarket,
+            "add-regiment" => DrawTool::Regiment,
+            "move-regiment" => DrawTool::MoveRegiment,
+            "add-legend" => DrawTool::Legend,
+            "add-journey" => DrawTool::Journey,
+            "add-measurer" => DrawTool::Measurer,
+            "add-zone" => DrawTool::Zone,
+            _ => return None,
+        })
+    }
+
+    /// The id of the tool.
+    pub fn id(self) -> &'static str {
+        match self {
+            DrawTool::Market => "add-market",
+            DrawTool::MoveMarket => "move-market",
+            DrawTool::Regiment => "add-regiment",
+            DrawTool::MoveRegiment => "move-regiment",
+            DrawTool::Legend => "add-legend",
+            DrawTool::Journey => "add-journey",
+            DrawTool::Measurer => "add-measurer",
+            DrawTool::Zone => "add-zone",
+        }
+    }
+
+    /// The number of points that the tool needs. A tool of one point
+    /// finishes on the click.
+    pub fn min_points(self) -> usize {
+        match self {
+            DrawTool::Journey | DrawTool::Measurer => 2,
+            DrawTool::Zone => 3,
+            _ => 1,
+        }
+    }
+
+    /// The text of the status bar while the tool is on.
+    pub fn hint(self) -> &'static str {
+        match self {
+            DrawTool::Market => "click a burg to make it the center of a new market",
+            DrawTool::MoveMarket => "click the burg that is the new center of the market",
+            DrawTool::Regiment => "click a point in a state to add a regiment there",
+            DrawTool::MoveRegiment => "click the new position of the regiment",
+            DrawTool::Legend => "click the top left corner of the legend box",
+            DrawTool::Journey => "click the stops, then double click or press Enter",
+            DrawTool::Measurer => "click the points, then double click or press Enter",
+            DrawTool::Zone => "click the outline, then double click or press Enter",
+        }
+    }
+}
+
+/// The command of a draw tool with the points that the user clicked. `id`
+/// is the item to move, and `text` is the field of the tool: the name of a
+/// zone or a journey, the troops of a regiment, the kind of a measurer, or
+/// the title and items of a legend box.
+pub fn draw(
+    config: &Config,
+    world: &World,
+    tool: DrawTool,
+    id: &str,
+    points: &[[f64; 2]],
+    text: &str,
+) -> Result<Command, String> {
+    let points: Vec<[f64; 2]> = points
+        .iter()
+        .map(|p| [crate::model::round2(p[0]), crate::model::round2(p[1])])
+        .collect();
+    if points.len() < tool.min_points() {
+        return Err(format!(
+            "{} needs {} points or more",
+            tool.id(),
+            tool.min_points()
+        ));
+    }
+    let at = points[0];
+    let text = text.trim();
+    let missing = || format!("there is no item {id:?} to move");
+    match tool {
+        DrawTool::Market => Ok(append(config, "markets", json!({ "at": at }))),
+        DrawTool::MoveMarket => {
+            let m = world
+                .economy
+                .markets
+                .iter()
+                .find(|m| m.id.to_string() == id)
+                .ok_or_else(missing)?;
+            let from = world
+                .society
+                .places
+                .get(m.center as usize - 1)
+                .ok_or_else(missing)?
+                .at;
+            Ok(append(config, "markets", json!({ "at": from, "to": at })))
+        }
+        DrawTool::Regiment => {
+            let mut units = parse_units(text)?;
+            if units.is_empty() {
+                let unit = world
+                    .military_units
+                    .first()
+                    .ok_or("the world has no military units")?;
+                units.insert(unit.name.clone(), 500.0);
+            }
+            Ok(append(
+                config,
+                "regiments",
+                json!({ "at": at, "add": true, "units": units }),
+            ))
+        }
+        DrawTool::MoveRegiment => {
+            let r = regiment(world, id).ok_or_else(missing)?;
+            Ok(append(config, "regiments", json!({ "at": r.at, "to": at })))
+        }
+        DrawTool::Legend => {
+            // The text is `Title; #rrggbb text; #rrggbb text`.
+            let mut parts = text.split(';').map(str::trim);
+            let name = parts.next().filter(|n| !n.is_empty()).unwrap_or("Legend");
+            let mut items = Vec::new();
+            for part in parts.filter(|p| !p.is_empty()) {
+                let (color, label) = part.split_once(' ').unwrap_or((part, ""));
+                if !(color.len() == 7 && color.starts_with('#')) {
+                    return Err(format!("{part:?} does not start with a color #rrggbb"));
+                }
+                items.push(json!({ "color": color, "text": label.trim() }));
+            }
+            Ok(append(
+                config,
+                "legends",
+                json!({ "name": name, "items": items, "at": at }),
+            ))
+        }
+        DrawTool::Journey => {
+            let mut value = json!({ "stops": points });
+            if !text.is_empty() {
+                value["name"] = json!(text);
+            }
+            Ok(append(config, "journeys", value))
+        }
+        DrawTool::Measurer => {
+            let kind = if text.is_empty() { "ruler" } else { text };
+            let kinds = ["ruler", "opisometer", "route-opisometer", "planimeter"];
+            if !kinds.contains(&kind) {
+                return Err(format!("{kind:?} is not one of {}", kinds.join(", ")));
+            }
+            Ok(append(
+                config,
+                "measurers",
+                json!({ "kind": kind, "points": points }),
+            ))
+        }
+        DrawTool::Zone => {
+            // The text is `Name` or `Name; Type`.
+            let (name, kind) = text.split_once(';').unwrap_or((text, ""));
+            let name = if name.trim().is_empty() {
+                "New zone"
+            } else {
+                name.trim()
+            };
+            let kind = if kind.trim().is_empty() {
+                "Custom"
+            } else {
+                kind.trim()
+            };
+            Ok(append(
+                config,
+                "zones",
+                json!({ "polygon": points, "name": name, "kind": kind }),
+            ))
+        }
     }
 }
 
@@ -246,6 +509,189 @@ mod tests {
         e.run(cmd).unwrap();
         assert!(World::build(e.config()).unwrap().measurers.is_empty());
         for _ in 0..4 {
+            e.undo().unwrap();
+        }
+        assert_eq!(e.config(), &c);
+    }
+
+    #[test]
+    fn each_draw_tool_is_one_undoable_edit_that_adds_or_moves_an_item() {
+        let c = config();
+        let w = World::build(&c).unwrap();
+        let mut e = Editor::new(c.clone());
+        let soc = &w.society;
+        let centers: Vec<u32> = w.economy.markets.iter().map(|m| m.center).collect();
+        let free: Vec<[f64; 2]> = soc
+            .places
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !centers.contains(&(*i as u32 + 1)))
+            .map(|(_, p)| p.at)
+            .collect();
+        let state = soc.states.iter().find(|s| s.id != 0).unwrap();
+        let home = w.grid.points[state.center];
+        let around = [
+            [home[0] - 15.0, home[1] - 15.0],
+            [home[0] + 15.0, home[1] - 15.0],
+            [home[0], home[1] + 15.0],
+        ];
+        // Two burgs of one state, so a land path joins them.
+        let stops: Vec<[f64; 2]> = soc
+            .places
+            .iter()
+            .map(|p| p.at)
+            .filter(|p| soc.cell_state[w.grid.find_cell(p[0], p[1])] == state.id)
+            .take(2)
+            .collect();
+        assert_eq!(stops.len(), 2);
+        let draws: [(DrawTool, &[[f64; 2]], &str); 6] = [
+            (DrawTool::Market, &[free[0]], ""),
+            (DrawTool::Regiment, &[home], ""),
+            (
+                DrawTool::Legend,
+                &[[10.0, 10.0]],
+                "Roads; #aa0000 Kings road; #0000aa Sea lane",
+            ),
+            (DrawTool::Journey, &stops, "The Long Walk"),
+            (
+                DrawTool::Measurer,
+                &[[10.0, 10.0], [90.0, 40.0]],
+                "opisometer",
+            ),
+            (DrawTool::Zone, &around, "The Red Plague; Disease"),
+        ];
+        for (tool, points, text) in draws {
+            let cmd = draw(e.config(), &w, tool, "", points, text).unwrap();
+            e.run(cmd).unwrap();
+        }
+        let w2 = World::build(e.config()).unwrap();
+        let center_at = |w: &World, m: &inkland_core::economy::markets::Market| {
+            w.society.places[m.center as usize - 1].at
+        };
+        assert!(
+            w2.economy
+                .markets
+                .iter()
+                .any(|m| center_at(&w2, m) == free[0])
+        );
+        // Other edits change the generated regiments, so check the new one
+        // in a world with only that edit.
+        let mut alone = Editor::new(c.clone());
+        alone
+            .run(draw(&c, &w, DrawTool::Regiment, "", &[home], "").unwrap())
+            .unwrap();
+        let count = |w: &World| {
+            w.society
+                .states
+                .iter()
+                .find(|s| s.id == state.id)
+                .map_or(0, |s| s.military.len())
+        };
+        let w1 = World::build(alone.config()).unwrap();
+        assert_eq!(count(&w1), count(&w) + 1);
+        let legend = w2.legends.last().unwrap();
+        assert_eq!(legend.name, "Roads");
+        assert_eq!(legend.items.len(), 2);
+        assert!(w2.journeys.iter().any(|j| j.name == "The Long Walk"));
+        assert_eq!(w2.measurers.len(), w.measurers.len() + 1);
+        let zone = w2
+            .zones
+            .iter()
+            .find(|z| z.name == "The Red Plague")
+            .unwrap();
+        assert_eq!(zone.kind, "Disease");
+
+        // Move a market and a regiment.
+        let market = w2.economy.markets[0].id.to_string();
+        let to = *free.last().unwrap();
+        let cmd = draw(e.config(), &w2, DrawTool::MoveMarket, &market, &[to], "").unwrap();
+        e.run(cmd).unwrap();
+        let armed = w2
+            .society
+            .states
+            .iter()
+            .find(|s| !s.military.is_empty())
+            .unwrap();
+        let r = &armed.military[0];
+        let id = format!("{}-{}", armed.id, r.id);
+        let to = [r.at[0] + 5.0, r.at[1] + 5.0];
+        let cmd = draw(e.config(), &w2, DrawTool::MoveRegiment, &id, &[to], "").unwrap();
+        e.run(cmd).unwrap();
+        let w3 = World::build(e.config()).unwrap();
+        let moved = w3
+            .society
+            .states
+            .iter()
+            .find(|s| s.id == armed.id)
+            .and_then(|s| s.military.iter().find(|m| m.id == r.id))
+            .unwrap();
+        assert_ne!(moved.at, r.at);
+        assert_ne!(w3.economy.markets, w2.economy.markets);
+
+        for _ in 0..8 {
+            e.undo().unwrap();
+        }
+        assert_eq!(e.config(), &c);
+        // A line tool needs its points, and the fields must parse.
+        assert!(draw(&c, &w, DrawTool::Zone, "", &around[..2], "").is_err());
+        assert!(draw(&c, &w, DrawTool::Measurer, "", &around, "compass").is_err());
+        assert!(draw(&c, &w, DrawTool::Legend, "", &[home], "Key; red Forest").is_err());
+        assert!(draw(&c, &w, DrawTool::Regiment, "", &[home], "Infantry").is_err());
+        assert!(draw(&c, &w, DrawTool::MoveMarket, "999", &[home], "").is_err());
+        for t in ["add-market", "move-regiment", "add-zone"] {
+            assert_eq!(DrawTool::from_id(t).unwrap().id(), t);
+        }
+    }
+
+    #[test]
+    fn the_tariffs_and_the_troops_of_a_regiment_are_undoable_edits() {
+        let c = config();
+        let w = World::build(&c).unwrap();
+        let mut e = Editor::new(c.clone());
+        let cmd = command(e.config(), &w, "finance", "1", "tariffs", "embargo").unwrap();
+        e.run(cmd).unwrap();
+        let cmd = command(e.config(), &w, "finance", "1", "tariffs", "0.3").unwrap();
+        e.run(cmd).unwrap();
+        assert_eq!(
+            e.config().world.finance.len(),
+            1,
+            "the second edit sets the same entry"
+        );
+        let tariffs = e.config().world.finance[0].tariffs.as_ref().unwrap();
+        assert_eq!(tariffs[0].rate, inkland_core::config::TariffRate::Rate(0.3));
+        World::build(e.config()).unwrap();
+        assert!(command(e.config(), &w, "finance", "1", "tariffs", "lots").is_err());
+
+        let armed = w
+            .society
+            .states
+            .iter()
+            .find(|s| !s.military.is_empty())
+            .unwrap();
+        let r = &armed.military[0];
+        let unit = &w.military_units[0].name;
+        let id = format!("{}-{}", armed.id, r.id);
+        let cmd = command(
+            e.config(),
+            &w,
+            "regiments",
+            &id,
+            "units",
+            &format!("{unit}=1234"),
+        )
+        .unwrap();
+        e.run(cmd).unwrap();
+        let w2 = World::build(e.config()).unwrap();
+        let r2 = w2
+            .society
+            .states
+            .iter()
+            .find(|s| s.id == armed.id)
+            .and_then(|s| s.military.iter().find(|m| m.id == r.id))
+            .unwrap();
+        assert_ne!(r2.units, r.units);
+        assert!(command(e.config(), &w, "regiments", &id, "units", "").is_err());
+        for _ in 0..3 {
             e.undo().unwrap();
         }
         assert_eq!(e.config(), &c);
