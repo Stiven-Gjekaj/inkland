@@ -29,7 +29,9 @@ to the file when the first map shows, and then stops.
 - `INKLAND_APP_SNAPSHOT_OPEN=TAB/TOOL,TOOL` opens a tab of the menu and
   the dialogs or tools of the Tools tab before the image. TAB is
   `layers`, `style`, `options`, `tools`, `about`, or `closed`. A TOOL is
-  an id of the Tools tab, for example `burgs`, `regions`, or `print`.
+  an id of the Tools tab, for example `burgs`, `regions`, `diplomacy`,
+  `economy`, `goods`, `journeys`, `markers`, `markets`, `measurers`,
+  `military`, `notes`, `stability`, `zones`, or `print`.
   Example: `INKLAND_APP_SNAPSHOT_OPEN=tools/burgs`.
 - `INKLAND_APP_SNAPSHOT_POINTER=x,y` puts the pointer at a point of the
   world (config units). The status bar and the Cell Details dialog then
@@ -137,8 +139,38 @@ FMG tool that inkland does not have yet.
   `set` command, so undo and the edit script have it. "Use generated"
   removes the custom arms. A province and a generated burg have no custom
   arms.
+- **Diplomacy.** The relation of each state to the selected state, with
+  the FMG relation color and a description, and the relations history
+  (the chronicle). Click a state to see the relations to it.
+- **Economy.** The economy of the selected state: the economy type, the
+  people, the inequality, the trade balance, the day balance, the
+  prosperity, the product, the wealth, the sectors, the taxes, the
+  expenses, the main exports and imports, and the trade partners.
+- **Goods.** The goods, with the color, the type (raw or made), the unit,
+  the units made in a day, the units in stock in all markets, and the base
+  price.
+- **Journeys.** The journeys (type, start, end, distance, speed, total
+  time) and the segments of the selected journey.
+- **Markers.** The markers, with the name, the type, and the legend. Click
+  a marker to read its full legend.
+- **Markets.** The markets, with the color, the state, the cells, the
+  burgs, the stock, the sales, the purchases, and the value.
+- **Measurers.** The measurers: the type, the number of points, and the
+  length. Generation adds the default ruler.
+- **Military.** The forces of each state by unit, the total with the
+  crew, the people, the rate, the war alert, the upkeep, and the power.
+  Under them, the regiments of the selected state.
+- **Notes.** The notes of the regiments, the markers, and the zones, and
+  the text of the selected note.
+- **Stability.** The parts of the stability of the selected state, the
+  total, and the provinces, least stable first.
+- **Zones.** The zones, with the type, the cells, the area, the people,
+  and the hatch pattern of the fill.
+- These dialogs show the generated world. They do not edit, because the
+  config does not hold these data. Diplomacy, Military, Stability, and
+  Economy share one select of the state.
 - **Cells.** The Cell Details dialog. It shows the facts of the cell
-  under the pointer.
+  under the pointer, with the good of the deposit and the market.
 - **Print.** The checks of the report of the shown variant, with PASS or
   FAIL.
 
@@ -162,6 +194,7 @@ of Ctrl.
 | Enter | Finish the drawing |
 | Delete | Remove the selected burg pin |
 | Shift+H, T, Z, V, U, L, Q, S, C, R, P, E, W, Y | Heightmap, Burgs, Regions, Rivers, Routes, Labels, Units, States, Cultures, Religions, Provinces, Cells, Variants, Emblems |
+| Shift+D, G, J, K, M, O | Diplomacy, Goods, Journeys, Markers, Military, Notes |
 | Shift+1, Shift+4, Shift+5 | Add a burg, a river, a route |
 | A layer key (for example V, F, I, L, /) | Show or hide the layer |
 | + and -, 0 | Zoom in and out, show the full page |
