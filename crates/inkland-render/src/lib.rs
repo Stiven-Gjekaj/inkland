@@ -10,6 +10,7 @@ pub mod fmg;
 pub mod labels;
 pub mod metrics;
 mod metrics_data;
+mod metrics_styles;
 pub mod page;
 #[cfg(feature = "png")]
 pub mod png;

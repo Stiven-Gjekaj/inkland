@@ -3,15 +3,16 @@
 //! The SVG keeps real text, and the book build loads the fonts. To place
 //! labels without the font files, inkland keeps a table of advance widths
 //! for each permitted family. `examples/font_metrics.rs` makes the table
-//! from the font files.
+//! from the font files. `metrics_styles` has the tables of the free fonts
+//! of the style presets of `colour` mode, from `assets/fonts`.
 //!
-//! A family without a table, for example a font of a style preset of
-//! `colour` mode, uses a wide table: each character has the largest advance
+//! A family without a table, for example Georgia, uses a wide table: each character has the largest advance
 //! of all the tables, made 10 % larger, and at least the advance of a
 //! monospace font. A label in such a family is then never wider on the page
 //! than the placer measured it, in the font or in a fallback font.
 
 use crate::metrics_data as data;
+use crate::metrics_styles as styles;
 
 /// The metrics of one font.
 #[derive(Debug)]
@@ -34,6 +35,7 @@ impl FontMetrics {
     pub fn of(family: &str) -> &'static FontMetrics {
         data::FONTS
             .iter()
+            .chain(styles::STYLE_FONTS.iter())
             .find(|f| f.family.eq_ignore_ascii_case(family.trim()))
             .unwrap_or(&WIDE)
     }
@@ -164,6 +166,34 @@ mod tests {
         assert!((f.width("abc", 3.0, 1.0) - f.width("abc", 3.0, 0.0) - 2.0).abs() < 1e-12);
         // W is wider than i.
         assert!(f.width("W", 3.0, 0.0) > f.width("i", 3.0, 0.0));
+    }
+
+    #[test]
+    fn each_free_font_of_the_style_presets_has_a_table() {
+        use crate::fmg::style::Style;
+        use inkland_core::config::StyleName;
+        // These fonts have no free license, and the program has no file.
+        let not_free = ["Arial", "Courier New", "Georgia", "Times New Roman"];
+        for &name in &StyleName::ALL {
+            let s = Style::preset(name);
+            for g in s.groups(&["labels"]) {
+                let Some(family) = s.attr(&["labels", &g], "font-family") else {
+                    continue;
+                };
+                let f = FontMetrics::of(&family);
+                if not_free.contains(&family.as_str()) {
+                    assert_eq!(f.family, "", "{family}");
+                } else {
+                    assert_eq!(f.family, family, "{name:?} {g}");
+                }
+            }
+        }
+        // A wide font is wider than the first table.
+        let text = "Khuregkhum";
+        assert!(
+            FontMetrics::of("Eagle Lake").width(text, 10.0, 0.0)
+                > FontMetrics::of("IM Fell English").width(text, 10.0, 0.0)
+        );
     }
 
     #[test]
