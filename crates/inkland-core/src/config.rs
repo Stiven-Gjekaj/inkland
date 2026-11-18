@@ -889,6 +889,11 @@ pub struct EmblemOptions {
     /// larger than 300 map pixels at the zoom of the variant. Then a full
     /// map shows only the arms of the states.
     pub show_all: bool,
+    /// `true`: in `print-safe` mode, draw the emblems in black and white,
+    /// with the heraldic hatching of Petra Sancta for each tincture. Each
+    /// line is at least `min_line_width_pt` wide. `false`: `print-safe`
+    /// mode draws no emblems. `colour` mode always draws the colours.
+    pub hatching: bool,
 }
 
 impl EmblemOptions {

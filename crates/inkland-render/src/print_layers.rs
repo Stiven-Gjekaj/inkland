@@ -191,6 +191,45 @@ pub fn coordinates(s: &mut String, config: &Config, page: &Page, min: f64) {
     );
 }
 
+/// The coats of arms in black and white, with the hatching of Petra
+/// Sancta, when `render.emblems.hatching` is set. The places, sizes, and
+/// groups are those of `colour` mode (`fmg::layers::marks::layout`).
+pub fn emblems(s: &mut String, world: &World, config: &Config, page: &Page, min: f64) {
+    if !config.render.emblems.hatching {
+        return;
+    }
+    let Some(list) = crate::fmg::data::emblems(world) else {
+        return;
+    };
+    let px = crate::fmg::geom::Px::new(page, config.frame.width, config.frame.height);
+    let placed = crate::fmg::layers::marks::layout(world, config, &px, &list, &|_| 1.0);
+    let line = crate::page::line_mm(min);
+    let _ = writeln!(s, "<g id=\"emblems\" clip-path=\"url(#clip-map)\">");
+    for p in &placed {
+        let e = p.emblem;
+        let size = p.size * px.mm;
+        let prefix = format!("emblem-{}-{}", e.group, e.id);
+        let view = crate::emblem::draw(&e.coa, &prefix, &crate::emblem::Look::COLOUR).view;
+        // The width of a line in the units of the shield box.
+        let look = crate::emblem::Look {
+            hatching: true,
+            min_line: line * view[2] / size,
+        };
+        let d = crate::emblem::draw(&e.coa, &prefix, &look);
+        let _ = writeln!(
+            s,
+            "<svg id=\"{prefix}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"{}\">{}</svg>",
+            n(p.at[0] * px.mm - size / 2.0),
+            n(p.at[1] * px.mm - size / 2.0),
+            n(size),
+            n(size),
+            d.view_box(),
+            d.body
+        );
+    }
+    s.push_str("</g>\n");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,6 +272,31 @@ mod tests {
         let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
         for id in ["cells", "grid-overlay", "coordinates"] {
             assert!(svg.contains(&format!("<g id=\"{id}\"")), "{id}");
+        }
+        let opts = crate::checks::CheckOptions {
+            min_line_width_pt: c.render.min_line_width_pt,
+            fonts_allowed: c.render.fonts_allowed.clone(),
+        };
+        for r in crate::checks::check_svg(&svg, &opts) {
+            assert!(r.pass, "{} {:?}", r.name, r.details);
+        }
+        assert_eq!(svg, crate::svg::render(&w, &c, &c.variants[0]).svg);
+    }
+
+    #[test]
+    fn hatched_emblems_pass_the_print_checks() {
+        use inkland_core::config::LayerName;
+        let mut c = config();
+        c.render.layers = vec![LayerName::Coast, LayerName::Emblems];
+        let w = World::build(&c).unwrap();
+        // Off by default: no emblems in print-safe mode.
+        let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
+        assert!(!svg.contains("<g id=\"emblems\""));
+        c.render.emblems.hatching = true;
+        c.render.emblems.show_all = true;
+        let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
+        for st in &w.society.states {
+            assert!(svg.contains(&format!("id=\"emblem-state-{}\"", st.id)));
         }
         let opts = crate::checks::CheckOptions {
             min_line_width_pt: c.render.min_line_width_pt,

@@ -523,10 +523,8 @@ pub fn emblem_size(group: &str, count: usize, size_option: f64) -> f64 {
 /// The poles of inaccessibility of the areas of an owner of each cell, in
 /// world units (`getPolesOfInaccessibility`, with a precision of 20 map
 /// pixels and positions rounded to whole pixels).
-fn poles(ctx: &Ctx, owner: &[u32]) -> BTreeMap<u32, [f64; 2]> {
+fn poles(w: &inkland_core::world::World, u: f64, owner: &[u32]) -> BTreeMap<u32, [f64; 2]> {
     use super::super::geom;
-    let w = ctx.world;
-    let u = ctx.px.unit_px;
     geom::rings(w, &|c| owner[c])
         .into_iter()
         .map(|(id, rings)| {
@@ -612,24 +610,35 @@ fn collide(nodes: &mut [Node]) {
     }
 }
 
-/// Write coats of arms, in their groups. Each group has the size of FMG
-/// for its count, and a group is hidden, as in FMG, when its emblems are
-/// smaller than 25 or larger than 300 pixels at the zoom of the variant,
-/// unless `render.emblems.show_all` is set.
-pub fn write_emblems(s: &mut String, ctx: &Ctx, list: &[super::super::data::Emblem]) {
-    let soc = &ctx.world.society;
+/// A coat of arms at its place on the page.
+pub struct Placed<'a> {
+    pub emblem: &'a super::super::data::Emblem,
+    /// The center, in page pixels.
+    pub at: [f64; 2],
+    /// The width, in page pixels.
+    pub size: f64,
+}
+
+/// Place the coats of arms as `drawEmblems` does: the size of each group
+/// for its count, the pole of each area, the collision of d3, and the
+/// groups that FMG hides at the zoom of the variant. `size_option` gives
+/// the size factor of the style for a group. The result has the shown
+/// emblems, in the order of the groups `burg`, `province`, `state`.
+pub fn layout<'a>(
+    world: &inkland_core::world::World,
+    config: &inkland_core::config::Config,
+    px: &super::super::geom::Px,
+    list: &'a [super::super::data::Emblem],
+    size_option: &dyn Fn(&str) -> f64,
+) -> Vec<Placed<'a>> {
+    let soc = &world.society;
     let mut size = BTreeMap::new();
     for (group, _) in SIZING {
-        let key = format!("{group}Emblems");
-        let option = ctx
-            .style
-            .option_f64(&["emblems", &key], "size")
-            .unwrap_or(1.0);
         let count = list.iter().filter(|e| e.group == group).count();
-        size.insert(group, emblem_size(group, count, option));
+        size.insert(group, emblem_size(group, count, size_option(group)));
     }
-    let state_poles = poles(ctx, &soc.cell_state);
-    let province_poles = poles(ctx, &soc.cell_province);
+    let state_poles = poles(world, px.unit_px, &soc.cell_state);
+    let province_poles = poles(world, px.unit_px, &soc.cell_province);
     let mut nodes: Vec<Node> = list
         .iter()
         .map(|e| {
@@ -638,9 +647,9 @@ pub fn write_emblems(s: &mut String, ctx: &Ctx, list: &[super::super::data::Embl
                     "state" => state_poles.get(&e.id),
                     _ => province_poles.get(&e.id),
                 };
-                pole.copied().unwrap_or(ctx.world.grid.points[e.center])
+                pole.copied().unwrap_or(world.grid.points[e.center])
             });
-            let [x, y] = ctx.p(at);
+            let [x, y] = px.p(at);
             Node {
                 x,
                 y,
@@ -652,34 +661,57 @@ pub fn write_emblems(s: &mut String, ctx: &Ctx, list: &[super::super::data::Embl
         .collect();
     collide(&mut nodes);
 
-    let frame = ctx.config.frame.width;
-    let [vx0, _, vx1, _] = ctx.px.page.view;
+    let frame = config.frame.width;
+    let [vx0, _, vx1, _] = px.page.view;
     let zoom = if vx1 > vx0 { frame / (vx1 - vx0) } else { 1.0 };
-    let show_all = ctx.config.render.emblems.show_all;
+    let show_all = config.render.emblems.show_all;
+    let mut out = Vec::new();
+    for group in ["burg", "province", "state"] {
+        let screen = size[group] * zoom;
+        if !show_all && !(25.0..=300.0).contains(&screen) {
+            continue;
+        }
+        for (e, node) in list.iter().zip(&nodes).filter(|(e, _)| e.group == group) {
+            out.push(Placed {
+                emblem: e,
+                at: [node.x, node.y],
+                size: size[group],
+            });
+        }
+    }
+    out
+}
+
+/// Write coats of arms, in their groups. Each group has the size of FMG
+/// for its count, and a group is hidden, as in FMG, when its emblems are
+/// smaller than 25 or larger than 300 pixels at the zoom of the variant,
+/// unless `render.emblems.show_all` is set.
+pub fn write_emblems(s: &mut String, ctx: &Ctx, list: &[super::super::data::Emblem]) {
+    let option = |group: &str| {
+        ctx.style
+            .option_f64(&["emblems", &format!("{group}Emblems")], "size")
+            .unwrap_or(1.0)
+    };
+    let placed = layout(ctx.world, ctx.config, &ctx.px, list, &option);
     let _ = writeln!(s, "<g id=\"emblems\"{}>", ctx.attrs(&["emblems"], &[]));
     for group in ["burg", "province", "state"] {
         let key = format!("{group}Emblems");
-        let px = size[group];
         let _ = writeln!(
             s,
             "<g id=\"{group}-emblems\"{}>",
             ctx.attrs(&["emblems", &key], &[])
         );
-        let screen = px * zoom;
-        if !show_all && !(25.0..=300.0).contains(&screen) {
-            s.push_str("</g>\n");
-            continue;
-        }
-        for (e, node) in list.iter().zip(&nodes).filter(|(e, _)| e.group == group) {
+        for p in placed.iter().filter(|p| p.emblem.group == group) {
+            let e = p.emblem;
             let prefix = format!("emblem-{group}-{}", e.id);
             let d = crate::emblem::draw(&e.coa, &prefix, &crate::emblem::Look::COLOUR);
             let _ = writeln!(
                 s,
                 "<svg id=\"{prefix}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"{}\">{}</svg>",
-                n(node.x - px / 2.0),
-                n(node.y - px / 2.0),
-                n(px),
-                n(px),
+                n(p.at[0] - p.size / 2.0),
+                n(p.at[1] - p.size / 2.0),
+                n(p.size),
+                n(p.size),
                 d.view_box(),
                 d.body
             );

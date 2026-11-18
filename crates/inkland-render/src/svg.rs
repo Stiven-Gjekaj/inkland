@@ -92,6 +92,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
             LayerName::Cells => &["cells"],
             LayerName::Grid => &["grid"],
             LayerName::Coordinates => &["coordinates"],
+            LayerName::Emblems => &["emblems"],
             _ => &[],
         };
         for part in parts {
@@ -111,6 +112,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
                 "cells" => crate::print_layers::cells(&mut s, world, &page, min),
                 "grid" => crate::print_layers::grid(&mut s, config, &page, min),
                 "coordinates" => crate::print_layers::coordinates(&mut s, config, &page, min),
+                "emblems" => crate::print_layers::emblems(&mut s, world, config, &page, min),
                 _ => {}
             }
         }
