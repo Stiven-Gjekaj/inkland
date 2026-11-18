@@ -28,6 +28,11 @@ pub fn font_db(font_dirs: &[&Path]) -> FontDb {
     Arc::new(db)
 }
 
+/// A font database without fonts, for an SVG without text.
+pub fn empty_font_db() -> FontDb {
+    Arc::new(resvg::usvg::fontdb::Database::new())
+}
+
 /// A parsed SVG, ready to render many times at different scales.
 pub struct Scene {
     tree: resvg::usvg::Tree,

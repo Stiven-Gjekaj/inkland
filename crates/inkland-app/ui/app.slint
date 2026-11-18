@@ -19,6 +19,7 @@ import { LabelsDialog } from "dialogs/labels.slint";
 import { UnitsDialog } from "dialogs/units.slint";
 import { SocietyDialog } from "dialogs/society.slint";
 import { CellsDialog } from "dialogs/cells.slint";
+import { EmblemsDialog } from "dialogs/emblems.slint";
 
 export { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts, Theme }
 
@@ -90,6 +91,7 @@ export component AppWindow inherits Window {
         if Dialogs.labels: LabelsDialog {}
         if Dialogs.units: UnitsDialog {}
         if Dialogs.cells: CellsDialog {}
+        if Dialogs.emblems: EmblemsDialog {}
         if Dialogs.states: SocietyDialog {
             id: "states";
             title: "States Editor";

@@ -85,6 +85,7 @@ const IMPLEMENTED: &[&str] = &[
     "religions",
     "provinces",
     "cells",
+    "emblems",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -1100,6 +1101,57 @@ impl Controller {
 
     /// The rows of the editor tables, from the config and from the shown
     /// world.
+    /// The Emblems editor: the items of the kind, and the arms, the image,
+    /// and the custom field of the selected item.
+    fn update_emblems(&self, st: &State) {
+        use inkland_app::emblems as em;
+        let ui = self.ui();
+        let g = ui.global::<AppState>();
+        let l = ui.global::<Lists>();
+        l.set_emblem_kinds(model(em::KINDS.iter().map(s).collect()));
+        let open = ui.global::<Dialogs>().get_emblems();
+        let kind = usize::try_from(g.get_emblem_kind()).unwrap_or(0).min(2);
+        let found = st.shown.as_ref().and_then(|m| {
+            let w = m.world.as_ref();
+            let items = em::items(w, kind);
+            l.set_emblem_items(model(items.iter().map(|(_, n)| s(n)).collect()));
+            let index = usize::try_from(g.get_emblem_index())
+                .unwrap_or(0)
+                .min(items.len().saturating_sub(1));
+            g.set_emblem_index(index as i32);
+            let (id, _) = items.get(index)?;
+            let coa = em::coa(w, kind, *id)?.clone();
+            Some((coa, em::custom_path(st.editor.config(), w, kind, *id)))
+        });
+        let Some((coa, path)) = found else {
+            l.set_emblem_items(model(Vec::new()));
+            g.set_emblem_summary(s(""));
+            g.set_emblem_custom_path(s(""));
+            g.set_emblem_custom(false);
+            g.set_emblem_json(s(""));
+            g.set_emblem_image(slint::Image::default());
+            return;
+        };
+        let custom = path
+            .as_deref()
+            .and_then(|p| em::custom(st.editor.config(), p));
+        g.set_emblem_summary(s(em::summary(&coa)));
+        g.set_emblem_custom_path(s(path.unwrap_or_default()));
+        g.set_emblem_custom(custom.is_some());
+        let shown = custom.unwrap_or_else(|| coa.clone());
+        g.set_emblem_json(s(serde_json::to_string(&shown).unwrap_or_default()));
+        if open {
+            // Two pixels for each logical pixel, for a sharp image.
+            const SIZE: u32 = 392;
+            match em::image(&coa, SIZE) {
+                Ok(px) => g.set_emblem_image(slint::Image::from_rgba8(
+                    SharedPixelBuffer::clone_from_slice(&px, SIZE, SIZE),
+                )),
+                Err(e) => self.message(&format!("cannot draw the arms: {e}"), true),
+            }
+        }
+    }
+
     fn update_lists(&self, st: &State) {
         use inkland_app::rows;
         let ui = self.ui();
@@ -1197,6 +1249,7 @@ impl Controller {
                 }
             }
         }
+        self.update_emblems(st);
         l.set_rivers(table(rows::river_rows(c, world)));
         let sel = l.get_selected_river();
         match c.pins.rivers.iter().find(|r| r.id == sel.as_str()) {
@@ -1823,6 +1876,35 @@ fn main() -> Result<(), slint::PlatformError> {
     });
     let c = Rc::clone(&app);
     a.on_open_tool(move |id| c.open_tool(&id));
+    let c = Rc::clone(&app);
+    a.on_emblem_select(move |kind, index| {
+        let ui = c.ui();
+        let g = ui.global::<AppState>();
+        g.set_emblem_kind(kind);
+        g.set_emblem_index(index);
+        c.update_emblems(&c.state.borrow());
+    });
+    let c = Rc::clone(&app);
+    a.on_emblem_set(move |text| {
+        let path = c.ui().global::<AppState>().get_emblem_custom_path();
+        let r = if path.is_empty() {
+            Err("this item cannot have custom arms".to_owned())
+        } else {
+            inkland_app::emblems::parse(&text)
+                .and_then(|v| c.state.borrow_mut().editor.set(&path, v))
+        };
+        c.edited(r, "set custom arms");
+    });
+    let c = Rc::clone(&app);
+    a.on_emblem_reset(move || {
+        let path = c.ui().global::<AppState>().get_emblem_custom_path();
+        let r = if path.is_empty() {
+            Err("this item has no custom arms".to_owned())
+        } else {
+            c.state.borrow_mut().editor.unset(&path)
+        };
+        c.edited(r, "use the generated arms");
+    });
     let c = Rc::clone(&app);
     a.on_select_pin(move |id| {
         let mut st = c.state.borrow_mut();

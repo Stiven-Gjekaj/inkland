@@ -107,6 +107,18 @@ export global AppState {
     in property <string> message;
     in property <bool> message-is-error;
     in property <string> file-name;
+
+    // The Emblems editor: the kind (index in `Lists.emblem-kinds`), the
+    // item (index in `Lists.emblem-items`), its image and its text, the
+    // config field for custom arms (empty: none), `true` if the config has
+    // custom arms there, and the JSON text of the arms.
+    in property <int> emblem-kind;
+    in property <int> emblem-index;
+    in property <image> emblem-image;
+    in property <string> emblem-summary;
+    in property <string> emblem-custom-path;
+    in property <bool> emblem-custom;
+    in-out property <string> emblem-json;
 }
 
 // The menu: open or closed, and the open tab.
@@ -172,6 +184,11 @@ export global Actions {
     callback quit();
     // A button of the Tools tab.
     callback open-tool(string);
+    // The Emblems editor: select the kind and the item, set custom arms
+    // from JSON text, and remove the custom arms.
+    callback emblem-select(int, int);
+    callback emblem-set(string);
+    callback emblem-reset();
 
     // The Rust code calls this from the event loop when a worker thread
     // has a result.
@@ -191,6 +208,9 @@ export global Lists {
     in property <[string]> presets;
     in property <[bool]> presets-disabled;
     in-out property <int> preset-index;
+    // The kinds and the items of the Emblems editor.
+    in property <[string]> emblem-kinds;
+    in property <[string]> emblem-items;
     // The rows of the editor tables.
     in property <[TableRow]> brushes;
     // The point pins, then the places that generation adds.
@@ -303,8 +323,10 @@ export global Dialogs {
     in-out property <bool> provinces;
     in-out property <bool> cells;
     in-out property <bool> print;
+    in-out property <bool> emblems;
 
     public function open(id: string) {
+        if id == "emblems" { self.emblems = true; }
         if id == "heightmap" { self.heightmap = true; }
         if id == "burgs" { self.burgs = true; }
         if id == "regions" { self.regions = true; }
@@ -324,6 +346,7 @@ export global Dialogs {
     }
 
     public function close(id: string) {
+        if id == "emblems" { self.emblems = false; }
         if id == "heightmap" { self.heightmap = false; }
         if id == "burgs" { self.burgs = false; }
         if id == "regions" { self.regions = false; }
@@ -343,6 +366,7 @@ export global Dialogs {
     }
 
     public function close-all() {
+        self.emblems = false;
         self.heightmap = false;
         self.burgs = false;
         self.regions = false;

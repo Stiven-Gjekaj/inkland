@@ -1,0 +1,94 @@
+// The Emblems editor of FMG: the coat of arms of a state, a province, or a
+// burg of the shown world. "Set custom" writes the arms to the config:
+// `coa` of a burg pin, or `state_coa` of the pin that is the capital of a
+// state.
+
+import { Theme, Label, DialogButton, Field, Select, FormRow, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component EmblemsDialog inherits Dialog {
+    id: "emblems";
+    title: "Emblems Editor";
+    content-width: 380px;
+    pos-x: 440px;
+    pos-y: 60px;
+    FormRow {
+        label: "Type";
+        label-width: 70px;
+        Select {
+            dialog: true;
+            width: 110px;
+            model: Lists.emblem-kinds;
+            current-index: AppState.emblem-kind;
+            commit: false;
+            selected(i) => { Actions.emblem-select(i, 0); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    FormRow {
+        label: "Item";
+        label-width: 70px;
+        Select {
+            dialog: true;
+            horizontal-stretch: 1;
+            model: Lists.emblem-items;
+            current-index: AppState.emblem-index;
+            commit: false;
+            selected(i) => { Actions.emblem-select(AppState.emblem-kind, i); }
+        }
+    }
+    HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 200px;
+            height: 200px;
+            background: white;
+            border-width: 1px;
+            border-color: #dddddd;
+            Image {
+                width: 196px;
+                height: 196px;
+                source: AppState.emblem-image;
+                image-fit: contain;
+            }
+        }
+    }
+    Label {
+        dialog: true;
+        text: AppState.emblem-summary;
+        wrap: word-wrap;
+    }
+    FormRow {
+        label: "Custom";
+        label-width: 70px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            enabled: AppState.emblem-custom-path != "";
+            placeholder: "Arms as JSON of FMG";
+            text <=> AppState.emblem-json;
+            accepted(t) => { Actions.emblem-set(t); }
+        }
+    }
+    HorizontalLayout {
+        alignment: end;
+        spacing: 6px;
+        DialogButton {
+            text: "Set custom";
+            enabled: AppState.emblem-custom-path != "";
+            clicked => { Actions.emblem-set(AppState.emblem-json); }
+        }
+        DialogButton {
+            text: "Use generated";
+            enabled: AppState.emblem-custom;
+            clicked => { Actions.emblem-reset(); }
+        }
+    }
+    Tip {
+        dialog: true;
+        text: AppState.emblem-custom-path != ""
+            ? "Edit the JSON and press Enter or Set custom. Undo removes the edit."
+            : "Only a burg pin, or a state with a pinned capital, can have custom arms.";
+    }
+}
