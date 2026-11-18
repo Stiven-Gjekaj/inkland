@@ -9,10 +9,14 @@
 //! - `markets`: the markets, their cells, and the plaza of each center.
 //! - `output`: rural output, deposits, and the multipliers of a good.
 //! - `routes`: the travel cost over the route network.
+//! - `deals`, `taxes`, `corruption`: the deal log, the tariffs and trade
+//!   terms, and corruption by province.
 //!
 //! `build` runs after the feature names, as `Markets.generate` does in the
 //! FMG pipeline.
 
+pub mod corruption;
+pub mod deals;
 pub mod demand;
 pub mod finance;
 pub mod goods;
@@ -20,6 +24,7 @@ pub mod goods_data;
 pub mod markets;
 pub mod output;
 pub mod routes;
+pub mod taxes;
 
 use crate::config::Config;
 use crate::features::Features;
