@@ -126,15 +126,14 @@ fn each_generated_coat_of_arms_renders() {
 
 #[test]
 fn the_hatching_look_passes_the_print_checks() {
-    let look = Look {
-        hatching: true,
-        min_line: 3.0,
-    };
     let opts = crate::checks::CheckOptions {
         min_line_width_pt: 0.5,
         fonts_allowed: Vec::new(),
     };
     for (i, c) in generated(135).iter().enumerate() {
+        // The smallest line that the check permits, and not more. The
+        // check applies the transforms, so it tests each line as printed.
+        let look = print_look(c, 200.0, 0.5);
         let svg = document(c, &format!("coa-h{i}"), &look, 200.0);
         for r in crate::checks::check_svg(&svg, &opts) {
             assert!(r.pass, "{} {:?} {c:?}", r.name, r.details);
@@ -201,10 +200,6 @@ fn line_widths_round_up() {
 
 #[test]
 fn each_charge_renders_in_colour_and_with_hatching() {
-    let hatched = Look {
-        hatching: true,
-        min_line: 3.0,
-    };
     let opts = crate::checks::CheckOptions {
         min_line_width_pt: 0.5,
         fonts_allowed: Vec::new(),
@@ -222,11 +217,45 @@ fn each_charge_renders_in_colour_and_with_hatching() {
         ));
         // The charge changes the picture.
         assert_ne!(render_png(&svg), before, "{name}");
+        // The smallest line that the check permits, and not more.
+        let hatched = print_look(&c, 200.0, 0.5);
         let svg = document(&c, &format!("coa-ch{i}"), &hatched, 200.0);
         for r in crate::checks::check_svg(&svg, &opts) {
             assert!(r.pass, "{name}: {} {:?}", r.name, r.details);
         }
         render_png(&svg);
+    }
+}
+
+/// The hatching look whose lines are `min_pt` wide on a page where the
+/// shield is `size_mm` wide, as the map and the CLI make it.
+fn print_look(c: &Coa, size_mm: f64, min_pt: f64) -> Look {
+    let view = draw(c, "coa-v", &Look::COLOUR).view;
+    Look {
+        hatching: true,
+        min_line: crate::page::line_mm(min_pt) * view[2] / size_mm,
+    }
+}
+
+#[test]
+fn a_transform_in_a_charge_file_does_not_make_lines_thinner() {
+    // The file of the millstone draws its art at 0.18 of the size.
+    let file = charges::FILES
+        .iter()
+        .find(|(n, _)| *n == "millstone")
+        .unwrap()
+        .1;
+    assert!(file.contains("transform=\"matrix(0.18,0,0,0.18,"));
+    let c = coa(
+        r#"{"t1":"argent","charges":[{"charge":"millstone","t":"azure","p":"e"}],"shield":"heater"}"#,
+    );
+    let opts = crate::checks::CheckOptions {
+        min_line_width_pt: 0.5,
+        fonts_allowed: Vec::new(),
+    };
+    let svg = document(&c, "coa-m", &print_look(&c, 40.0, 0.5), 40.0);
+    for r in crate::checks::check_svg(&svg, &opts) {
+        assert!(r.pass, "{} {:?}", r.name, r.details);
     }
 }
 
