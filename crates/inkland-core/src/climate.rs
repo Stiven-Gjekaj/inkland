@@ -209,6 +209,46 @@ pub fn precipitation(
     prec.iter().map(|&p| p.min(255.0).round()).collect()
 }
 
+/// The prevailing winds that enter the map (FMG `Precipitation.getWinds`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Winds {
+    /// The first cell of each row with a wind from the west, and the 30
+    /// degree tier of the row: 0 in the north to 5 in the south.
+    pub westerly: Vec<(usize, usize)>,
+    /// The last cell of each row with a wind from the east, and its tier.
+    pub easterly: Vec<(usize, usize)>,
+    /// The number of rows with a wind from the north.
+    pub northerly: usize,
+    /// The number of rows with a wind from the south.
+    pub southerly: usize,
+}
+
+/// The winds of each row of a grid, for a latitude range `[south, north]`.
+pub fn winds(grid: &Grid, config: &Config, range: [f64; 2]) -> Winds {
+    let winds = config.world.climate.wind.unwrap_or(DEFAULT_WINDS);
+    let (cx, cy) = (grid.cells_x as usize, grid.cells_y as usize);
+    let mut out = Winds::default();
+    for row in 0..cy {
+        let first = row * cx;
+        let lat = latitude_in(range, config, grid.points[first][1]);
+        let tier = (((89.0 - lat).abs() / 30.0) as usize).min(5);
+        let angle = winds[tier];
+        if angle > 40.0 && angle < 140.0 {
+            out.westerly.push((first, tier));
+        }
+        if angle > 220.0 && angle < 320.0 {
+            out.easterly.push((first + cx - 1, tier));
+        }
+        if angle > 100.0 && angle < 260.0 {
+            out.northerly += 1;
+        }
+        if !(80.0..=280.0).contains(&angle) {
+            out.southerly += 1;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,5 +366,30 @@ mod tests {
     fn metres_grow_with_height() {
         assert_eq!(metres(10.0, 20.0), 0.0);
         assert!(metres(100.0, 20.0) > metres(50.0, 20.0));
+    }
+
+    #[test]
+    fn winds_follow_the_angle_of_each_tier() {
+        let g = grid();
+        let mut c = config([0.0, 60.0], "top-left");
+        // Tier 0 and 1 (60 to 29 degrees): from the west. Tier 2: from the
+        // north east, which is from the north and from the east.
+        c.world.climate.wind = Some([90.0, 90.0, 225.0, 0.0, 0.0, 0.0]);
+        let w = winds(&g, &c, [0.0, 60.0]);
+        let cx = g.cells_x as usize;
+        assert!(!w.westerly.is_empty() && !w.easterly.is_empty());
+        assert!(
+            w.westerly
+                .iter()
+                .all(|&(cell, tier)| cell % cx == 0 && tier <= 1)
+        );
+        assert!(
+            w.easterly
+                .iter()
+                .all(|&(cell, tier)| cell % cx == cx - 1 && tier == 2)
+        );
+        assert_eq!(w.northerly, w.easterly.len());
+        assert_eq!(w.southerly, 0);
+        assert_eq!(w.westerly.len() + w.easterly.len(), g.cells_y as usize);
     }
 }
