@@ -64,10 +64,9 @@ These notes describe `render.mode: "colour"`. The code is in
 - The colour checks (`no_opacity`, `no_masks_filters_rgba`,
   `black_and_white`, `min_line_width`, `font_families_allowed`) report
   `"applicable": false` in colour mode.
-- Not done: bitmap textures and ocean patterns, heightmap hachures, lake
-  ripples, wind arrows, the trade animation, the lake fill inside a zone,
-  the legend boxes of editors (generation makes none), and the fogging
-  layer.
+- The texture and the ocean pattern are data URIs in the SVG, so the file
+  has all that it needs.
+- Not done: the trade animation (the SVG is still) and the fogging layer.
 
 ## Print-safe mode
 
