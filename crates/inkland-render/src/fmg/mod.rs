@@ -11,6 +11,7 @@
 pub mod color;
 pub mod data;
 pub mod geom;
+pub mod hatches;
 pub mod icons;
 mod icons_data;
 pub mod layers;

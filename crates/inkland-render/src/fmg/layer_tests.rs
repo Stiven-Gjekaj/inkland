@@ -78,7 +78,8 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         Vignette => Some("vignette"),
         Legend => Some("legend"),
         Emblems => Some("emblems"),
-        Texture | Zones | Ice | Population | Markers | Features => None,
+        Zones => Some("zones"),
+        Texture | Ice | Population | Markers | Features => None,
         Coast | Regions | Roads | Places => None,
     }
 }
@@ -515,4 +516,41 @@ fn placed_colour_labels_have_the_size_of_their_style_group() {
         }
     }
     assert!(seen > 0);
+}
+
+/// Render the layers of a world in `colour` mode.
+fn render_world(w: &World, layers: &[LayerName]) -> String {
+    let mut c = base_config();
+    c.render.layers = layers.to_vec();
+    crate::svg::render(w, &c, &c.variants[0]).svg
+}
+
+/// The test world with a change.
+fn world_with(change: impl FnOnce(&mut World)) -> World {
+    let mut w = world().clone();
+    change(&mut w);
+    w
+}
+
+#[test]
+fn zones_draw_with_the_hatches_of_fmg() {
+    let svg = render_with(&[LayerName::Zones], StyleName::Default);
+    let w = world();
+    assert!(!w.zones.is_empty(), "the test world has zones");
+    for z in &w.zones {
+        assert!(
+            svg.contains(&format!("<path id=\"zone-{}\" d=\"M", z.id)),
+            "{}",
+            z.id
+        );
+        let id = z.color.trim_start_matches("url(#").trim_end_matches(')');
+        assert!(svg.contains(&format!("fill=\"{}\"", z.color)));
+        assert!(svg.contains(&format!("<pattern id=\"{id}\"")), "{id}");
+    }
+    // The style of FMG: opacity 0.6, no stroke width.
+    assert!(svg.contains("<g id=\"zones\" opacity=\"0.6\""));
+    parse_and_draw(&svg);
+    // No zones: no group and no pattern.
+    let empty = render_world(&world_with(|w| w.zones.clear()), &[LayerName::Zones]);
+    assert!(!empty.contains("<g id=\"zones\"") && !empty.contains("<pattern id=\"hatch"));
 }

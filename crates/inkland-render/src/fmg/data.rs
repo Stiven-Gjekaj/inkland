@@ -1,5 +1,5 @@
 //! The data of the layers that the world may not have: zones, ice,
-//! population, emblems, and markers. Zones are not in the world yet.
+//! population, emblems, and markers.
 //!
 //! The drawing of each of these layers reads its data from here. Each
 //! function gives `None` while the world has no such data, and the layer
@@ -61,9 +61,20 @@ pub struct Marker {
     pub stroke: String,
 }
 
-/// The zones of a world.
-pub fn zones(_world: &World) -> Option<Vec<Zone>> {
-    None
+/// The zones of a world that have cells (`drawZones`).
+pub fn zones(world: &World) -> Option<Vec<Zone>> {
+    let out: Vec<Zone> = world
+        .zones
+        .iter()
+        .filter(|z| !z.cells.is_empty())
+        .map(|z| Zone {
+            id: z.id,
+            kind: z.kind.to_owned(),
+            color: z.color.to_owned(),
+            cells: z.cells.clone(),
+        })
+        .collect();
+    (!out.is_empty()).then_some(out)
 }
 
 /// The ice of a world: its glaciers and icebergs.

@@ -52,8 +52,8 @@ Some data tables come from it. This file keeps its license notice.
     `src/assets/icons/relief`, `burgs`, and `ports`. The place icons of the
     set `watabou` are by Watabou (Oleg Dolya); each file names its author.
     In inkland: `crates/inkland-render/assets/fmg/icons`.
-  - The SVG filters, the compass rose, and the grid patterns, from
-    `src/index.html`, and the biome colours and relief pools, from
+  - The SVG filters, the compass rose, the grid patterns, and the hatch
+    patterns, from `src/index.html`, and the biome colours and relief pools, from
     `src/model/physical/biomes-generator.ts`. In inkland:
     `crates/inkland-render/src/fmg/`.
   - The emblem generator data: tinctures, divisions, lines, ordinaries,

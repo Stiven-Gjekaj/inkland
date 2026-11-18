@@ -7,7 +7,7 @@ use super::super::Ctx;
 use super::super::geom::{self, Edge, n};
 use super::palette::BIOME_COLORS;
 use inkland_core::grid::OUTSIDE;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 /// The fill path and the water gap path of an area: the fill of its rings,
@@ -235,7 +235,7 @@ pub fn religions(s: &mut String, ctx: &Ctx) {
     s.push_str("</g>\n");
 }
 
-/// Zones (`drawZones`). The world has no zones yet; see `data::zones`.
+/// Zones (`drawZones`): one path for each zone, with its hatch fill.
 pub fn zones(s: &mut String, ctx: &Ctx) {
     let Some(list) = super::super::data::zones(ctx.world) else {
         return;
@@ -243,22 +243,37 @@ pub fn zones(s: &mut String, ctx: &Ctx) {
     write_zones(s, ctx, &list);
 }
 
-/// Write zones.
+/// The rings of the outline of a set of cells (`getVertexPath`).
+fn cell_rings(ctx: &Ctx, cells: &[usize]) -> Vec<Vec<Edge>> {
+    let g = &ctx.world.grid;
+    let set: BTreeSet<usize> = cells.iter().copied().filter(|&c| c < g.len()).collect();
+    let mut edges = Vec::new();
+    for &c in &set {
+        let poly = &g.polygons[c];
+        for (k, &o) in g.edge_cells[c].iter().enumerate() {
+            if o != OUTSIDE && set.contains(&(o as usize)) {
+                continue;
+            }
+            edges.push(Edge {
+                from: poly[k],
+                to: poly[(k + 1) % poly.len()],
+                other: o,
+            });
+        }
+    }
+    geom::chain_rings(&edges)
+}
+
+/// Write zones. A hatch fill adds its pattern to the defs.
 pub fn write_zones(s: &mut String, ctx: &Ctx, list: &[super::super::data::Zone]) {
-    let w = ctx.world;
     let _ = writeln!(s, "<g id=\"zones\"{}>", ctx.attrs(&["zones"], &[]));
     for z in list {
-        let mut inside = vec![false; w.grid.len()];
-        for &c in &z.cells {
-            if c < inside.len() {
-                inside[c] = true;
-            }
-        }
-        let rings = geom::rings(w, &|c| u32::from(inside[c]));
-        let (fill, _) = fill_and_gap(ctx, rings.get(&1).map_or(&[][..], Vec::as_slice));
+        let rings = cell_rings(ctx, &z.cells);
+        let (fill, _) = fill_and_gap(ctx, &rings);
         if fill.is_empty() {
             continue;
         }
+        super::super::hatches::ensure(ctx, &z.color);
         let _ = writeln!(
             s,
             "<path id=\"zone-{}\" d=\"{fill}\" fill=\"{}\"/>",
