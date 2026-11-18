@@ -767,6 +767,27 @@ pub fn segment_rows(world: &World, journey: &str, unit: &str) -> Vec<Row> {
         .collect()
 }
 
+/// The Measurers Editor of FMG: the type, the number of points, and the
+/// length.
+pub fn measurer_rows(world: &World, unit: &str) -> Vec<Row> {
+    world
+        .measurers
+        .iter()
+        .enumerate()
+        .map(|(k, m)| {
+            row(
+                k.to_string(),
+                vec![
+                    m.kind.name().to_owned(),
+                    m.points.len().to_string(),
+                    format!("{} {unit}", num(m.length(), 1)),
+                ],
+                false,
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1023,5 +1044,18 @@ mod tests {
         assert_eq!(segments.len(), j.segments.len());
         assert_eq!(segments[0].cells[1], j.segments[0].transport);
         assert!(segment_rows(&w, "0", "mi").is_empty());
+    }
+
+    #[test]
+    fn the_measurer_rows_give_the_kind_and_the_length() {
+        let (_, w) = world();
+        let rows = measurer_rows(&w, "mi");
+        assert_eq!(rows.len(), w.measurers.len());
+        assert_eq!(rows[0].cells[0], "Ruler", "the default ruler");
+        assert_eq!(rows[0].cells[1], "2");
+        assert_eq!(
+            rows[0].cells[2],
+            format!("{} mi", num(w.measurers[0].length(), 1))
+        );
     }
 }

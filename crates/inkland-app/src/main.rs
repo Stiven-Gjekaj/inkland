@@ -87,6 +87,7 @@ const IMPLEMENTED: &[&str] = &[
     "cells",
     "emblems",
     "diplomacy",
+    "measurers",
     "journeys",
     "economy",
     "markets",
@@ -1193,6 +1194,10 @@ impl Controller {
         let w = open(d.get_diplomacy());
         l.set_relations(rows(w, &|w| ov::relation_rows(w, selected)));
         g.set_chronicle(s(w.map(ov::chronicle_text).unwrap_or_default()));
+        let unit = st.editor.config().units.name.clone();
+        l.set_measurers(rows(open(d.get_measurers()), &|w| {
+            ov::measurer_rows(w, &unit)
+        }));
         let w = open(d.get_journeys());
         let unit = st.editor.config().units.name.clone();
         let journeys = w.map(|w| ov::journey_rows(w, &unit)).unwrap_or_default();

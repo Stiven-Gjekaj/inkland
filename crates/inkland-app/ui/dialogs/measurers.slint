@@ -1,0 +1,25 @@
+// The Measurers Editor of FMG: the rulers and the other measurers of the
+// shown world, with the type, the number of points, and the length. It
+// does not edit, because the config has no measurers.
+
+import { Theme, Label, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { Lists } from "../globals.slint";
+
+export component MeasurersDialog inherits Dialog {
+    id: "measurers";
+    title: "Measurers Editor";
+    content-width: 380px;
+    pos-x: 460px;
+    pos-y: 80px;
+    Table {
+        header: ["Type", "Points", "Length"];
+        widths: [140px, 60px, 120px];
+        rows: Lists.measurers;
+        list-height: 120px;
+    }
+    Tip {
+        dialog: true;
+        text: "Generation adds the default ruler of FMG.";
+    }
+}
