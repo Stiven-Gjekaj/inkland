@@ -49,8 +49,23 @@ example:
 - A value is a string, a number, a boolean, or `null`.
 
 Sizes and line widths are in map pixels of FMG. inkland puts the world in
-a map of 1920 x 1080 pixels and scales the pixels to the page. The label
-font sizes come from `render.font_sizes_pt`, not from the style.
+a map of 1920 x 1080 pixels and scales the pixels to the page.
+
+The label font sizes come from the label groups of the style:
+
+- The capitals get `render.font_sizes_pt.place_city`.
+- Each other group keeps the ratio of its `font-size` to the `font-size`
+  of the capitals. For example, the `atlas` states are 20/7 of the
+  capitals.
+- No label size is less than 5 pt.
+- The `size_pt` of the label options of an overlay wins over the style.
+- An area label (a state, a region, a lake, an ocean, or an island) gets
+  smaller to fit its area, down to 0.4 of its size.
+
+The outline or the shadow of a label group is a halo around the text. The
+label placer keeps the halo free, inside the map. The original program has
+no label groups for lakes, oceans, and islands. Lakes use the `river`
+group, oceans use the `added` group, and islands use the `province` group.
 
 ## The paths of the default preset
 

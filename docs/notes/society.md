@@ -72,8 +72,9 @@ as FMG for the same seed. This is not a goal.
 
 ## Additions for print
 
-- A required label (a pin, a capital, or a state with its capital in the
-  view) that finds no free position can hide the symbols of generated
+- A required label (a pin, a capital, a state with its capital in the
+  view, or a pinned river with its source or its mouth in the view) that
+  finds no free position can hide the symbols of generated
   places that are not capitals. The SVG leaves out a hidden symbol, and the
   label of that place gets the reason `hidden`.
 - The labels of the many generated places are optional.

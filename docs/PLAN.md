@@ -598,7 +598,9 @@ and the test that closes each milestone. We stop for a review after each one.
   table has the advance widths, the cap height, and the descender of IM
   Fell English, IM Fell English SC, Caladea, and Inter.
   `examples/font_metrics.rs` makes it from local font files. A family that
-  is not in the table uses the IM Fell English widths.
+  is not in the table, for example a font of a style preset, uses a wide
+  table: each character has the largest advance of the four tables, 10 %
+  larger, and at least 0.6 em, the advance of a monospace font.
 - Labels: each place in the view, each state, each pinned region with a
   `name`, and each pinned river with a `name`. Generated rivers have no
   names in this version.
@@ -616,6 +618,12 @@ and the test that closes each milestone. We stop for a review after each one.
   area. The text is along the page or upright (bottom to top). Letter
   spacing makes the text fill about 70 % of the width of the area, between
   limits. A label part outside the area costs more.
+- On each cell, an area label gets the largest of the sizes 1, 0.85, 0.7,
+  0.55, and 0.4 of its size at which its text fits in 0.9 of the width of
+  the area, as the original program fits state labels. A smaller size
+  costs more. If no candidate has a free place, the smaller sizes and
+  letters without space are a second choice. No label gets smaller than
+  5 pt by this rule.
 - A river label follows a straight part of its river (chord at least 0.8 of
   the length), above the line, from left to right. It is a `<textPath>` on a
   path in `<defs>` with the id `path-<label id>`.
@@ -627,8 +635,11 @@ and the test that closes each milestone. We stop for a review after each one.
 - The report: `labels.placed` is the number of placed labels.
   `labels.unplaced` lists each label without a place, with `reason`
   (`collision` or `outside`) and `required`. Required labels are the labels
-  of pins, capitals, and states. The check `all_labels_placed` fails only
-  for required labels, and each one gives a `LABEL_UNPLACED` warning. Other
+  of pins, capitals, and states. The label of a state is required only if
+  its capital is in the view. The label of a pinned river is required only
+  if its source or its mouth is in the view. The check `all_labels_placed`
+  fails only for required labels, and each one gives a `LABEL_UNPLACED`
+  warning. Other
   labels, such as generated villages, can be left out without a failure.
 - Proptest: no two placed label boxes overlap, and no label box leaves the
   map or covers a symbol or an extra.
@@ -723,8 +734,9 @@ came from the review:
   at its last land cell, and a type, `river` or `stream`. Land features are
   continents, islands, or isles; lakes are freshwater or frozen. Continents,
   islands, and lakes of 2 or more cells get names. `world.json`, `query`,
-  and `export` give them. Large generated rivers and named lakes get
-  optional labels.
+  and `export` give them. Large generated rivers, named lakes of each type,
+  oceans, seas, gulfs, islands, isles, and lake islands get optional
+  labels in both modes. Continents have no label.
 - Religions (`religions.rs`): a folk religion for each culture, and
   `world.religions` organized religions that start at the best places and
   spread up to a range. `world.json` and `query` give them. They have no
