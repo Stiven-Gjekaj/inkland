@@ -96,18 +96,20 @@ markers, the overviews, and the output read them.
 - Equal costs in a priority queue come out in insertion order. Sorts are
   stable. `libm` gives the math functions, so the last bits can differ
   from JavaScript.
-- The goods catalogue and the military roster are the FMG defaults. The
-  config does not hold them. Only the culture type multipliers apply,
-  because the defaults use only those. User adjustments are not in the
-  config, so they are zero, as on a new FMG map.
+- The goods catalogue, the military roster, and the journey transports
+  start as the FMG defaults. `world.goods`, `world.military_units`, and
+  `world.transports` change, add, or remove entries, as the FMG editors do.
+  Only the culture type multipliers of a good apply, because the defaults
+  use only those. User adjustments are not in the config, so they are
+  zero, as on a new FMG map.
 - The edit and regeneration functions of FMG (add a market, set taxes,
   move a regiment, edit a journey) are not ported. The app shows these
   data in read-only dialogs.
 - The economy debug log is not ported.
 - The era of the calendar comes from the markers part of the seed tree,
   and the military uses the same era.
-- Journey and segment ids start at 1. Journeys use the fixed FMG list of
-  transports. Water paths do not meander.
+- Journey and segment ids start at 1. A segment keeps the domain and the
+  hours per day of its transport. Water paths do not meander.
 - Text has no em-dash: two bivouac lines of the journey lore, the lines of
   a regiment note, and the mine names use a colon or a hyphen.
 - The places that an overlay adds in a variant are not in the economy.
