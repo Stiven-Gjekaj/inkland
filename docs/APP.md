@@ -130,6 +130,13 @@ FMG tool that inkland does not have yet.
   add a new variant that shows only the rectangle.
 - **States, Cultures, Religions, Provinces.** The lists of the shown
   world, with the number of cells and burgs. These lists do not edit.
+- **Emblems.** The coat of arms of a state, a province, or a burg of the
+  shown world, with its image and a short text. "Set custom" writes the
+  JSON text of the arms to the config: `coa` of a burg pin, or
+  `state_coa` of the pin that is the capital of a state. Each change is a
+  `set` command, so undo and the edit script have it. "Use generated"
+  removes the custom arms. A province and a generated burg have no custom
+  arms.
 - **Cells.** The Cell Details dialog. It shows the facts of the cell
   under the pointer.
 - **Print.** The checks of the report of the shown variant, with PASS or
@@ -154,7 +161,7 @@ of Ctrl.
 | Escape | Stop the drawing and the tool; then close the dialogs and the menu |
 | Enter | Finish the drawing |
 | Delete | Remove the selected burg pin |
-| Shift+H, T, Z, V, U, L, Q, S, C, R, P, E, W | Heightmap, Burgs, Regions, Rivers, Routes, Labels, Units, States, Cultures, Religions, Provinces, Cells, Variants |
+| Shift+H, T, Z, V, U, L, Q, S, C, R, P, E, W, Y | Heightmap, Burgs, Regions, Rivers, Routes, Labels, Units, States, Cultures, Religions, Provinces, Cells, Variants, Emblems |
 | Shift+1, Shift+4, Shift+5 | Add a burg, a river, a route |
 | A layer key (for example V, F, I, L, /) | Show or hide the layer |
 | + and -, 0 | Zoom in and out, show the full page |

@@ -99,7 +99,8 @@ inkland query --world out/world.json --at 120.5,88
 The output gives the cell, `land`, `height`, `height_above_sea`, the feature,
 the biome, the temperature and the precipitation, the pinned regions that
 contain the point, the culture, state, and province, and the nearest place,
-river, and road with their distances. `nearest_river.side` is `left` or
+river, and road with their distances. The state, the province, and the
+nearest place have `coa`, the coat of arms. `nearest_river.side` is `left` or
 `right` as one looks downstream.
 
 ## `inkland export`
@@ -118,7 +119,8 @@ inkland export --world out/world.json --format geojson --layers coast,rivers,roa
 
 The coordinates are config units of the frame with 3 decimals, not WGS84.
 `crs` is `inkland:local`. Each feature has `layer`, an id, and, where they
-apply, a pin id, a name, a kind, and a length.
+apply, a pin id, a name, a kind, and a length. A place has `coa`, its coat
+of arms.
 
 ## `inkland emblem`
 
