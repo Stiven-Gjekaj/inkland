@@ -75,12 +75,13 @@ follow Azgaar's Fantasy Map Generator (FMG). The FMG files are
 
 ## Differences from FMG
 
-- The charges are the 159 charge files of FMG whose licenses permit use in
-  inkland, also in a book for sale: CC0, CC BY, CC BY-SA, and the Free Art
-  License. `THIRD_PARTY_NOTICES.md` names each file that is not CC0, with
+- The charges are the 169 charge files of FMG whose licenses permit use in
+  inkland, also in a book for sale: CC0, CC BY, CC BY-SA, the Free Art
+  License, and the GNU FDL 1.3 (its text is in
+  `crates/inkland-render/assets/emblems/GFDL-1.3.txt`). `THIRD_PARTY_NOTICES.md` names each file that is not CC0, with
   its author and license. The 183 files under CC BY-NC-SA 3.0 do not
-  permit commercial use, the 10 files under the GNU FDL need its full text
-  with each copy, and 1 file has no license; inkland leaves them out. The
+  permit commercial use, and 1 file has no license; inkland leaves them
+  out. The
   generator draws only from categories and charges with art, with the
   weights of FMG. A charge of a culture type without art falls back to the
   normal choice.

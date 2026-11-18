@@ -69,16 +69,18 @@ Some data tables come from it. This file keeps its license notice.
     FMG ports them from Armoria (<https://github.com/Azgaar/Armoria>), by
     the same author. In inkland:
     `crates/inkland-render/src/emblem/data.rs`.
-  - 159 charge files (SVG), from `src/assets/icons/charges`, with no
+  - 169 charge files (SVG), from `src/assets/icons/charges`, with no
     change. Each file names its author and its license in its `metadata`
     element. In inkland: `crates/inkland-render/assets/emblems/charges`.
     - 108 files have the license CC0 1.0 (public domain). Authors: Azgaar,
       Celbusro, Fedor Taran, Gothika, Inkscaper, Leonid 2, Madboy74,
       Marmelad, Rama, Zorlot, spax89, toa267, and V. A. Lyakhor.
-    - 51 files have an attribution or share-alike license. These files stay
-      under their own licenses, not under the license of inkland. A change
-      to a CC BY-SA or Free Art file must keep the same license. The files
-      and their authors:
+    - 61 files have an attribution, share-alike, or GNU FDL license. These
+      files stay under their own licenses, not under the license of
+      inkland. A change to a CC BY-SA, Free Art, or GNU FDL file must keep
+      the same license. The full text of the GNU FDL 1.3 is in
+      `crates/inkland-render/assets/emblems/GFDL-1.3.txt`, and each release
+      package has a copy. The files and their authors:
       - CC BY 1.0 (<https://creativecommons.org/licenses/by/1.0>):
         - `tools/pincers.svg` by Yorick
         - `tools/scissors2.svg` by Yorick
@@ -136,10 +138,20 @@ Some data tables come from it. This file keeps its license notice.
         - `tools/trowel.svg` by Jacques63
       - Free Art License 1.3 (<http://artlibre.org/licence/lal/en>):
         - `miscellaneous/bookClosed2.svg` by Tzeentch
-    - inkland does not include the other 194 charge files of FMG: 183 have
-      the license CC BY-NC-SA 3.0, which does not permit commercial use, 10
-      have the GNU FDL 1.3, which needs its full text with each copy, and 1
-      has no license.
+      - GNU FDL 1.3 (<https://www.gnu.org/licenses/fdl-1.3.html>):
+        - `agriculture/millstone.svg` by Madboy74
+        - `agriculture/ploughshare.svg` by Madboy74
+        - `architecture/castle2.svg` by Madboy74
+        - `architecture/palace.svg` by Xavigivax
+        - `architecture/portcullis.svg` by Ssire
+        - `arms/lanceHead.svg` by Orror
+        - `beasts/stagLodgedRegardant.svg` by Sodacan
+        - `ornaments/ribbon7.svg` by Rinaldum
+        - `tools/hook.svg` by Madboy74
+        - `tools/ladder2.svg` by Bruno Vallette
+    - inkland does not include the other 184 charge files of FMG: 183 have
+      the license CC BY-NC-SA 3.0, which does not permit commercial use,
+      and 1 has no license.
 - Test data copied into inkland:
   - The test maps `tests/fixtures/1.112.1.map` and `1.154.0.map`, with gzip
     and no other change. In inkland: `fixtures/azgaar/*.map.gz`. They come
