@@ -35,6 +35,7 @@ pub mod overlay;
 pub mod pack;
 pub mod population;
 pub mod provinces;
+pub mod quadtree;
 pub mod rand;
 pub mod religions;
 pub mod rivers;
