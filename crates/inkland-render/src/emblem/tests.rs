@@ -140,18 +140,6 @@ fn the_hatching_look_passes_the_print_checks() {
             assert!(r.pass, "{} {:?} {c:?}", r.name, r.details);
         }
         render_png(&svg);
-        // Each stroke width is at least the smallest line.
-        let doc = roxmltree::Document::parse(&svg).unwrap();
-        for n in doc.descendants().filter(|n| n.is_element()) {
-            if let Some(w) = n.attribute("stroke-width") {
-                let w: f64 = w.parse().unwrap();
-                let in_pattern = n.ancestors().any(|a| a.tag_name().name() == "pattern");
-                let in_use = n.tag_name().name() == "use";
-                if !in_pattern && !in_use {
-                    assert!(w >= 3.0 - 1e-9, "{w} {c:?}");
-                }
-            }
-        }
     }
 }
 
@@ -240,4 +228,64 @@ fn each_charge_renders_in_colour_and_with_hatching() {
         }
         render_png(&svg);
     }
+}
+
+#[test]
+fn a_transformed_part_of_a_charge_gets_a_wider_line() {
+    // The file of the millstone draws its art at 0.18 of the size.
+    let c = coa(
+        r#"{"t1":"argent","charges":[{"charge":"millstone","t":"azure","p":"e"}],"shield":"heater"}"#,
+    );
+    let look = Look {
+        hatching: true,
+        min_line: 2.0,
+    };
+    let d = draw(&c, "coa-w", &look);
+    let svg = format!("<svg xmlns=\"http://www.w3.org/2000/svg\">{}</svg>", d.body);
+    let doc = roxmltree::Document::parse(&svg).unwrap();
+    let width =
+        |n: roxmltree::Node| -> f64 { n.attribute("stroke-width").unwrap().parse().unwrap() };
+    let used = doc
+        .descendants()
+        .find(|n| n.tag_name().name() == "use")
+        .map(width)
+        .unwrap();
+    let scaled = doc
+        .descendants()
+        .find(|n| n.attribute("transform") == Some("matrix(0.18,0,0,0.18,63.25,73.1)"))
+        .unwrap();
+    // After the scale, the line is as wide as the line of the use.
+    assert!(width(scaled) * 0.18 >= used - 1e-9, "{svg}");
+    // The hatching in the scaled part is for its scale: its lines are
+    // wider than those of the hatching of the use.
+    let fill = scaled.attribute("fill").unwrap();
+    assert!(fill.starts_with("url(#coa-w-h"), "{fill}");
+    let outer = doc
+        .descendants()
+        .find(|n| {
+            n.tag_name().name() == "g"
+                && n.attribute("fill").is_some_and(|f| f.starts_with("url("))
+                && n.children().any(|c| c.tag_name().name() == "use")
+        })
+        .and_then(|n| n.attribute("fill"))
+        .unwrap();
+    assert_ne!(fill, outer);
+}
+
+#[test]
+fn a_hatched_orle_is_at_least_one_line_wide() {
+    // A small shield: the line is wider than the band of the orle.
+    let c =
+        coa(r#"{"t1":"argent","ordinaries":[{"ordinary":"orle","t":"azure"}],"shield":"heater"}"#);
+    let look = Look {
+        hatching: true,
+        min_line: 20.0,
+    };
+    let d = draw(&c, "coa-o", &look);
+    // The band of the orle is 20 / 0.85 wide before its scale of 0.85.
+    assert!(
+        d.body.contains("stroke=\"#fff\" stroke-width=\"23.53\""),
+        "{}",
+        d.body
+    );
 }

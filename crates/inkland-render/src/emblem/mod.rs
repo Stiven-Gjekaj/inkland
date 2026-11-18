@@ -15,6 +15,7 @@
 mod charges;
 mod data;
 
+use crate::transform::Affine;
 use inkland_core::emblems::{Charge, Coa, Divided, Ordinary};
 use inkland_core::rand::js_round;
 use std::collections::BTreeMap;
@@ -151,8 +152,9 @@ impl Painter<'_> {
     /// `scale` is the scale of the user space of the element, for the
     /// width of the hatching lines.
     fn paint(&mut self, tincture: &str, scale: f64) -> String {
+        // The full scale: a pattern for a larger scale has thinner lines.
         let key = if self.look.hatching {
-            format!("{tincture} {}", num(scale))
+            format!("{tincture} {scale}")
         } else {
             tincture.to_owned()
         };
@@ -210,7 +212,11 @@ impl Painter<'_> {
         let id = self.new_id("p", self.paints.len());
         self.paints.insert(key, id.clone());
         let charge = semy
-            .map(|c| self.charge_def(c, &c2, &c2, &c2, None))
+            .map(|c| {
+                let art = scale * tile;
+                let width = self.look.hatching.then(|| self.look.min_line / art);
+                self.charge_def(c, &c2, &c2, &c2, [t2; 3], art, width)
+            })
             .unwrap_or_default();
         text = text
             .replace("{p}", &id)
@@ -295,20 +301,25 @@ impl Painter<'_> {
     }
 
     /// The id of a charge definition with its tinctures (`getCharge`).
-    /// `width` is the line width of an inescutcheon, in its own units.
+    /// `t`, `t2`, and `t3` are the paints of the tinctures `tinctures`
+    /// at the scale `art_scale` of the charge art. With hatching, `width`
+    /// is the width of a line in the units of the charge art.
+    #[allow(clippy::too_many_arguments)]
     fn charge_def(
         &mut self,
         name: &str,
         t: &str,
         t2: &str,
         t3: &str,
+        tinctures: [&str; 3],
+        art_scale: f64,
         width: Option<f64>,
     ) -> String {
         let key = (
             name.to_owned(),
             t.to_owned(),
             t2.to_owned(),
-            format!("{t3} {}", width.map(num).unwrap_or_default()),
+            format!("{t3} {}", width.map(|w| format!("{w}")).unwrap_or_default()),
         );
         if let Some(id) = self.charge_ids.get(&key) {
             return id.clone();
@@ -326,7 +337,10 @@ impl Painter<'_> {
                 .binary_search_by(|(k, _)| (*k).cmp(name))
                 .map(|i| charges::FILES[i].1)
                 .unwrap_or("");
-            charge_markup(file, &id, t2, t3, self.look)
+            let look = *self.look;
+            let mut repaint =
+                |slot: usize, factor: f64| self.paint(tinctures[slot], art_scale * factor);
+            charge_markup(file, &id, [t, t2, t3], &look, width, &mut repaint)
         };
         self.defs
             .insert(id.clone(), format!("<g id=\"{id}\">{inner}</g>"));
@@ -414,8 +428,24 @@ fn scoped(prefix: &str, id: &str) -> String {
 /// to fills. With hatching, each colour becomes black or white, the
 /// elements with an opacity and the gradients, masks, and filters go, a
 /// fill from a gradient becomes white, and the lines get the width of the
-/// use.
-fn charge_markup(file: &str, prefix: &str, t2: &str, t3: &str, look: &Look) -> String {
+/// use. `line` is that width in the units of the charge: an element with
+/// a transform that makes lines thinner gets a wider line, so that each
+/// line is `line` wide or wider after its transforms.
+///
+/// A hatching pattern scales with the user space of the element that it
+/// fills. So an element with a transform that changes the scale gets the
+/// pattern of its scale: `repaint(slot, factor)` gives the paint of the
+/// tincture `slot` (0: the main tincture, 1: `secondary`, 2: `tertiary`) at
+/// `factor` times the scale of the charge art.
+fn charge_markup(
+    file: &str,
+    prefix: &str,
+    paints: [&str; 3],
+    look: &Look,
+    line: Option<f64>,
+    repaint: &mut dyn FnMut(usize, f64) -> String,
+) -> String {
+    let [_, t2, t3] = paints;
     let start = file
         .find("<svg")
         .and_then(|s| file[s..].find('>').map(|e| s + e + 1))
@@ -428,6 +458,11 @@ fn charge_markup(file: &str, prefix: &str, t2: &str, t3: &str, look: &Look) -> S
     // Depth of an element that the hatching look leaves out.
     let mut skip: Option<usize> = None;
     let mut depth = 0usize;
+    // The transform of each open element, the outermost first.
+    let mut transforms: Vec<Affine> = vec![Affine::IDENTITY];
+    // The tincture of the fill of each open element: `None` for a fill
+    // that is not a tincture.
+    let mut slots: Vec<Option<usize>> = vec![Some(0)];
     while let Some(lt) = rest.find('<') {
         let between = &rest[..lt];
         if skip.is_none() {
@@ -437,9 +472,14 @@ fn charge_markup(file: &str, prefix: &str, t2: &str, t3: &str, look: &Look) -> S
         let tag = &rest[lt..gt];
         rest = &rest[gt..];
         let closing = tag.starts_with("</");
-        let self_closing = tag.ends_with("/>");
+        // A comment or a declaration has no end tag.
+        let self_closing = tag.ends_with("/>") || tag.starts_with("<!") || tag.starts_with("<?");
         if closing {
             depth = depth.saturating_sub(1);
+            if transforms.len() > 1 {
+                transforms.pop();
+                slots.pop();
+            }
             if skip == Some(depth) {
                 skip = None;
                 continue;
@@ -453,8 +493,26 @@ fn charge_markup(file: &str, prefix: &str, t2: &str, t3: &str, look: &Look) -> S
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric() || *c == ':')
             .collect();
+        let own = attr(tag, "transform").map_or(Affine::IDENTITY, Affine::parse);
+        let parent = *transforms.last().unwrap_or(&Affine::IDENTITY);
+        let total = parent.then(&own);
+        let class_slot = attr(tag, "class").and_then(|classes| {
+            classes.split_whitespace().fold(None, |slot, c| match c {
+                "secondary" => Some(Some(1)),
+                "tertiary" => Some(Some(2)),
+                "pseudostroke" => Some(None),
+                _ => slot,
+            })
+        });
+        let slot = match class_slot {
+            Some(s) => s,
+            None if attr(tag, "fill").is_some() => None,
+            None => slots.last().copied().flatten(),
+        };
         if !self_closing {
             depth += 1;
+            transforms.push(total);
+            slots.push(slot);
         }
         if skip.is_some() || name == "metadata" || tag.starts_with("<?") || tag.starts_with("<!") {
             continue;
@@ -555,9 +613,67 @@ fn charge_markup(file: &str, prefix: &str, t2: &str, t3: &str, look: &Look) -> S
             ] {
                 t = drop_attr(&t, key);
             }
+            // A transform that makes lines thinner: a wider line here, for
+            // this element and the elements in it. A tincture fill gets the
+            // hatching of the scale here.
+            let factor = total.thin_factor();
+            let rescaled = (factor - 1.0).abs() > 1e-9 && factor > 1e-9;
+            if let Some(s) = slot
+                && rescaled
+                && (attr(&t, "transform").is_some() || class_slot.is_some())
+            {
+                t = drop_attr(&t, "fill");
+                t = add_attr(&t, "fill", &repaint(s, factor));
+            }
+            if let Some(w) = line
+                && attr(&t, "transform").is_some()
+                && (factor - 1.0).abs() > 1e-9
+                && factor > 1e-9
+            {
+                t = add_attr(&t, "stroke-width", &up(w / factor));
+            }
         }
         out.push_str(&t);
     }
+    out
+}
+
+/// Markup for print whose transforms keep each line `line` wide or wider:
+/// an element with a transform that changes the scale gets a wider line,
+/// and, if it has no own fill, the fill `repaint(factor)` for its scale.
+fn fit_lines(markup: &str, line: f64, repaint: &mut dyn FnMut(f64) -> String) -> String {
+    let mut out = String::new();
+    let mut rest = markup;
+    let mut transforms: Vec<Affine> = vec![Affine::IDENTITY];
+    while let Some(lt) = rest.find('<') {
+        out.push_str(&rest[..lt]);
+        let gt = rest[lt..].find('>').map_or(rest.len(), |e| lt + e + 1);
+        let mut t = rest[lt..gt].to_owned();
+        rest = &rest[gt..];
+        if t.starts_with("</") {
+            if transforms.len() > 1 {
+                transforms.pop();
+            }
+            out.push_str(&t);
+            continue;
+        }
+        let own = attr(&t, "transform").map(Affine::parse);
+        let parent = *transforms.last().unwrap_or(&Affine::IDENTITY);
+        let total = own.map_or(parent, |o| parent.then(&o));
+        let factor = total.thin_factor();
+        if own.is_some() && (factor - 1.0).abs() > 1e-9 && factor > 1e-9 {
+            t = drop_attr(&t, "stroke-width");
+            t = add_attr(&t, "stroke-width", &up(line / factor));
+            if attr(&t, "fill").is_none() {
+                t = add_attr(&t, "fill", &repaint(factor));
+            }
+        }
+        if !t.ends_with("/>") && !t.starts_with("<!") && !t.starts_with("<?") {
+            transforms.push(total);
+        }
+        out.push_str(&t);
+    }
+    out.push_str(rest);
     out
 }
 
@@ -690,8 +806,10 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
             let fill = pt.paint(t, art_scale);
             let f2 = t2.map_or_else(|| fill.clone(), |x| pt.paint(x, art_scale));
             let f3 = t3.map_or_else(|| fill.clone(), |x| pt.paint(x, art_scale));
-            let width = (look.hatching && inescutcheon).then(|| lw / art_scale);
-            let id = pt.charge_def(&name, &fill, &f2, &f3, width);
+            // The width of a line in the units of the charge art.
+            let width = look.hatching.then(|| lw / art_scale);
+            let tinctures = [t, t2.unwrap_or(t), t3.unwrap_or(t)];
+            let id = pt.charge_def(&name, &fill, &f2, &f3, tinctures, art_scale, width);
             let mut seen = String::new();
             let mut uses = String::new();
             for ch in c.p.chars() {
@@ -719,10 +837,23 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
         };
 
     let draw_ordinary = |pt: &mut Painter, o: &Ordinary, t: &str| -> String {
-        let fill = pt.paint(t, 1.0);
         let kind = o.ordinary.as_str();
+        // The orle has the scale .85. With hatching, its hatching and its
+        // band are for that scale, and each band is at least one line
+        // wide.
+        let scale = if kind == "orle" && look.hatching {
+            0.85
+        } else {
+            1.0
+        };
+        let fill = pt.paint(t, scale);
         if kind == "bordure" || kind == "orle" {
-            let width = if kind == "bordure" { 33.3 } else { 10.0 };
+            let width = match (kind, look.hatching) {
+                ("bordure", true) => f64::max(33.3, lw),
+                ("bordure", false) => 33.3,
+                (_, true) => f64::max(10.0, lw / 0.85),
+                _ => 10.0,
+            };
             let tr = if kind == "orle" {
                 " transform=\"translate(15 15) scale(.85)\""
             } else {
@@ -734,7 +865,9 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
                 let _ = write!(
                     s,
                     "<path d=\"{path}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{}\"{tr}/>",
-                    up(width + 2.0 * lw)
+                    // The black edge on each side of the band is one line
+                    // wide after the scale of the orle.
+                    up(width + 2.0 * lw / if kind == "orle" { 0.85 } else { 1.0 })
                 );
                 if kind == "orle" {
                     let _ = write!(
@@ -755,6 +888,7 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
             return String::new();
         };
         if look.hatching {
+            let content = fit_lines(&content, lw, &mut |f| pt.paint(t, f));
             format!(
                 "<g fill=\"{fill}\" stroke=\"#000\" stroke-width=\"{}\">{content}</g>",
                 up(lw)
@@ -814,6 +948,7 @@ pub fn draw(coa: &Coa, prefix: &str, look: &Look) -> Drawn {
         body.push_str("</g>");
         if look.hatching {
             // The line of partition.
+            let shape = fit_lines(&shape, lw, &mut |_| "none".to_owned());
             let _ = write!(
                 body,
                 "<g fill=\"none\" stroke=\"#000\" stroke-width=\"{}\">{shape}</g>",
