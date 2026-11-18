@@ -1,4 +1,5 @@
-//! The icons of `colour` mode: relief icons, place icons, and port anchors.
+//! The icons of `colour` mode: relief icons, place icons, port anchors, and
+//! goods icons.
 //!
 //! Each icon file becomes an SVG `<symbol>`, as `icon-sets.ts` of the
 //! original program makes it. A symbol id is the set and the file name in
@@ -105,6 +106,17 @@ pub fn place_icon_path(id: &str) -> Option<String> {
     None
 }
 
+/// The path of a goods icon of the economy, for example `goods-amber`
+/// gives `goods/amber`. An unknown icon gives the `unknown` icon of FMG.
+pub fn goods_icon_path(icon: &str) -> String {
+    let path = format!("goods/{}", icon.strip_prefix("goods-").unwrap_or(icon));
+    if file(&path).is_some() {
+        path
+    } else {
+        "goods/unknown".to_owned()
+    }
+}
+
 /// The relief icon types (`TYPES` in `relief-generator.ts`): the name, the
 /// number of variants, and the fallback type.
 pub const RELIEF_TYPES: [(&str, u32, Option<&str>); 14] = [
@@ -194,6 +206,21 @@ mod tests {
         let b = symbol("burgs/atlas/circle", "burgs-atlas-circle").unwrap();
         assert!(b.contains("overflow=\"visible\""));
         assert_eq!(anchored_box("burgs/atlas/circle"), [-0.6, -0.6, 1.2, 1.2]);
+    }
+
+    #[test]
+    fn each_good_has_its_icon() {
+        for good in inkland_core::economy::goods::catalogue() {
+            let path = goods_icon_path(good.icon);
+            assert_ne!(path, "goods/unknown", "{}", good.name);
+            let s = symbol(&path, &kebab(&path)).unwrap();
+            assert!(s.contains("viewBox=\"0 0 100 100\""), "{}", good.name);
+        }
+        assert_eq!(goods_icon_path("goods-nothing"), "goods/unknown");
+        assert_eq!(
+            kebab(&goods_icon_path("goods-tropicalTimber")),
+            "goods-tropical-timber"
+        );
     }
 
     #[test]

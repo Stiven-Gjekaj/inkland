@@ -52,6 +52,13 @@ Some data tables come from it. This file keeps its license notice.
     `src/assets/icons/relief`, `burgs`, and `ports`. The place icons of the
     set `watabou` are by Watabou (Oleg Dolya); each file names its author.
     In inkland: `crates/inkland-render/assets/fmg/icons`.
+  - 72 goods icons (SVG files), from `src/assets/icons/goods`, with no
+    change. Each file names its author and its license in its `desc`
+    element. 65 files have the license CC BY 3.0
+    (<https://creativecommons.org/licenses/by/3.0>). They come from the
+    Noun Project, and Azgaar edited some of them. 7 files have the license
+    CC0 1.0 (public domain). In inkland:
+    `crates/inkland-render/assets/fmg/icons/goods`.
   - The SVG filters, the compass rose, the grid patterns, and the hatch
     patterns, from `src/index.html`, and the biome colours and relief pools, from
     `src/model/physical/biomes-generator.ts`. In inkland:
