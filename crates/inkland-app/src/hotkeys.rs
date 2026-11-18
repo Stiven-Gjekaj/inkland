@@ -160,9 +160,12 @@ mod tests {
             hotkey("]", false, false, false),
             Some(Hotkey::BrushSize(true))
         );
+        assert_eq!(
+            hotkey("g", false, false, false),
+            Some(Hotkey::Layer("goods"))
+        );
         // Alt and unknown keys do nothing.
         assert_eq!(hotkey("v", false, false, true), None);
-        assert_eq!(hotkey("g", false, false, false), None);
         assert_eq!(hotkey("Home", false, false, false), None);
     }
 

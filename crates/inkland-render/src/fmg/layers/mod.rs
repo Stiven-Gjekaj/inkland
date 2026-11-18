@@ -3,6 +3,7 @@
 pub(crate) mod areas;
 mod base;
 mod decor;
+pub(crate) mod economy;
 mod lines;
 pub(crate) mod marks;
 pub(crate) mod overlays;
@@ -39,6 +40,7 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Relief => marks::relief(s, ctx),
         BurgIcons => marks::burg_icons(s, ctx),
         Ice => marks::ice(s, ctx),
+        Goods => economy::goods(s, ctx),
         Emblems => marks::emblems(s, ctx),
         Markers => marks::markers(s, ctx),
         Features => marks::features(s, ctx),

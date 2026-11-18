@@ -1171,6 +1171,10 @@ pub enum LayerName {
     /// Glaciers and icebergs. Only `colour` mode. Draws nothing when the
     /// world has no ice.
     Ice,
+    /// Goods: the output of the cells, the pies of the places, and the
+    /// deposit icons (FMG `goods`). Only `colour` mode. Draws nothing when
+    /// the world has no economy.
+    Goods,
     /// Precipitation. Only `colour` mode.
     Precipitation,
     /// Population. Only `colour` mode. Draws nothing when the world has no
@@ -1194,7 +1198,7 @@ pub enum LayerName {
 
 impl LayerName {
     /// All layer names, in the order of their declaration.
-    pub const ALL: [LayerName; 36] = [
+    pub const ALL: [LayerName; 37] = [
         LayerName::Coast,
         LayerName::Relief,
         LayerName::Rivers,
@@ -1223,6 +1227,7 @@ impl LayerName {
         LayerName::Temperature,
         LayerName::Coastline,
         LayerName::Ice,
+        LayerName::Goods,
         LayerName::Precipitation,
         LayerName::Population,
         LayerName::Emblems,

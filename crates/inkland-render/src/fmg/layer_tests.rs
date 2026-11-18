@@ -79,6 +79,7 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         Legend => Some("legend"),
         Emblems => Some("emblems"),
         Zones => Some("zones"),
+        Goods => Some("goods"),
         Texture | Ice | Population | Markers | Features => None,
         Coast | Regions | Roads | Places => None,
     }
@@ -553,4 +554,35 @@ fn zones_draw_with_the_hatches_of_fmg() {
     // No zones: no group and no pattern.
     let empty = render_world(&world_with(|w| w.zones.clear()), &[LayerName::Zones]);
     assert!(!empty.contains("<g id=\"zones\"") && !empty.contains("<pattern id=\"hatch"));
+}
+
+#[test]
+fn goods_draw_the_cells_the_places_and_the_deposits() {
+    let svg = render_with(&[LayerName::Goods], StyleName::Default);
+    for part in ["goods-cells", "goods-traffic", "goods-burgs", "goods-icons"] {
+        assert!(svg.contains(&format!("<g id=\"{part}\"")), "{part}");
+    }
+    assert!(svg.contains("<polygon id=\"goods-cell-"));
+    assert!(svg.contains("<g id=\"goods-burg-"));
+    assert!(svg.contains("<g id=\"goods-icon-"));
+    // Each deposit icon has its symbol, with the lines of FMG: 0.1 x 0.4 x
+    // 100 / 2.5.
+    assert!(svg.contains("<symbol id=\"goods-"));
+    assert!(svg.contains("stroke=\"#41414f\" stroke-width=\"1.6\"/></g>"));
+    // The traffic of the goods layer is off in the default style.
+    assert!(svg.contains("<g id=\"goods-traffic\" fill=\"none\" opacity=\"0.7\""));
+    assert!(!svg.contains("data-cells="));
+    parse_and_draw(&svg);
+
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Goods];
+    c.render.style_overrides.insert(
+        "goods.groups.goodsTraffic.options.render".to_owned(),
+        json!(true),
+    );
+    let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert!(svg.contains("data-cells="));
+
+    let empty = world_with(|w| w.economy.goods.clear());
+    assert!(!render_world(&empty, &[LayerName::Goods]).contains("<g id=\"goods\""));
 }
