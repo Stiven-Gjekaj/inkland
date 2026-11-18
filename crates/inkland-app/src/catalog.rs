@@ -217,6 +217,29 @@ pub const PRESETS: &[(&str, &str, &[&str])] = &[
         ],
     ),
     (
+        "goods",
+        "Goods and production",
+        &[
+            "borders", "goods", "ice", "lakes", "rivers", "scaleBar", "vignette",
+        ],
+    ),
+    (
+        "trade",
+        "Trade map",
+        &[
+            "borders",
+            "burgIcons",
+            "ice",
+            "lakes",
+            "markets",
+            "rivers",
+            "routes",
+            "scaleBar",
+            "trade",
+            "vignette",
+        ],
+    ),
+    (
         "military",
         "Military map",
         &[
@@ -653,6 +676,27 @@ mod tests {
         v["render"] = render;
         let next: Config = serde_json::from_value(v).unwrap();
         assert_eq!(current_preset(&next), Some("political"));
+    }
+
+    #[test]
+    fn the_trade_preset_shows_the_markets_and_the_trade() {
+        let c = config(json!({}));
+        let render = render_with_preset(&c, "trade").unwrap();
+        let layers: Vec<&str> = render["layers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert!(layers.contains(&"markets") && layers.contains(&"trade"));
+        assert!(!layers.contains(&"goods") && !layers.contains(&"labels"));
+        let render = render_with_preset(&c, "goods").unwrap();
+        assert!(
+            render["layers"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("goods"))
+        );
     }
 
     #[test]
