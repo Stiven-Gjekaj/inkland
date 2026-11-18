@@ -381,7 +381,7 @@ pub const TOOLS: &[ToolDef] = &[
     tool("biomes", "Biomes", "Edit", "Shift+B", false),
     tool("burgs", "Burgs", "Edit", "Shift+T", true),
     tool("cultures", "Cultures", "Edit", "Shift+C", true),
-    tool("diplomacy", "Diplomacy", "Edit", "Shift+D", false),
+    tool("diplomacy", "Diplomacy", "Edit", "Shift+D", true),
     tool("emblems", "Emblems", "Edit", "Shift+Y", true),
     tool("heightmap", "Heightmap", "Edit", "Shift+H", true),
     tool("labels", "Labels", "Edit", "Shift+L", true),

@@ -1,0 +1,42 @@
+// The Diplomacy Overview of FMG: the relation of each state to the
+// selected state, with the FMG color of the relation, and the relations
+// history. It does not edit, because the config has no relations.
+
+import { Theme, Label, Select, FormRow, Table, TextBox, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component DiplomacyDialog inherits Dialog {
+    id: "diplomacy";
+    title: "Diplomacy Overview";
+    content-width: 480px;
+    pos-x: 440px;
+    pos-y: 50px;
+    FormRow {
+        label: "Relations to";
+        label-width: 90px;
+        Select {
+            dialog: true;
+            horizontal-stretch: 1;
+            model: Lists.state-names;
+            current-index <=> AppState.overview-state;
+            selected(i) => { Actions.selection-changed(); }
+        }
+    }
+    Table {
+        header: ["State", "Relation", "Description"];
+        widths: [140px, 70px, 220px];
+        rows: Lists.relations;
+        list-height: 200px;
+        select(id) => {
+            AppState.overview-state = id.to-float() - 1;
+            Actions.selection-changed();
+        }
+    }
+    Label { dialog: true; text: "Relations history"; font-weight: 700; }
+    TextBox { text: AppState.chronicle; box-height: 130px; }
+    Tip {
+        dialog: true;
+        text: "Click a state to see the relations to it. The world makes the relations from the generation options.";
+    }
+}

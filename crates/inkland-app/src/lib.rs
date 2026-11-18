@@ -8,6 +8,7 @@ pub mod hotkeys;
 pub mod model;
 pub mod options;
 pub mod overlay;
+pub mod overviews;
 pub mod pins;
 pub mod rows;
 pub mod snapshot;

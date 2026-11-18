@@ -86,6 +86,7 @@ const IMPLEMENTED: &[&str] = &[
     "provinces",
     "cells",
     "emblems",
+    "diplomacy",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -1157,6 +1158,34 @@ impl Controller {
         }
     }
 
+    /// The read-only overviews of the shown world: the state select, and
+    /// the rows of the open overviews.
+    fn update_overviews(&self, st: &State) {
+        use inkland_app::overviews as ov;
+        use inkland_app::rows;
+        let ui = self.ui();
+        let l = ui.global::<Lists>();
+        let g = ui.global::<AppState>();
+        let d = ui.global::<Dialogs>();
+        let world = st.shown.as_ref().map(|m| m.world.as_ref());
+        let names = world.map(ov::state_names).unwrap_or_default();
+        l.set_state_names(model(names.iter().map(s).collect()));
+        let last = i32::try_from(names.len()).unwrap_or(i32::MAX) - 1;
+        let index = g.get_overview_state().min(last).max(0);
+        g.set_overview_state(index);
+        let selected = world
+            .and_then(|w| ov::state_of_index(w, index))
+            .unwrap_or(0);
+        // The rows of a closed overview, or without a world, are empty.
+        let open = |on: bool| world.filter(|_| on);
+        let rows = |w: Option<&World>, f: &dyn Fn(&World) -> Vec<rows::Row>| {
+            table(w.map(f).unwrap_or_default())
+        };
+        let w = open(d.get_diplomacy());
+        l.set_relations(rows(w, &|w| ov::relation_rows(w, selected)));
+        g.set_chronicle(s(w.map(ov::chronicle_text).unwrap_or_default()));
+    }
+
     fn update_lists(&self, st: &State) {
         use inkland_app::rows;
         let ui = self.ui();
@@ -1255,6 +1284,7 @@ impl Controller {
             }
         }
         self.update_emblems(st);
+        self.update_overviews(st);
         l.set_rivers(table(rows::river_rows(c, world)));
         let sel = l.get_selected_river();
         match c.pins.rivers.iter().find(|r| r.id == sel.as_str()) {

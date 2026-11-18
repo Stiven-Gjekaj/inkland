@@ -119,6 +119,11 @@ export global AppState {
     in property <string> emblem-custom-path;
     in property <bool> emblem-custom;
     in-out property <string> emblem-json;
+
+    // The overviews of the world: the selected state (an index in
+    // `Lists.state-names`) and the long texts.
+    in-out property <int> overview-state;
+    in property <string> chronicle;
 }
 
 // The menu: open or closed, and the open tab.
@@ -257,6 +262,9 @@ export global Lists {
     in property <[TableRow]> provinces;
     // The facts of the cell under the pointer: a label and a value.
     in property <[TableRow]> cell-lines;
+    // The overviews of the shown world. Read only.
+    in property <[string]> state-names;
+    in property <[TableRow]> relations;
 }
 
 // The values of the Options tab and of the Style tab, as the text of their
@@ -324,6 +332,7 @@ export global Dialogs {
     in-out property <bool> cells;
     in-out property <bool> print;
     in-out property <bool> emblems;
+    in-out property <bool> diplomacy;
 
     public function open(id: string) {
         if id == "emblems" { self.emblems = true; }
@@ -341,6 +350,7 @@ export global Dialogs {
         if id == "religions" { self.religions = true; }
         if id == "provinces" { self.provinces = true; }
         if id == "cells" { self.cells = true; }
+        if id == "diplomacy" { self.diplomacy = true; }
         Actions.selection-changed();
         if id == "print" { self.print = true; }
     }
@@ -361,6 +371,7 @@ export global Dialogs {
         if id == "religions" { self.religions = false; }
         if id == "provinces" { self.provinces = false; }
         if id == "cells" { self.cells = false; }
+        if id == "diplomacy" { self.diplomacy = false; }
         Actions.selection-changed();
         if id == "print" { self.print = false; }
     }
@@ -381,6 +392,7 @@ export global Dialogs {
         self.religions = false;
         self.provinces = false;
         self.cells = false;
+        self.diplomacy = false;
         Actions.selection-changed();
         self.print = false;
     }
