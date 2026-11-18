@@ -182,10 +182,12 @@ of Ctrl.
       inkland edit --world world.json --script edits.json -o new-world.json
 
   The result is the same config and the same `world.json` as in the app.
-- The config in `world.json` has only the default variant. Thus a script
-  with an edit of a variant other than the first variant (for example a
-  crop of the second variant) replays with `--config`, but not with
-  `--world`.
+- A `world.json` keeps only the part of the config that makes the world.
+  It does not keep the variants, the overlays, the render options, or the
+  font directories. Thus `--world` refuses a script that edits one of
+  them, with the error `EDIT_OUTSIDE_WORLD`. Replay such a script with
+  `--config`. When you save such a script, the status bar tells you to
+  use `--config`.
 
 ## License
 

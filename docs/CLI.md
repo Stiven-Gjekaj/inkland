@@ -179,6 +179,11 @@ The commands are `set`, `unset`, `add_pin`, `remove_pin`, `move_pin`,
 script that gives back the first file. The edited config must pass all
 config checks, else nothing is written.
 
+A `world.json` keeps only the part of the config that makes the world.
+Thus `--world` refuses a `set` or `unset` of `/overlays`, `/variants`,
+`/render`, or `/font_dirs` with the error `EDIT_OUTSIDE_WORLD`, and
+writes nothing. Apply such a script to the config file with `--config`.
+
 ## `inkland check`
 
 Run the print checks on an SVG file.
