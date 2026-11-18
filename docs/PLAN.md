@@ -291,8 +291,8 @@ Fonts:
 - The `font_families_allowed` check parses the written SVG and fails if a
   `font-family` is not in `fonts_allowed`. A config that names a family that
   is not in `fonts_allowed` is a schema error (`FONT_NOT_ALLOWED`, exit 2).
-- The PNG preview uses `font_dirs` and the system fonts. A missing font gives
-  the warning `FONT_NOT_FOUND`.
+- The PNG preview uses the free fonts in the program, `font_dirs`, and the
+  system fonts. A missing font gives the warning `FONT_NOT_FOUND`.
 
 ### 3.9 Flags that change the config
 
