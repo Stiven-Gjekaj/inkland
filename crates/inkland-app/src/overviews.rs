@@ -514,6 +514,184 @@ pub fn market_rows(world: &World) -> Vec<Row> {
         .collect()
 }
 
+/// The Gini index of the values, 0 for equal (FMG `gini`).
+pub fn gini(values: &[f64]) -> f64 {
+    let mut sorted: Vec<f64> = values.iter().map(|v| v.max(0.0)).collect();
+    sorted.sort_by(f64::total_cmp);
+    let total = sorted.iter().fold(0.0, |t, v| t + v);
+    let n = sorted.len();
+    if total == 0.0 || n < 2 {
+        return 0.0;
+    }
+    let weighted = sorted.iter().enumerate().fold(0.0, |t, (i, v)| {
+        t + (2.0 * (i as f64 + 1.0) - n as f64 - 1.0) * v
+    });
+    weighted / (n as f64 * total)
+}
+
+/// The Economy Overview of FMG for one state, as lines of a label and a
+/// value: the cards, the revenue, the expenses, and the trade.
+pub fn economy_lines(world: &World, selected: u32) -> Vec<Row> {
+    use inkland_core::economy::accounts;
+    use inkland_core::economy::finance::Expense;
+    use inkland_core::military::{POPULATION_SCALE, URBANIZATION_RATE};
+    let soc = &world.society;
+    let e = &world.economy;
+    let (Some(s), Some(acc)) = (
+        state(world, selected),
+        e.accounts.states.get(selected as usize),
+    ) else {
+        return Vec::new();
+    };
+    let w = &e.accounts.world;
+    let p = &acc.people;
+    let price = |v: f64| num(v, 2);
+    let share = |a: f64, b: f64| if b != 0.0 { rn(a / b * 100.0, 1) } else { 0.0 };
+    let trade = accounts::trade(soc, e, selected);
+    let budget = accounts::budget(soc, e, selected);
+    let f = &s.economy;
+    // People from population points, as FMG `people` gives them.
+    let urban = p.urban_people * POPULATION_SCALE * URBANIZATION_RATE;
+    let rural = (p.people - p.urban_people) * POPULATION_SCALE;
+    let mut lines: Vec<(String, String)> = vec![
+        (
+            "Economy".into(),
+            accounts::economy_type(p, &w.people)
+                .unwrap_or("-")
+                .to_owned(),
+        ),
+        (
+            "Population".into(),
+            format!(
+                "{} (rural {}, urban {})",
+                si(rural + urban),
+                si(rural),
+                si(urban)
+            ),
+        ),
+        (
+            "Inequality".into(),
+            format!(
+                "{} (world {})",
+                num(gini(&acc.burg_wealth), 2),
+                num(gini(&w.burg_wealth), 2)
+            ),
+        ),
+        (
+            "Trade balance".into(),
+            format!(
+                "{} (exports {}, imports {})",
+                price(trade.exports - trade.imports),
+                price(trade.exports),
+                price(trade.imports)
+            ),
+        ),
+        (
+            "Day balance".into(),
+            format!(
+                "{} (tax burden {}%)",
+                price(f.treasury),
+                num(share(acc.taxes, p.product), 1)
+            ),
+        ),
+        (
+            "Prosperity".into(),
+            p.prosperity.map_or_else(|| "-".to_owned(), percent),
+        ),
+        (
+            "Product".into(),
+            format!(
+                "{} ({}% of the world)",
+                price(p.product),
+                num(share(p.product, w.people.product), 1)
+            ),
+        ),
+        (
+            "Wealth".into(),
+            format!("{} (world {})", price(p.wealth), price(w.people.wealth)),
+        ),
+        (
+            "Sectors".into(),
+            format!(
+                "rural {}%, manufacturing {}%, trade {}%",
+                num(share(p.rural, p.product), 0),
+                num(share(p.manufacturing, p.product), 0),
+                num(share(p.trade, p.product), 0)
+            ),
+        ),
+        (
+            format!("Sales tax: {}%", num(f.sales_tax * 100.0, 1)),
+            price(budget.sales_tax),
+        ),
+        ("Import tariffs".into(), price(budget.tariffs)),
+        (
+            format!("Poll tax: {} a head", num(f.poll_tax, 2)),
+            format!(
+                "{} of {}",
+                price(budget.poll_tax),
+                price(budget.poll_tax_owed)
+            ),
+        ),
+        (
+            format!("Market licenses: {} each", num(f.market_fee, 2)),
+            price(budget.market_fees),
+        ),
+        ("Collected".into(), price(f.collected)),
+    ];
+    for x in Expense::ALL {
+        lines.push((
+            format!(
+                "{}: {}%",
+                crate::catalog::title_case(x.name()),
+                num(f.budget.of(x), 0)
+            ),
+            price(-f.spent_on(x)),
+        ));
+    }
+    lines.push(("Pocketed by officials".into(), price(-f.pocketed)));
+    let top = |values: &[f64]| {
+        let mut list: Vec<(usize, f64)> = values
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, v)| *v > 0.0)
+            .collect();
+        list.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        let names: Vec<String> = list
+            .iter()
+            .take(6)
+            .filter_map(|(k, v)| e.goods.get(*k).map(|g| format!("{} {}", g.name, price(*v))))
+            .collect();
+        if names.is_empty() {
+            "none".to_owned()
+        } else {
+            names.join(", ")
+        }
+    };
+    lines.push(("Main exports".into(), top(&trade.exported)));
+    lines.push(("Main imports".into(), top(&trade.imported)));
+    let mut partners = trade.partners.clone();
+    partners.sort_by(|a, b| (b.1 + b.2).total_cmp(&(a.1 + a.2)).then(a.0.cmp(&b.0)));
+    let partners: Vec<String> = partners
+        .iter()
+        .take(6)
+        .map(|(id, ex, im)| format!("{} {}", state_name(world, *id), price(ex - im)))
+        .collect();
+    lines.push((
+        "Foreign trade".into(),
+        if partners.is_empty() {
+            "none".to_owned()
+        } else {
+            partners.join(", ")
+        },
+    ));
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(k, (label, value))| row(k.to_string(), vec![label, value], false))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -725,5 +903,30 @@ mod tests {
             let buys: f64 = r.cells[6].parse().unwrap();
             assert!(sales >= 0.0 && buys >= 0.0);
         }
+    }
+
+    #[test]
+    fn the_economy_lines_give_the_accounts_of_the_state() {
+        let (_, w) = world();
+        let s = &w.society.states[0];
+        let lines = economy_lines(&w, s.id);
+        let get = |k: &str| {
+            lines
+                .iter()
+                .find(|r| r.cells[0].starts_with(k))
+                .map(|r| r.cells[1].clone())
+                .unwrap_or_else(|| panic!("no line {k}"))
+        };
+        assert_eq!(get("Collected"), num(s.economy.collected, 2));
+        let p = &w.economy.accounts.states[s.id as usize].people;
+        assert!(get("Product").starts_with(&num(p.product, 2)));
+        assert!(get("Population").starts_with(&si(p.people * 1000.0)));
+        assert!(lines.iter().any(|r| r.cells[0].starts_with("Military: ")));
+        assert!(
+            economy_lines(&w, 0).is_empty(),
+            "the neutrals have no select entry"
+        );
+        assert_eq!(gini(&[1.0, 1.0, 1.0]), 0.0);
+        assert!((gini(&[0.0, 0.0, 3.0]) - 2.0 / 3.0).abs() < 1e-12);
     }
 }

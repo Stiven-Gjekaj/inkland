@@ -1,0 +1,37 @@
+// The Economy Overview of FMG for the selected state: the economy type,
+// the people, the product, the wealth, the prosperity, the revenue, the
+// expenses, and the trade. It does not edit, because the config has no
+// budget.
+
+import { Theme, Label, Select, FormRow, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component EconomyDialog inherits Dialog {
+    id: "economy";
+    title: "Economy Overview";
+    content-width: 560px;
+    pos-x: 440px;
+    pos-y: 50px;
+    FormRow {
+        label: "Economy of";
+        label-width: 90px;
+        Select {
+            dialog: true;
+            horizontal-stretch: 1;
+            model: Lists.state-names;
+            current-index <=> AppState.overview-state;
+            selected(i) => { Actions.selection-changed(); }
+        }
+    }
+    Table {
+        header: ["Figure", "Value"];
+        widths: [190px, 330px];
+        rows: Lists.economy-lines;
+        list-height: 400px;
+    }
+    Tip {
+        dialog: true;
+        text: "The figures are of one day of the economy run. Prices are in the money of FMG.";
+    }
+}

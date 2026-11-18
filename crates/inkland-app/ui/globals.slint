@@ -270,6 +270,7 @@ export global Lists {
     // The overviews of the shown world. Read only.
     in property <[string]> state-names;
     in property <[TableRow]> relations;
+    in property <[TableRow]> economy-lines;
     in property <[TableRow]> markets;
     in property <[TableRow]> goods;
     in property <[TableRow]> stability-parts;
@@ -349,6 +350,7 @@ export global Dialogs {
     in-out property <bool> print;
     in-out property <bool> emblems;
     in-out property <bool> diplomacy;
+    in-out property <bool> economy;
     in-out property <bool> markets;
     in-out property <bool> goods;
     in-out property <bool> stability;
@@ -374,6 +376,7 @@ export global Dialogs {
         if id == "provinces" { self.provinces = true; }
         if id == "cells" { self.cells = true; }
         if id == "diplomacy" { self.diplomacy = true; }
+        if id == "economy" { self.economy = true; }
         if id == "markets" { self.markets = true; }
         if id == "goods" { self.goods = true; }
         if id == "stability" { self.stability = true; }
@@ -402,6 +405,7 @@ export global Dialogs {
         if id == "provinces" { self.provinces = false; }
         if id == "cells" { self.cells = false; }
         if id == "diplomacy" { self.diplomacy = false; }
+        if id == "economy" { self.economy = false; }
         if id == "markets" { self.markets = false; }
         if id == "goods" { self.goods = false; }
         if id == "stability" { self.stability = false; }
@@ -430,6 +434,7 @@ export global Dialogs {
         self.provinces = false;
         self.cells = false;
         self.diplomacy = false;
+        self.economy = false;
         self.markets = false;
         self.goods = false;
         self.stability = false;

@@ -21,6 +21,7 @@ import { SocietyDialog } from "dialogs/society.slint";
 import { CellsDialog } from "dialogs/cells.slint";
 import { EmblemsDialog } from "dialogs/emblems.slint";
 import { DiplomacyDialog } from "dialogs/diplomacy.slint";
+import { EconomyDialog } from "dialogs/economy.slint";
 import { MarketsDialog } from "dialogs/markets.slint";
 import { GoodsDialog } from "dialogs/goods.slint";
 import { StabilityDialog } from "dialogs/stability.slint";
@@ -101,6 +102,7 @@ export component AppWindow inherits Window {
         if Dialogs.cells: CellsDialog {}
         if Dialogs.emblems: EmblemsDialog {}
         if Dialogs.diplomacy: DiplomacyDialog {}
+        if Dialogs.economy: EconomyDialog {}
         if Dialogs.markets: MarketsDialog {}
         if Dialogs.goods: GoodsDialog {}
         if Dialogs.stability: StabilityDialog {}
