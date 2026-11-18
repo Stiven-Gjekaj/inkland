@@ -563,6 +563,50 @@ fn zones_draw_with_the_hatches_of_fmg() {
 }
 
 #[test]
+fn a_zone_around_a_lake_covers_the_lake() {
+    use inkland_core::features::FeatureKind;
+    let w = world();
+    let lake = w
+        .features
+        .list
+        .iter()
+        .find(|f| f.kind == FeatureKind::Lake && !f.shoreline.is_empty())
+        .expect("the test world has a lake with a shore");
+    let lake_cells: Vec<usize> = (0..w.grid.len())
+        .filter(|&c| w.features.of_cell[c] == lake.id)
+        .collect();
+    // The rings of a zone path, in no order.
+    let rings = |cells: Vec<usize>| {
+        let changed = world_with(|w| {
+            w.zones.truncate(1);
+            w.zones[0].cells = cells;
+        });
+        let svg = render_world(&changed, &[LayerName::Zones]);
+        let d = svg
+            .split("<path id=\"zone-")
+            .nth(1)
+            .and_then(|p| p.split(" d=\"").nth(1))
+            .and_then(|p| p.split('"').next())
+            .expect("a zone path")
+            .to_owned();
+        let mut out: Vec<String> = d
+            .split('M')
+            .filter(|r| !r.is_empty())
+            .map(str::to_owned)
+            .collect();
+        out.sort();
+        out
+    };
+    let shore = lake.shoreline.clone();
+    let mut with_lake = shore.clone();
+    with_lake.extend(&lake_cells);
+    with_lake.sort_unstable();
+    // The zone of the shore draws as the zone of the shore and the lake:
+    // the lake is not a hole.
+    assert_eq!(rings(shore), rings(with_lake));
+}
+
+#[test]
 fn goods_draw_the_cells_the_places_and_the_deposits() {
     let svg = render_with(&[LayerName::Goods], StyleName::Default);
     for part in ["goods-cells", "goods-traffic", "goods-burgs", "goods-icons"] {

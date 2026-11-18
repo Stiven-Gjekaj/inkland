@@ -6,6 +6,7 @@
 use super::super::Ctx;
 use super::super::geom::{self, Edge, n};
 use super::palette::BIOME_COLORS;
+use inkland_core::features::FeatureKind;
 use inkland_core::grid::OUTSIDE;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -261,7 +262,32 @@ fn cell_rings(ctx: &Ctx, cells: &[usize]) -> Vec<Vec<Edge>> {
             });
         }
     }
-    geom::chain_rings(&edges)
+    let mut rings = geom::chain_rings(&edges);
+    // A ring around a lake whose shore is all in the set is not a hole: the
+    // zone covers the lake (`getVertexPath`, "inner lake").
+    rings.retain(|ring| !inner_lake(ctx, &set, ring));
+    rings
+}
+
+/// Whether all cells across a ring are of one lake, and all shore cells of
+/// that lake are in the set.
+fn inner_lake(ctx: &Ctx, set: &BTreeSet<usize>, ring: &[Edge]) -> bool {
+    let f = &ctx.world.features;
+    let mut lake = None;
+    for e in ring {
+        if e.other == OUTSIDE {
+            return false;
+        }
+        let id = f.of_cell[e.other as usize];
+        if f.get(id).kind != FeatureKind::Lake || lake.is_some_and(|l| l != id) {
+            return false;
+        }
+        lake = Some(id);
+    }
+    lake.is_some_and(|id| {
+        let shore = &f.get(id).shoreline;
+        !shore.is_empty() && shore.iter().all(|c| set.contains(c))
+    })
 }
 
 /// Write zones. A hatch fill adds its pattern to the defs.
