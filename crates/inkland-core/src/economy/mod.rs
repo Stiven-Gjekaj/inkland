@@ -7,6 +7,8 @@
 //! - `demand`: what people need and how they spend.
 //! - `finance`: the taxes, tariffs, and budget of a state (`State::economy`).
 //! - `markets`: the markets, their cells, and the plaza of each center.
+//! - `output`: rural output, deposits, and the multipliers of a good.
+//! - `routes`: the travel cost over the route network.
 //!
 //! `build` runs after the feature names, as `Markets.generate` does in the
 //! FMG pipeline.
@@ -16,6 +18,8 @@ pub mod finance;
 pub mod goods;
 pub mod goods_data;
 pub mod markets;
+pub mod output;
+pub mod routes;
 
 use crate::config::Config;
 use crate::features::Features;
