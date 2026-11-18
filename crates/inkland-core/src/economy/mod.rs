@@ -175,9 +175,9 @@ pub(crate) fn burg_views(soc: &Society) -> Vec<markets::Burg> {
         .collect()
 }
 
-/// Run the economy: markets (`Markets.generate`) and the run of one day
-/// (`Production.produce`). The plaza of each place is its market: a center
-/// has one.
+/// Run the economy: markets (`Markets.generate`), the run of one day
+/// (`Production.produce`), and the taxes (`Taxes.collect`). The plaza of
+/// each place is its market: a center has one.
 pub fn build(input: &Input, soc: &mut Society) -> Economy {
     let Input {
         config,
@@ -250,6 +250,7 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
         spacing: libm::sqrt(w * h / crate::world::cell_count(config)),
     };
     produce(input, soc, &links, &mut economy);
+    collect(soc, &economy);
     economy
 }
 
@@ -501,6 +502,66 @@ fn produce(input: &Input, soc: &mut Society, links: &[Vec<(usize, bool)>], e: &m
     }
 }
 
+/// Add up the taxes of the deals, the poll tax, and the fees into what each
+/// state collected, what officials pocketed, and the treasury
+/// (`Taxes.collect`).
+fn collect(soc: &mut Society, e: &Economy) {
+    let n = soc.states.len() + 1;
+    let state_of_market = |m: u32| soc.places[e.markets[m as usize - 1].center as usize - 1].state;
+    let (mut sales, mut tariffs, mut poll, mut fees) =
+        (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+    for d in &e.deals {
+        let burg = soc.places[d.burg as usize - 1].state;
+        let market = state_of_market(d.market);
+        let (tax_state, tariff_state) = if d.kind == deals::DealKind::Sale {
+            (burg, market)
+        } else {
+            (market, burg)
+        };
+        if d.tax != 0.0 {
+            sales[tax_state as usize] += d.tax;
+        }
+        if d.tariff != 0.0 {
+            tariffs[tariff_state as usize] += d.tariff;
+        }
+    }
+    for (b, pe) in e.places.iter().enumerate() {
+        if pe.poll_tax_paid != 0.0 {
+            poll[soc.places[b].state as usize] += pe.poll_tax_paid;
+        }
+    }
+    for m in &e.markets {
+        if let Some(rural) = &m.rural {
+            for &(s, _, paid) in &rural.poll_tax {
+                poll[s as usize] += paid;
+            }
+        }
+        if m.fee_paid != 0.0 {
+            fees[state_of_market(m.id) as usize] += m.fee_paid;
+        }
+    }
+    let capital_cells: Vec<Option<usize>> = soc
+        .states
+        .iter()
+        .map(|s| {
+            (s.capital as usize)
+                .checked_sub(1)
+                .map(|c| soc.places[c].cell)
+        })
+        .collect();
+    for (k, s) in soc.states.iter_mut().enumerate() {
+        let i = s.id as usize;
+        let collected = crate::rand::rn(sales[i] + tariffs[i] + poll[i] + fees[i] + 0.0, 2);
+        let expenses = s.economy.budget.total();
+        let corruption = e.corruption.of_state(s, capital_cells[k], collected);
+        let pocketed = crate::rand::rn(collected.max(0.0) * expenses * corruption / 10000.0, 2);
+        let spent = s.economy.spent.iter().fold(0.0, |t, v| t + v);
+        s.economy.collected = collected;
+        s.economy.pocketed = pocketed;
+        s.economy.treasury = crate::rand::rn(collected - pocketed - spent, 2);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::config::Config;
@@ -595,6 +656,14 @@ mod tests {
                 assert!(row.price <= v * 5.0 + 1e-9);
                 assert!(row.stock >= 0.0);
             }
+        }
+        // Each state keeps what it collected less what officials pocketed
+        // and what it spent.
+        for s in &soc.states {
+            let f = &s.economy;
+            let spent: f64 = f.spent.iter().sum();
+            assert!((f.treasury - (f.collected - f.pocketed - spent)).abs() < 0.011);
+            assert!(f.pocketed >= 0.0);
         }
         assert!(soc.states.iter().any(|s| s.economy.collected > 0.0));
         // Places make goods, and most end the day with money.
