@@ -25,6 +25,7 @@ pub mod geonames;
 pub mod grid;
 pub mod heightmap;
 pub mod ice;
+pub mod journeys;
 pub mod lakes;
 pub mod markers;
 pub mod meander;
