@@ -1539,6 +1539,7 @@ impl Controller {
     /// Edit a field of an item of an editor table.
     fn edit_item(self: &Rc<Self>, list: &str, id: &str, field: &str, text: &str) {
         let mut st = self.state.borrow_mut();
+        let st_shown_world = st.shown.as_ref().map(|m| std::sync::Arc::clone(&m.world));
         let e = &mut st.editor;
         let num = |t: &str| {
             t.trim()
@@ -1569,6 +1570,13 @@ impl Controller {
                     num(text).map(|n| setting.size_pt = Some(n))
                 }
                 .and_then(|()| e.set_label(v, id, setting))
+            }
+            ("states" | "cultures" | "religions" | "provinces", "name") => {
+                let world = st_shown_world.as_deref();
+                match world.and_then(|w| inkland_app::rows::area_point(w, list, id)) {
+                    Some((kind, at)) => e.rename_area(kind, at, text),
+                    None => Err(format!("{list:?} has no item {id:?}")),
+                }
             }
             (_, "name") => match pin_list(list) {
                 Some(l) => e.rename_in(l, id, text),
@@ -1983,6 +1991,16 @@ fn main() -> Result<(), slint::PlatformError> {
         let path = c.ui().global::<AppState>().get_emblem_custom_path();
         let r = if path.is_empty() {
             Err("this item cannot have custom arms".to_owned())
+        } else if let Some(at) = inkland_app::emblems::area_point(&path) {
+            inkland_app::emblems::parse(&text)
+                .and_then(|v| serde_json::from_value(v).map_err(|e| e.to_string()))
+                .and_then(|coa| {
+                    let kind = inkland_core::config::AreaKind::Province;
+                    c.state
+                        .borrow_mut()
+                        .editor
+                        .set_area_coa(kind, at, Some(coa))
+                })
         } else {
             inkland_app::emblems::parse(&text)
                 .and_then(|v| c.state.borrow_mut().editor.set(&path, v))
@@ -1994,6 +2012,9 @@ fn main() -> Result<(), slint::PlatformError> {
         let path = c.ui().global::<AppState>().get_emblem_custom_path();
         let r = if path.is_empty() {
             Err("this item has no custom arms".to_owned())
+        } else if let Some(at) = inkland_app::emblems::area_point(&path) {
+            let kind = inkland_core::config::AreaKind::Province;
+            c.state.borrow_mut().editor.set_area_coa(kind, at, None)
         } else {
             c.state.borrow_mut().editor.unset(&path)
         };

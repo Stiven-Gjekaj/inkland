@@ -42,13 +42,28 @@ pub fn coa(world: &World, kind: usize, id: u32) -> Option<&Coa> {
     }
 }
 
+/// The prefix of the custom arms path of a province: `area:province:x,y`,
+/// with the site of its center cell. The arms go into `world.renames`.
+pub const AREA_PREFIX: &str = "area:province:";
+
+/// The point of a province path.
+pub fn area_point(path: &str) -> Option<[f64; 2]> {
+    let (x, y) = path.strip_prefix(AREA_PREFIX)?.split_once(',')?;
+    Some([x.parse().ok()?, y.parse().ok()?])
+}
+
 /// The JSON Pointer of the config field for custom arms of an item, or
 /// `None` if the config has no field for it: a state needs a pinned
-/// capital with `capital_of`, a burg must be a pin, and a province has no
-/// field.
+/// capital with `capital_of`, and a burg must be a pin. A province gives
+/// `area:province:x,y` (see `AREA_PREFIX`).
 pub fn custom_path(config: &Config, world: &World, kind: usize, id: u32) -> Option<String> {
     let s = &world.society;
     let i = (id as usize).checked_sub(1)?;
+    if kind == 1 {
+        let (_, at) = crate::rows::area_point(world, "provinces", &id.to_string())?;
+        let at = [crate::model::round2(at[0]), crate::model::round2(at[1])];
+        return Some(format!("{AREA_PREFIX}{},{}", at[0], at[1]));
+    }
     let place = match kind {
         0 => s
             .places
@@ -69,6 +84,18 @@ pub fn custom_path(config: &Config, world: &World, kind: usize, id: u32) -> Opti
 
 /// The custom arms of the config at a path, if there are any.
 pub fn custom(config: &Config, path: &str) -> Option<Coa> {
+    if let Some(at) = area_point(path) {
+        return config
+            .world
+            .renames
+            .iter()
+            .find(|r| {
+                r.kind == inkland_core::config::AreaKind::Province
+                    && r.at == Some(at)
+                    && r.pin.is_none()
+            })
+            .and_then(|r| r.coa.clone());
+    }
     let (k, field) = path.strip_prefix("/pins/points/")?.split_once('/')?;
     let pin = config.pins.points.get(k.parse::<usize>().ok()?)?;
     match field {
@@ -170,7 +197,9 @@ mod tests {
             custom_path(&c, &w, 2, 2).as_deref(),
             Some("/pins/points/1/coa")
         );
-        assert_eq!(custom_path(&c, &w, 1, 1), None);
+        // A province has a path to its rename entry.
+        let province = custom_path(&c, &w, 1, 1).unwrap();
+        assert!(area_point(&province).is_some(), "{province}");
         // A generated place has no field.
         let generated = w.society.places.iter().find(|p| p.pin.is_none()).unwrap();
         assert_eq!(custom_path(&c, &w, 2, generated.id), None);
@@ -191,5 +220,26 @@ mod tests {
         assert_eq!(custom(e.config(), &path).unwrap().t1, "vert");
         assert!(e.undo().unwrap());
         assert_eq!(custom(e.config(), &path), None);
+    }
+
+    #[test]
+    fn province_arms_go_into_the_rename_entry_and_come_back_on_a_new_build() {
+        let (c, w) = world();
+        let mut e = crate::model::Editor::new(c.clone());
+        let path = custom_path(e.config(), &w, 1, 1).unwrap();
+        let at = area_point(&path).unwrap();
+        let coa: Coa = serde_json::from_value(parse(r#"{"t1":"vert"}"#).unwrap()).unwrap();
+        let kind = inkland_core::config::AreaKind::Province;
+        e.set_area_coa(kind, at, Some(coa)).unwrap();
+        assert_eq!(custom(e.config(), &path).unwrap().t1, "vert");
+        let w2 = World::build(e.config()).unwrap();
+        assert_eq!(w2.society.provinces[0].coa.as_ref().unwrap().t1, "vert");
+        // A name stays when the arms go.
+        e.rename_area(kind, at, "Hearth").unwrap();
+        e.set_area_coa(kind, at, None).unwrap();
+        assert_eq!(custom(e.config(), &path), None);
+        assert_eq!(e.config().world.renames[0].name.as_deref(), Some("Hearth"));
+        e.rename_area(kind, at, "").unwrap();
+        assert_eq!(e.config(), &c);
     }
 }

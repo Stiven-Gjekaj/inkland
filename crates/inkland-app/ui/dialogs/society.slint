@@ -1,24 +1,45 @@
 // The States, Cultures, Religions, and Provinces editors. They show the
-// names and the numbers of the shown world. They do not edit, because the
-// config has no fields for these items yet.
+// names and the numbers of the shown world. Select an item to give it a
+// new name. The name goes into `world.renames` of the config, so it comes
+// back after each regeneration.
 
-import { Theme, Table, TableRow, Tip } from "../theme.slint";
+import { Theme, Field, FormRow, Table, TableRow, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
+import { Actions } from "../globals.slint";
 
 export component SocietyDialog inherits Dialog {
     in property <[string]> header;
     in property <[length]> widths;
     in property <[TableRow]> rows;
+    in-out property <string> selected;
+    in-out property <string> new-name;
     content-width: 470px;
     pos-x: 460px;
     Table {
         header: root.header;
         widths: root.widths;
         rows: root.rows;
-        list-height: 220px;
+        selected: root.selected;
+        list-height: 200px;
+        select(id) => {
+            root.selected = id;
+            root.new-name = "";
+        }
+    }
+    FormRow {
+        label: root.selected == "" ? "No item selected" : "Name";
+        label-width: 120px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            enabled: root.selected != "";
+            placeholder: "New name (empty: the generated name)";
+            text <=> root.new-name;
+            accepted(t) => { Actions.edit-item(root.id, root.selected, "name", t); }
+        }
     }
     Tip {
         dialog: true;
-        text: "The world makes these items from the generation options. The numbers count the cells and the burgs of each item.";
+        text: "The world makes these items from the generation options. A new name stays after each regeneration. Leave the name empty to get the generated name back.";
     }
 }

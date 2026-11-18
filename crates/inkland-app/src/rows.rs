@@ -298,6 +298,38 @@ fn count(cells: &[u32], id: u32) -> usize {
     cells.iter().filter(|c| **c == id).count()
 }
 
+/// The kind of the area of an editor list, and the site of the center
+/// cell of the item `id`. A rename finds its area by this point.
+pub fn area_point(
+    world: &World,
+    list: &str,
+    id: &str,
+) -> Option<(inkland_core::config::AreaKind, [f64; 2])> {
+    use inkland_core::config::AreaKind;
+    let id: u32 = id.parse().ok()?;
+    let s = &world.society;
+    let (kind, center) = match list {
+        "states" => (
+            AreaKind::State,
+            s.states.iter().find(|x| x.id == id)?.center,
+        ),
+        "cultures" => (
+            AreaKind::Culture,
+            s.cultures.iter().find(|x| x.id == id)?.center,
+        ),
+        "religions" => (
+            AreaKind::Religion,
+            world.religions.list.iter().find(|x| x.id == id)?.center,
+        ),
+        "provinces" => (
+            AreaKind::Province,
+            s.provinces.iter().find(|x| x.id == id)?.center,
+        ),
+        _ => return None,
+    };
+    world.grid.points.get(center).map(|&p| (kind, p))
+}
+
 /// The states: name, capital, culture, cells, burgs.
 pub fn state_rows(world: &World) -> Vec<Row> {
     let s = &world.society;
@@ -532,6 +564,43 @@ mod tests {
         .unwrap();
         let w = World::build(&c).unwrap();
         (c, w)
+    }
+
+    #[test]
+    fn a_rename_in_the_editor_comes_back_after_a_new_build() {
+        use inkland_core::config::AreaKind;
+        let (c, w) = world();
+        let s = &w.society;
+        let st = &s.states[0];
+        let (kind, at) = area_point(&w, "states", &st.id.to_string()).unwrap();
+        assert_eq!(kind, AreaKind::State);
+        assert_eq!(s.cell_state[w.grid.find_cell(at[0], at[1])], st.id);
+        let mut e = crate::model::Editor::new(c.clone());
+        e.rename_area(kind, at, "Ostreya").unwrap();
+        let w2 = World::build(e.config()).unwrap();
+        let renamed = &w2.society.states[0];
+        assert_eq!(renamed.name, "Ostreya");
+        assert_eq!(state_rows(&w2)[0].cells[0], "Ostreya");
+        // The same name again is no new edit.
+        e.rename_area(kind, at, "Ostreya").unwrap();
+        assert_eq!(e.config().world.renames.len(), 1);
+        // An empty name takes the rename away, and undo gives it back.
+        e.rename_area(kind, at, " ").unwrap();
+        assert!(e.config().world.renames.is_empty());
+        assert_eq!(e.config(), &c);
+        e.undo().unwrap();
+        assert_eq!(e.config().world.renames.len(), 1);
+        for list in ["cultures", "religions", "provinces"] {
+            let rows = match list {
+                "cultures" => culture_rows(&w),
+                "religions" => religion_rows(&w),
+                _ => province_rows(&w),
+            };
+            if let Some(r) = rows.iter().find(|r| r.id != "0") {
+                assert!(area_point(&w, list, &r.id).is_some(), "{list}");
+            }
+        }
+        assert!(area_point(&w, "rivers", "1").is_none());
     }
 
     #[test]

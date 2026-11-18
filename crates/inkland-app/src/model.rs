@@ -177,6 +177,83 @@ impl Editor {
         })
     }
 
+    /// Name a generated area: the area of `kind` that holds the point `at`.
+    /// An empty name takes the rename away, so the generated name comes
+    /// back. Custom arms of the area stay.
+    pub fn rename_area(
+        &mut self,
+        kind: inkland_core::config::AreaKind,
+        at: [f64; 2],
+        name: &str,
+    ) -> Result<(), String> {
+        use inkland_core::config::RenameEntry;
+        let at = [round2(at[0]), round2(at[1])];
+        let name = name.trim();
+        let renames = &self.config.world.renames;
+        let index = renames
+            .iter()
+            .position(|r| r.kind == kind && r.at == Some(at) && r.pin.is_none());
+        let old = index.map(|i| renames[i].clone());
+        if name.is_empty() {
+            return match (index, old) {
+                (Some(i), Some(r)) if r.coa.is_none() && r.full_name.is_none() => {
+                    self.run(Command::RemoveRename { index: i })
+                }
+                (Some(_), Some(r)) => self.run(Command::NameArea {
+                    rename: Box::new(RenameEntry { name: None, ..r }),
+                    index: None,
+                }),
+                _ => Ok(()),
+            };
+        }
+        if old.as_ref().and_then(|r| r.name.as_deref()) == Some(name) {
+            return Ok(());
+        }
+        let entry = RenameEntry {
+            kind,
+            at: Some(at),
+            name: Some(name.to_owned()),
+            ..old.unwrap_or_default()
+        };
+        self.run(Command::NameArea {
+            rename: Box::new(entry),
+            index: None,
+        })
+    }
+
+    /// Set or take away the custom arms of a generated state or province:
+    /// the area of `kind` that holds the point `at`. The arms go into the
+    /// rename entry of the area, with its name.
+    pub fn set_area_coa(
+        &mut self,
+        kind: inkland_core::config::AreaKind,
+        at: [f64; 2],
+        coa: Option<inkland_core::emblems::Coa>,
+    ) -> Result<(), String> {
+        use inkland_core::config::RenameEntry;
+        let at = [round2(at[0]), round2(at[1])];
+        let renames = &self.config.world.renames;
+        let index = renames
+            .iter()
+            .position(|r| r.kind == kind && r.at == Some(at) && r.pin.is_none());
+        let old = index.map(|i| renames[i].clone());
+        match (coa, index, old) {
+            (None, None, _) => Ok(()),
+            (None, Some(i), Some(r)) if r.name.is_none() && r.full_name.is_none() => {
+                self.run(Command::RemoveRename { index: i })
+            }
+            (coa, _, old) => self.run(Command::NameArea {
+                rename: Box::new(RenameEntry {
+                    kind,
+                    at: Some(at),
+                    coa,
+                    ..old.unwrap_or_default()
+                }),
+                index: None,
+            }),
+        }
+    }
+
     /// Add a heightmap brush stroke at `at`.
     pub fn brush(&mut self, at: [f64; 2], radius: f64, delta: f64) -> Result<(), String> {
         self.run(Command::Brush {
