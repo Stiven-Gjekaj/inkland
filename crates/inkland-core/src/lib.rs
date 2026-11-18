@@ -47,3 +47,4 @@ pub mod society;
 pub mod stability;
 pub mod states;
 pub mod world;
+pub mod zones;

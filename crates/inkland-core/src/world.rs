@@ -89,6 +89,8 @@ pub struct World {
     /// The stability of the states and their provinces, after the
     /// military.
     pub stability: crate::stability::Stability,
+    /// Zones: areas of cells with a story, after the markers.
+    pub zones: Vec<crate::zones::Zone>,
     /// Journeys: the routes of parties between places, as data. The last
     /// stage.
     pub journeys: Vec<crate::journeys::Journey>,
@@ -470,7 +472,7 @@ impl World {
         );
         // FMG works out the stability on demand; inkland keeps it.
         let stability = crate::stability::build(&society, &economy);
-        let markers = crate::markers::generate(&crate::markers::Input {
+        let mut markers = crate::markers::generate(&crate::markers::Input {
             config,
             grid: &grid,
             features: &features,
@@ -485,6 +487,23 @@ impl World {
             pin_cells: &pin_cells,
             economy: &economy,
         });
+        // The zones (FMG `Zones.generate`), after the markers.
+        let zones = crate::zones::generate(
+            &crate::zones::Input {
+                config,
+                grid: &grid,
+                features: &features,
+                rivers: &rivers,
+                names: &names,
+                society: &society,
+                religions: &religions,
+                roads: &roads,
+                sea_routes: &sea_routes,
+                economy: &economy,
+                stability: &stability,
+            },
+            &mut markers,
+        );
         // The journeys run last, as in FMG (`Journeys.generate`). Later
         // stages go before them.
         let journeys = crate::journeys::generate(&crate::journeys::Input {
@@ -534,6 +553,7 @@ impl World {
             markers,
             economy,
             stability,
+            zones,
             journeys,
         })
     }
