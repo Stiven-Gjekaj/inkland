@@ -119,6 +119,66 @@ pub fn polygon_self_intersects(poly: &[Point]) -> bool {
     false
 }
 
+/// Clip a polygon to the box `[x0, y0, x1, y1]` (Sutherland-Hodgman, as
+/// `clipPolygon` of the `lineclip` library that FMG `clipPoly` uses). The
+/// polygon is open: the last point does not repeat the first. The result
+/// is empty when no part of the polygon is in the box.
+pub fn clip_polygon(points: &[Point], bbox: [f64; 4]) -> Vec<Point> {
+    let code = |p: Point| -> u8 {
+        let mut c = 0;
+        if p[0] < bbox[0] {
+            c |= 1;
+        } else if p[0] > bbox[2] {
+            c |= 2;
+        }
+        if p[1] < bbox[1] {
+            c |= 4;
+        } else if p[1] > bbox[3] {
+            c |= 8;
+        }
+        c
+    };
+    let cut = |a: Point, b: Point, edge: u8| -> Point {
+        match edge {
+            8 => [
+                a[0] + (b[0] - a[0]) * (bbox[3] - a[1]) / (b[1] - a[1]),
+                bbox[3],
+            ],
+            4 => [
+                a[0] + (b[0] - a[0]) * (bbox[1] - a[1]) / (b[1] - a[1]),
+                bbox[1],
+            ],
+            2 => [
+                bbox[2],
+                a[1] + (b[1] - a[1]) * (bbox[2] - a[0]) / (b[0] - a[0]),
+            ],
+            _ => [
+                bbox[0],
+                a[1] + (b[1] - a[1]) * (bbox[0] - a[0]) / (b[0] - a[0]),
+            ],
+        }
+    };
+    let mut points = points.to_vec();
+    for edge in [1u8, 2, 4, 8] {
+        let Some(&last) = points.last() else { break };
+        let mut result = Vec::with_capacity(points.len() + 4);
+        let (mut prev, mut prev_inside) = (last, code(last) & edge == 0);
+        for &p in &points {
+            let inside = code(p) & edge == 0;
+            if inside != prev_inside {
+                result.push(cut(prev, p, edge));
+            }
+            if inside {
+                result.push(p);
+            }
+            prev = p;
+            prev_inside = inside;
+        }
+        points = result;
+    }
+    points
+}
+
 pub fn dist(a: Point, b: Point) -> f64 {
     dist2(a, b).sqrt()
 }
@@ -217,6 +277,39 @@ fn polygon_contains_strictly(poly: &[Point], p: Point) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_polygon_clips_to_the_box() {
+        let bbox = [0.0, 0.0, 10.0, 10.0];
+        // Inside: no change.
+        let inside = [[1.0, 1.0], [9.0, 1.0], [5.0, 9.0]];
+        assert_eq!(clip_polygon(&inside, bbox), inside.to_vec());
+        // Outside: nothing.
+        assert!(clip_polygon(&[[20.0, 20.0], [30.0, 20.0], [25.0, 30.0]], bbox).is_empty());
+        // A square over the left edge: the part left of x = 0 goes, and
+        // the cut points are on the edge.
+        let over = [[-5.0, 2.0], [5.0, 2.0], [5.0, 8.0], [-5.0, 8.0]];
+        let c = clip_polygon(&over, bbox);
+        assert_eq!(c, vec![[0.0, 2.0], [5.0, 2.0], [5.0, 8.0], [0.0, 8.0]]);
+        // A diamond over a corner keeps its area inside the box.
+        let corner = [[-2.0, 5.0], [5.0, -2.0], [12.0, 5.0], [5.0, 12.0]];
+        let c = clip_polygon(&corner, bbox);
+        assert!(
+            c.iter()
+                .all(|p| p[0] >= 0.0 && p[0] <= 10.0 && p[1] >= 0.0 && p[1] <= 10.0)
+        );
+        let area = |q: &[Point]| {
+            (0..q.len())
+                .map(|i| {
+                    let (a, b) = (q[i], q[(i + 1) % q.len()]);
+                    a[0] * b[1] - b[0] * a[1]
+                })
+                .sum::<f64>()
+                / 2.0
+        };
+        // 100 minus the four corner triangles of 3 x 3 / 2.
+        assert!((area(&c) - 82.0).abs() < 1e-9, "{}", area(&c));
+    }
 
     fn square(x0: f64, y0: f64, size: f64) -> Shape {
         Shape::Polygon(vec![
