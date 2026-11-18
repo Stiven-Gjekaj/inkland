@@ -105,6 +105,10 @@ codes! {
         /// division, an ordinary, a line, a charge, or a position that does
         /// not exist, or `state_coa` is on a place without `capital_of`.
         CoaInvalid = "COA_INVALID" => InvalidConfig,
+        /// An edit of a world file sets or unsets a value that a
+        /// `world.json` does not keep: an overlay, a variant, a render
+        /// option, or a font directory.
+        EditOutsideWorld = "EDIT_OUTSIDE_WORLD" => InvalidConfig,
         /// A pin or a crop is outside the frame.
         PinOutsideFrame = "PIN_OUTSIDE_FRAME" => Infeasible,
         /// A point pin is in a `sea` or `lake` region.

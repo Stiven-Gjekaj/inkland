@@ -136,6 +136,10 @@ pub fn export(world_text: &str, format: &str, layers: Option<&str>) -> Result<Va
 /// script that undoes the edit. The new config must pass `validate`.
 pub fn edit_config(config: &Config, script_text: &str) -> Result<(Config, Script), Vec<Error>> {
     let script = Script::parse(script_text).map_err(|e| vec![e])?;
+    apply_script(config, &script)
+}
+
+fn apply_script(config: &Config, script: &Script) -> Result<(Config, Script), Vec<Error>> {
     let (next, undo) = script.apply(config).map_err(|e| vec![e])?;
     let errors = validate(&next);
     if !errors.is_empty() {
@@ -155,11 +159,48 @@ pub struct WorldEdit {
     pub applied: usize,
 }
 
+/// The errors of an edit script for a world file: one `EDIT_OUTSIDE_WORLD`
+/// for each `set` or `unset` of a value that a `world.json` does not keep.
+/// Such a script applies only to a config file.
+pub fn world_script_errors(script: &Script) -> Vec<Error> {
+    script
+        .commands
+        .iter()
+        .enumerate()
+        .filter_map(|(i, cmd)| {
+            let path = match cmd {
+                Command::Set { path, .. } | Command::Unset { path } => path,
+                _ => return None,
+            };
+            if inkland_io::config::in_world_part(path) {
+                return None;
+            }
+            Some(
+                Error::new(
+                    ErrorCode::EditOutsideWorld,
+                    path.clone(),
+                    format!(
+                        "command {i} edits {path}, but world.json keeps only the part of the \
+                         config that makes the world; apply the script to the config file"
+                    ),
+                )
+                .with("command", i),
+            )
+        })
+        .collect()
+}
+
 /// Apply an edit script to a world file: edit its config and make the world
-/// again.
+/// again. A script that edits a value that the world file does not keep is
+/// refused (see `world_script_errors`).
 pub fn edit_world(world_text: &str, script_text: &str) -> Result<WorldEdit, Vec<Error>> {
     let (config, _) = read_world(world_text).map_err(|e| vec![e])?;
-    let (next, undo) = edit_config(&config, script_text)?;
+    let script = Script::parse(script_text).map_err(|e| vec![e])?;
+    let errors = world_script_errors(&script);
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    let (next, undo) = apply_script(&config, &script)?;
     let world = inkland_core::world::World::build(&next).map_err(|e| vec![e])?;
     Ok(WorldEdit {
         world_json: inkland_io::world::world_json(&world, &next),
@@ -665,6 +706,39 @@ mod tests {
             edit_world(&world, bad).unwrap_err()[0].code,
             ErrorCode::PinOutsideFrame
         );
+    }
+
+    #[test]
+    fn an_edit_of_a_world_file_outside_its_world_part_is_refused() {
+        let c = config(json!({
+            "world": { "cells": 1000, "template": "pangea" },
+            "variants": [
+                { "name": "full", "page": { "w_mm": 100, "h_mm": 80 } },
+                { "name": "west", "crop": [0, 0, 50, 80], "page": { "w_mm": 50, "h_mm": 80 } }
+            ]
+        }));
+        let world = generate(&c, None).unwrap().world_json;
+        let script = r#"{ "version": 1, "commands": [
+            { "op": "set", "path": "/world/sea_level", "value": 22 },
+            { "op": "set", "path": "/variants/1/crop", "value": [0, 0, 40, 80] },
+            { "op": "unset", "path": "/render/extras" }
+        ]}"#;
+        let errors = edit_world(&world, script).unwrap_err();
+        let found: Vec<_> = errors
+            .iter()
+            .map(|e| (e.code, e.path.as_str(), e.details["command"].clone()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                (ErrorCode::EditOutsideWorld, "/variants/1/crop", json!(1)),
+                (ErrorCode::EditOutsideWorld, "/render/extras", json!(2)),
+            ]
+        );
+        assert_eq!(exit_code_of(&errors), ExitCode::InvalidConfig);
+        // The same script applies to the config file.
+        let (next, _) = edit_config(&c, script).unwrap();
+        assert_eq!(next.variants[1].crop, Some([0.0, 0.0, 40.0, 80.0]));
     }
 
     #[test]

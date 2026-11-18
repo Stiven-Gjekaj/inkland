@@ -589,6 +589,36 @@ fn edit_writes_a_new_world_and_its_undo_script_restores_the_bytes() {
 }
 
 #[test]
+fn edit_of_a_variant_is_refused_on_a_world_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let world = generated_world(dir.path());
+    let script = dir.path().join("edits.json");
+    std::fs::write(
+        &script,
+        r#"{ "version": 1, "commands": [
+            { "op": "move_pin", "id": "ostrey", "at": [45, 35] },
+            { "op": "set", "path": "/variants/1/crop", "value": [0, 0, 50, 40] }
+        ]}"#,
+    )
+    .unwrap();
+    let edited = dir.path().join("edited.json");
+    let (code, e) = run(&[
+        "edit",
+        "--world",
+        world.to_str().unwrap(),
+        "--script",
+        script.to_str().unwrap(),
+        "-o",
+        edited.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 2, "{e}");
+    assert_eq!(e["error"]["code"], "EDIT_OUTSIDE_WORLD");
+    assert_eq!(e["error"]["path"], "/variants/1/crop");
+    assert_eq!(e["error"]["details"]["command"], 1);
+    assert!(!edited.exists(), "nothing is written");
+}
+
+#[test]
 fn generate_twice_gives_the_same_bytes() {
     let dir = tempfile::tempdir().unwrap();
     let mut c = minimal();

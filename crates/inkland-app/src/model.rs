@@ -444,6 +444,14 @@ mod tests {
         ]
     }
 
+    /// A script with one command.
+    fn one(c: &Command) -> inkland::Script {
+        inkland::Script {
+            version: 1,
+            commands: vec![c.clone()],
+        }
+    }
+
     #[test]
     fn app_edits_saved_as_a_script_give_the_same_world_when_the_cli_replays_them() {
         let start = config();
@@ -465,9 +473,24 @@ mod tests {
             e.config_json(),
             "the saved config has the same bytes"
         );
-        // The world file: `inkland edit --world`.
+        // The world file: `inkland edit --world`. A world file keeps only
+        // the world part of the config, so it refuses the edits of the
+        // variants, the overlays, and the render options.
         let first = inkland::generate(&start, None).unwrap();
-        let edited = inkland::edit_world(&first.world_json, &script).unwrap();
+        let refused = inkland::edit_world(&first.world_json, &script).unwrap_err();
+        assert!(!refused.is_empty());
+        assert!(
+            refused
+                .iter()
+                .all(|err| err.code == inkland::ErrorCode::EditOutsideWorld)
+        );
+        // The edits of the world part replay on the world file.
+        let mut world_part = e.history.script();
+        world_part
+            .commands
+            .retain(|c| inkland::world_script_errors(&one(c)).is_empty());
+        let world_script = serde_json::to_string(&world_part).unwrap();
+        let edited = inkland::edit_world(&first.world_json, &world_script).unwrap();
         let app = inkland::generate(e.config(), None).unwrap();
         assert_ne!(
             app.world_json, first.world_json,
