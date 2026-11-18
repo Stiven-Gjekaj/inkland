@@ -520,6 +520,21 @@ A raster of heights that covers the full frame. The raster divides the frame int
 | `rows` | integer | yes |  | Number of rows, from the low y edge to the high y edge. 2 or more. |
 | `values` | array of integer | yes |  | The heights on the scale 0 to 100, row by row. The first row is at the low y edge of the frame. In each row, the first value is at the low x edge. The list has `cols` x `rows` values. |
 
+### RegimentEntry
+
+A change to the regiments. With `add`, the entry adds a regiment of the state that holds `at`, at that point; it must give `units`. Else it changes the regiment nearest to `at`: its name, units, or fleet flag, moves it with `to`, splits it in two halves with `split`, or removes it with `remove`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `add` | boolean |  |  | Add a new regiment. |
+| `at` | array of 2 number | yes |  | A point `[x, y]`, in units. |
+| `name` | string |  |  | The name. Default for a new regiment: the name that FMG gives. |
+| `naval` | boolean |  |  | `true`: a fleet. |
+| `remove` | boolean |  |  | Remove the regiment. |
+| `split` | boolean |  |  | Split the regiment in two halves. The new one stands below. |
+| `to` | array of 2 number |  |  | Move the regiment to this point `[x, y]`. Its base stays. |
+| `units` | map of name to number |  |  | The troops of each unit, in people, by unit name. A unit that the entry does not name keeps its troops. |
+
 ### RegionKind
 
 Kinds of forced terrain.
@@ -766,6 +781,7 @@ Generation options.
 | `notes` | array of [`NoteEntry`](#noteentry) |  |  | Notes of the map, as the Notes editor of Azgaar's Fantasy Map Generator writes them. |
 | `places` | [`PlaceOptions`](#placeoptions) |  |  | Options for places that generation adds. |
 | `provinces_ratio` | integer |  | `20` | Provinces for each 100 places of a state. 0 to 100. A state gets at least 2 provinces when it has 2 places or more. 100: each place is the seat of a province. |
+| `regiments` | array of [`RegimentEntry`](#regimententry) |  |  | Changes to the regiments: add, change, move, split, or remove. |
 | `religions` | integer |  | `4` | Number of religions. |
 | `renames` | array of [`RenameEntry`](#renameentry) |  |  | Names and arms for generated states, cultures, religions, and provinces. Generation applies them after the coats of arms, so the later stages use the new names. |
 | `sea_level` | integer |  | `20` | Sea level on the height scale 0 to 100. Cells below it are water. |

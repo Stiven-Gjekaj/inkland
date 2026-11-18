@@ -127,6 +127,11 @@ codes! {
         /// not a center, has both `remove` and `to`, or the world has no
         /// place.
         MarketInvalid = "MARKET_INVALID" => Infeasible,
+        /// An entry of `world.regiments` has more than one of `add`,
+        /// `split`, and `remove`, a new regiment without units or outside a
+        /// state, an unknown unit, a negative number of troops, a regiment
+        /// too small to split, or no regiment to change.
+        RegimentInvalid = "REGIMENT_INVALID" => Infeasible,
         /// An edit of a world file sets or unsets a value that a
         /// `world.json` does not keep: an overlay, a variant, a render
         /// option, or a font directory.

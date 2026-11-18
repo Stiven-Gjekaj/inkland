@@ -491,6 +491,7 @@ impl World {
             },
             &mut society,
         );
+        crate::military::apply_config(config, &grid, &military_units, &mut society)?;
         // FMG works out the stability on demand; inkland keeps it.
         let stability = crate::stability::build(&society, &economy);
         let mut markers = crate::markers::generate(&crate::markers::Input {

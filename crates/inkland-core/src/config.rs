@@ -252,6 +252,43 @@ pub struct World {
     /// Changes to the markets: add, move, or remove a market center.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markets: Vec<MarketEntry>,
+    /// Changes to the regiments: add, change, move, split, or remove.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub regiments: Vec<RegimentEntry>,
+}
+
+/// A change to the regiments. With `add`, the entry adds a regiment of the
+/// state that holds `at`, at that point; it must give `units`. Else it
+/// changes the regiment nearest to `at`: its name, units, or fleet flag,
+/// moves it with `to`, splits it in two halves with `split`, or removes it
+/// with `remove`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RegimentEntry {
+    /// A point `[x, y]`, in units.
+    pub at: Point,
+    /// Add a new regiment.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub add: bool,
+    /// The name. Default for a new regiment: the name that FMG gives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The troops of each unit, in people, by unit name. A unit that the
+    /// entry does not name keeps its troops.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub units: Option<BTreeMap<String, f64>>,
+    /// `true`: a fleet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub naval: Option<bool>,
+    /// Move the regiment to this point `[x, y]`. Its base stays.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<Point>,
+    /// Split the regiment in two halves. The new one stands below.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub split: bool,
+    /// Remove the regiment.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub remove: bool,
 }
 
 /// A change to the market centers. `at` names the place nearest to the
@@ -700,6 +737,7 @@ impl Default for World {
             zones: Vec::new(),
             finance: Vec::new(),
             markets: Vec::new(),
+            regiments: Vec::new(),
         }
     }
 }

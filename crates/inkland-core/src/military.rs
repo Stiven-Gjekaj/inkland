@@ -1023,6 +1023,207 @@ pub fn generate(input: &Input, soc: &mut Society) {
     g.deploy_to_fronts(soc);
 }
 
+/// The FMG name of a regiment (`getName`): its number among the regiments
+/// or fleets of its state, and the province or the place of its cell.
+fn default_name(soc: &Society, r: &Regiment, all: &[Regiment]) -> String {
+    let proper = if r.naval {
+        None
+    } else {
+        let province = soc.cell_province[r.cell];
+        if province != NONE {
+            soc.provinces
+                .get(province as usize - 1)
+                .map(|p| p.name.clone())
+        } else {
+            soc.places
+                .iter()
+                .find(|p| p.cell == r.cell)
+                .map(|p| p.name.clone())
+        }
+    };
+    let number = nth(all
+        .iter()
+        .filter(|o| o.naval == r.naval && o.id != r.id)
+        .count() as i64
+        + 1);
+    let form = if r.naval { "Fleet" } else { "Regiment" };
+    match proper {
+        Some(p) => format!("{number} ({p}) {form}"),
+        None => format!("{number} {form}"),
+    }
+}
+
+/// The troops points and the power of a list of units.
+fn recount(r: &mut Regiment, units: &[Unit]) {
+    r.total = rn(r.units.iter().map(|u| u.1).sum::<f64>(), 3);
+    r.power = r.units.iter().fold(0.0, |s, (name, points)| {
+        s + points * unit(units, name).map_or(0.0, |u| u.power)
+    });
+}
+
+/// Apply the regiment changes of the config, in order (`world.regiments`).
+pub fn apply_config(
+    config: &Config,
+    grid: &Grid,
+    units: &[Unit],
+    soc: &mut Society,
+) -> Result<(), crate::error::Error> {
+    use crate::error::{Error, ErrorCode};
+    for (i, e) in config.world.regiments.iter().enumerate() {
+        let path = format!("/world/regiments/{i}");
+        let bad = |m: String| Error::new(ErrorCode::RegimentInvalid, path.clone(), m);
+        if [e.add, e.split, e.remove].iter().filter(|&&b| b).count() > 1 {
+            return Err(bad("use only one of add, split, and remove".into()));
+        }
+        let mut troops: Vec<(String, f64)> = Vec::new();
+        for (name, &people) in e.units.iter().flatten() {
+            if unit(units, name).is_none() {
+                return Err(bad(format!("no military unit has the name \"{name}\"")));
+            }
+            if !(people.is_finite() && people >= 0.0) {
+                return Err(bad(format!(
+                    "the troops of {name} must be 0 or more, found {people}"
+                )));
+            }
+            troops.push((name.clone(), people / POPULATION_SCALE));
+        }
+        if e.add {
+            if troops.is_empty() {
+                return Err(bad("a new regiment needs units".into()));
+            }
+            let cell = grid.find_cell(e.at[0], e.at[1]);
+            let state = soc.cell_state[cell];
+            let Some(k) = soc
+                .states
+                .iter()
+                .position(|s| s.id == state && state != NONE)
+            else {
+                return Err(bad(format!(
+                    "no state holds the point ({}, {})",
+                    e.at[0], e.at[1]
+                )));
+            };
+            let id = soc.states[k]
+                .military
+                .iter()
+                .map(|r| r.id + 1)
+                .max()
+                .unwrap_or(0);
+            let mut r = Regiment {
+                id,
+                state,
+                name: String::new(),
+                cell,
+                at: e.at,
+                base: e.at,
+                naval: e.naval.unwrap_or(false),
+                units: troops.into_iter().filter(|u| u.1 > 0.0).collect(),
+                total: 0.0,
+                power: 0.0,
+                icon: DEFAULT_ICON.to_owned(),
+                note: String::new(),
+            };
+            recount(&mut r, units);
+            if let Some(main) = r.units.iter().max_by(|a, b| a.1.total_cmp(&b.1))
+                && let Some(u) = unit(units, &main.0)
+            {
+                r.icon = u.icon.clone();
+            }
+            r.name = match &e.name {
+                Some(n) => n.clone(),
+                None => default_name(soc, &r, &soc.states[k].military),
+            };
+            soc.states[k].military.push(r);
+            continue;
+        }
+        // The regiment nearest to the point.
+        let found = soc
+            .states
+            .iter()
+            .enumerate()
+            .flat_map(|(k, s)| s.military.iter().enumerate().map(move |(j, r)| (k, j, r)))
+            .min_by(|a, b| {
+                let d = |r: &Regiment| libm::hypot(r.at[0] - e.at[0], r.at[1] - e.at[1]);
+                d(a.2).total_cmp(&d(b.2))
+            })
+            .map(|(k, j, _)| (k, j));
+        let Some((k, j)) = found else {
+            return Err(bad("the world has no regiment to change".into()));
+        };
+        if e.remove {
+            soc.states[k].military.remove(j);
+            continue;
+        }
+        if e.split {
+            let r = &mut soc.states[k].military[j];
+            let half: Vec<(String, f64)> = r
+                .units
+                .iter()
+                .map(|(u, points)| {
+                    (
+                        u.clone(),
+                        (self::troops(*points) / 2.0).floor() / POPULATION_SCALE,
+                    )
+                })
+                .collect();
+            if half.iter().all(|h| h.1 == 0.0) {
+                return Err(bad(format!(
+                    "the regiment {} has too few troops to split",
+                    r.name
+                )));
+            }
+            for (u, h) in r.units.iter_mut().zip(&half) {
+                u.1 = rn(u.1 - h.1, 3);
+            }
+            recount(r, units);
+            let shift = REGIMENT_SIZE * 2.0;
+            let mut y = r.at[1] + shift;
+            let original = r.clone();
+            let military = &soc.states[k].military;
+            while military
+                .iter()
+                .any(|o| o.at[0] == original.at[0] && o.at[1] == y)
+            {
+                y += shift;
+            }
+            let id = military.iter().map(|o| o.id + 1).max().unwrap_or(0);
+            let mut added = Regiment {
+                id,
+                name: String::new(),
+                at: [original.at[0], y],
+                units: half,
+                note: String::new(),
+                ..original
+            };
+            recount(&mut added, units);
+            added.name = default_name(soc, &added, &soc.states[k].military);
+            soc.states[k].military.push(added);
+            continue;
+        }
+        let r = &mut soc.states[k].military[j];
+        if let Some(n) = &e.name {
+            r.name = n.clone();
+        }
+        if let Some(v) = e.naval {
+            r.naval = v;
+        }
+        if let Some(to) = e.to {
+            r.at = to;
+        }
+        if e.units.is_some() {
+            for (name, points) in troops {
+                match r.units.iter_mut().find(|u| u.0 == name) {
+                    Some(u) => u.1 = points,
+                    None => r.units.push((name, points)),
+                }
+            }
+            r.units.retain(|u| u.1 > 0.0);
+            recount(r, units);
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1155,6 +1356,67 @@ mod tests {
             raised.iter().all(|u| u == "levies" || u == "slingers"),
             "{raised:?}"
         );
+    }
+
+    #[test]
+    fn regiment_entries_add_change_split_and_remove() {
+        let base = world(7);
+        let armed = base
+            .society
+            .states
+            .iter()
+            .find(|s| !s.military.is_empty())
+            .unwrap();
+        let first = armed.military[0].clone();
+        let mut c: Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 7, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 4000, "template": "continents", "states": 6 }
+        }))
+        .unwrap();
+        let land = base.grid.points[armed.center];
+        c.world.regiments = serde_json::from_value(serde_json::json!([
+            { "at": land, "add": true, "units": { "archers": 1500 }, "name": "The Bowmen" },
+            { "at": first.at, "split": true },
+            { "at": first.at, "to": [first.at[0] + 5.0, first.at[1]], "units": { "infantry": 2000 } }
+        ]))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let s = w.society.states.iter().find(|s| s.id == armed.id).unwrap();
+        assert_eq!(s.military.len(), armed.military.len() + 2);
+        let bowmen = s.military.iter().find(|r| r.name == "The Bowmen").unwrap();
+        assert_eq!(bowmen.units, vec![("archers".to_owned(), 1.5)]);
+        assert_eq!(
+            bowmen.troops_power(),
+            1.5 * unit(&w.military_units, "archers").unwrap().power
+        );
+        let moved = s.military.iter().find(|r| r.id == first.id).unwrap();
+        assert_eq!(moved.at, [first.at[0] + 5.0, first.at[1]]);
+        assert_eq!(moved.of("infantry"), 2.0);
+        let split = s.military.last().unwrap();
+        assert!(split.total > 0.0 && split.at[1] > first.at[1]);
+        assert!(split.name.ends_with("Regiment") || split.name.ends_with("Fleet"));
+        // A remove takes the regiment away.
+        c.world.regiments =
+            serde_json::from_value(serde_json::json!([{ "at": first.at, "remove": true }]))
+                .unwrap();
+        let w = World::build(&c).unwrap();
+        let s = w.society.states.iter().find(|s| s.id == armed.id).unwrap();
+        assert!(!s.military.iter().any(|r| r.name == first.name));
+        for bad in [
+            serde_json::json!([{ "at": land, "add": true }]),
+            serde_json::json!([{ "at": land, "add": true, "units": { "pikemen": 10 } }]),
+            serde_json::json!([{ "at": land, "split": true, "remove": true }]),
+        ] {
+            c.world.regiments = serde_json::from_value(bad).unwrap();
+            let e = World::build(&c).unwrap_err();
+            assert_eq!(
+                (e.code, e.path.as_str()),
+                (
+                    crate::error::ErrorCode::RegimentInvalid,
+                    "/world/regiments/0"
+                )
+            );
+        }
     }
 
     fn world(seed: u64) -> World {
