@@ -14,8 +14,10 @@ export component JourneysDialog inherits Dialog {
     pos-y: 60px;
     Table {
         header: ["Journey", "Type", "From", "To", "Distance", "Speed", "Total time"];
-        widths: [160px, 84px, 84px, 84px, 66px, 60px, 60px];
+        widths: [120px, 76px, 80px, 80px, 60px, 50px, 60px];
         rows: Lists.journeys;
+        action: "Remove";
+        act(id) => { Actions.edit-item("journeys", id, "remove", ""); }
         selected: AppState.selected-journey;
         list-height: 100px;
         select(id) => {

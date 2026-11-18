@@ -3,6 +3,7 @@
 //! in `main.rs` connects them to the Slint user interface.
 
 pub mod catalog;
+pub mod data_edits;
 pub mod emblems;
 pub mod hotkeys;
 pub mod model;

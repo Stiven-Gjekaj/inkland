@@ -1,8 +1,8 @@
-// The Notes Editor of FMG: the notes (legends) of the regiments, the
-// markers, and the zones of the shown world, and the text of the selected
-// note. It does not edit, because the config has no notes.
+// The Notes Editor of FMG: the notes of the config, the notes (legends)
+// of the regiments, the markers, and the zones of the shown world, and the
+// text of the selected note. A new note goes into `world.notes`.
 
-import { Theme, Label, Table, TextBox, Tip } from "../theme.slint";
+import { Theme, Field, FormRow, Label, Table, TextBox, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
 import { AppState, Actions, Lists } from "../globals.slint";
 
@@ -14,8 +14,10 @@ export component NotesDialog inherits Dialog {
     pos-y: 70px;
     Table {
         header: ["Type", "Name"];
-        widths: [80px, 310px];
+        widths: [80px, 250px];
         rows: Lists.notes;
+        action: "Remove";
+        act(id) => { Actions.edit-item("notes", id, "remove", ""); }
         selected: AppState.selected-note;
         list-height: 180px;
         select(id) => {
@@ -27,8 +29,21 @@ export component NotesDialog inherits Dialog {
         text: AppState.note-text;
         box-height: 160px;
     }
+    FormRow {
+        label: "New note";
+        label-width: 90px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            placeholder: "Title of the note";
+            accepted(t) => {
+                Actions.edit-item("notes", "", "add", t);
+                self.text = "";
+            }
+        }
+    }
     Tip {
         dialog: true;
-        text: "The world writes these notes. Notes: " + Lists.notes.length + ".";
+        text: "Notes: " + Lists.notes.length + ". Custom notes come from the config, and Remove takes one away. The world writes the other notes.";
     }
 }

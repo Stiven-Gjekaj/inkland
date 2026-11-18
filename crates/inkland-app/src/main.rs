@@ -1571,6 +1571,14 @@ impl Controller {
                 }
                 .and_then(|()| e.set_label(v, id, setting))
             }
+            (
+                "zones" | "markets" | "regiments" | "journeys" | "notes",
+                "remove" | "name" | "split" | "add",
+            ) => match st_shown_world.as_deref() {
+                Some(w) => inkland_app::data_edits::command(e.config(), w, list, id, field, text)
+                    .and_then(|cmd| e.run(cmd)),
+                None => Err("there is no world to edit".to_owned()),
+            },
             ("states" | "cultures" | "religions" | "provinces", "name") => {
                 let world = st_shown_world.as_deref();
                 match world.and_then(|w| inkland_app::rows::area_point(w, list, id)) {

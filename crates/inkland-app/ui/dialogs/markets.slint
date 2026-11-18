@@ -5,7 +5,7 @@
 
 import { Theme, Label, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
-import { Lists } from "../globals.slint";
+import { Lists, Actions } from "../globals.slint";
 
 export component MarketsDialog inherits Dialog {
     id: "markets";
@@ -15,8 +15,10 @@ export component MarketsDialog inherits Dialog {
     pos-y: 60px;
     Table {
         header: ["Market", "Owner", "Cells", "Burgs", "Stock", "Sales", "Buys", "Value"];
-        widths: [110px, 100px, 44px, 44px, 66px, 66px, 66px, 70px];
+        widths: [90px, 80px, 44px, 44px, 60px, 60px, 60px, 60px];
         rows: Lists.markets;
+        action: "Remove";
+        act(id) => { Actions.edit-item("markets", id, "remove", ""); }
         list-height: 260px;
     }
     Tip {

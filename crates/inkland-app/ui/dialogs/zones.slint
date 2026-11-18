@@ -4,7 +4,7 @@
 
 import { Theme, Label, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
-import { Lists } from "../globals.slint";
+import { Lists, Actions } from "../globals.slint";
 
 export component ZonesDialog inherits Dialog {
     id: "zones";
@@ -14,8 +14,10 @@ export component ZonesDialog inherits Dialog {
     pos-y: 80px;
     Table {
         header: ["Description", "Type", "Cells", "Area", "Population", "Fill"];
-        widths: [170px, 90px, 44px, 80px, 70px, 50px];
+        widths: [120px, 90px, 44px, 70px, 70px, 50px];
         rows: Lists.zones;
+        action: "Remove";
+        act(id) => { Actions.edit-item("zones", id, "remove", ""); }
         list-height: 240px;
     }
     Tip {

@@ -1,7 +1,7 @@
 // The Military Overview of FMG: the forces of each state by unit, the war
 // alert, the upkeep, and the power. Under it, the Regiments Overview of
-// FMG for the selected state. It does not edit, because the config has no
-// regiments.
+// FMG for the selected state. Split puts a regiment change into
+// `world.regiments`.
 
 import { Theme, Label, Select, FormRow, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
@@ -37,12 +37,14 @@ export component MilitaryDialog inherits Dialog {
     }
     Table {
         header: Lists.regiment-header;
-        widths: [170px, 50px, 50px, 50px, 50px, 50px, 50px, 56px, 56px];
+        widths: [130px, 46px, 46px, 46px, 46px, 46px, 46px, 52px, 52px];
         rows: Lists.regiments;
+        action: "Split";
+        act(id) => { Actions.edit-item("regiments", id, "split", ""); }
         list-height: 160px;
     }
     Tip {
         dialog: true;
-        text: "Click a state to see its regiments. Total counts the crew of each unit. Power is the troops times the unit power and the upkeep.";
+        text: "Click a state to see its regiments. Split makes two halves of a regiment. Total counts the crew of each unit. Power is the troops times the unit power and the upkeep.";
     }
 }
