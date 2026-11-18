@@ -1,6 +1,6 @@
 // The dialog window of the app.
 
-import { Theme } from "theme.slint";
+import { Theme, Icons } from "theme.slint";
 import { Ui, Dialogs } from "globals.slint";
 
 // A movable and closable window inside the main window, like the jQuery
@@ -84,16 +84,15 @@ export component Dialog inherits Rectangle {
                 border-width: 1px;
                 border-color: close-touch.pressed ? #5d4651 : #c5c5c5;
                 background: close-touch.has-hover ? Theme.header-active : transparent;
-                Path {
-                    x: (parent.width - 8px) / 2;
-                    y: (parent.height - 8px) / 2;
-                    width: 8px;
-                    height: 8px;
-                    viewbox-width: 8;
-                    viewbox-height: 8;
-                    commands: "M 0 0 L 8 8 M 8 0 L 0 8";
-                    stroke: white;
-                    stroke-width: 1.5px;
+                Text {
+                    width: parent.width;
+                    height: parent.height;
+                    text: Icons.cancel;
+                    font-family: Icons.family;
+                    font-size: 11px;
+                    color: white;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
                 close-touch := TouchArea {
                     clicked => { Dialogs.close(root.id); }

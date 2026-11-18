@@ -42,3 +42,6 @@ slint = { version = "1.18", default-features = false, features = [
 
 [build-dependencies]
 slint-build = "1.18"
+
+[dev-dependencies]
+ttf-parser.workspace = true
