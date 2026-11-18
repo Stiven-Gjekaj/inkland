@@ -75,13 +75,17 @@ follow Azgaar's Fantasy Map Generator (FMG). The FMG files are
 
 ## Differences from FMG
 
-- The charges are only the 108 charge files of FMG with the license CC0.
-  The other charge files of FMG have licenses (for example CC BY-NC-SA
-  3.0) that do not agree with the license of inkland. The generator draws
-  only from categories and charges with art, with the weights of FMG. The
-  categories beasts, beast heads, and fishes have no CC0 charge, so the
-  arms have no lions or eagles. A charge of a culture type without art
-  falls back to the normal choice.
+- The charges are the 159 charge files of FMG whose licenses permit use in
+  inkland, also in a book for sale: CC0, CC BY, CC BY-SA, and the Free Art
+  License. `THIRD_PARTY_NOTICES.md` names each file that is not CC0, with
+  its author and license. The 183 files under CC BY-NC-SA 3.0 do not
+  permit commercial use, the 10 files under the GNU FDL need its full text
+  with each copy, and 1 file has no license; inkland leaves them out. The
+  generator draws only from categories and charges with art, with the
+  weights of FMG. A charge of a culture type without art falls back to the
+  normal choice.
+- In the hatched look, a charge loses its gradients, masks, and filters. A
+  fill from a gradient becomes white.
 - Picture emblems, inscriptions, diapers, the zoom of a shield, and the
   placement fields (`x`, `y`, `size`, `angle`, `stretch`, `outside`,
   `layered`, `compony`, `gyronny`) are not in the config shape.

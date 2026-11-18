@@ -69,16 +69,77 @@ Some data tables come from it. This file keeps its license notice.
     FMG ports them from Armoria (<https://github.com/Azgaar/Armoria>), by
     the same author. In inkland:
     `crates/inkland-render/src/emblem/data.rs`.
-  - 108 charge files (SVG), from `src/assets/icons/charges`. inkland
-    keeps only the files with the license CC0 1.0 (public domain); each
-    file names its author and its license in its `metadata` element, and
-    the files have no change. Authors: Azgaar, Celbusro, Fedor Taran,
-    Gothika, Inkscaper, Leonid 2, Madboy74, Marmelad, Rama, Zorlot,
-    spax89, toa267, and V. A. Lyakhor. In inkland:
-    `crates/inkland-render/assets/emblems/charges`. The other 245 charge
-    files of FMG have other licenses (CC BY-NC-SA 3.0, CC BY-SA, GNU FDL,
-    CC BY, Free Art License) or no license. inkland does not include
-    them.
+  - 159 charge files (SVG), from `src/assets/icons/charges`, with no
+    change. Each file names its author and its license in its `metadata`
+    element. In inkland: `crates/inkland-render/assets/emblems/charges`.
+    - 108 files have the license CC0 1.0 (public domain). Authors: Azgaar,
+      Celbusro, Fedor Taran, Gothika, Inkscaper, Leonid 2, Madboy74,
+      Marmelad, Rama, Zorlot, spax89, toa267, and V. A. Lyakhor.
+    - 51 files have an attribution or share-alike license. These files stay
+      under their own licenses, not under the license of inkland. A change
+      to a CC BY-SA or Free Art file must keep the same license. The files
+      and their authors:
+      - CC BY 1.0 (<https://creativecommons.org/licenses/by/1.0>):
+        - `tools/pincers.svg` by Yorick
+        - `tools/scissors2.svg` by Yorick
+      - CC BY 4.0 (<https://creativecommons.org/licenses/by/4.0>):
+        - `arms/lanceWithBanner.svg` by Jean-Paul Gibert
+        - `conventional/gear.svg` by Jean-Paul GIBERT
+      - CC BY-SA 2.5 (<https://creativecommons.org/licenses/by-sa/2.5>):
+        - `miscellaneous/snowflake.svg` by Lokal_Profil
+      - CC BY-SA 3.0 (<https://creativecommons.org/licenses/by-sa/3.0>):
+        - `agriculture/scythe.svg` by Spedona
+        - `architecture/lighthouse.svg` by Tretinville
+        - `architecture/windmill.svg` by Christie L. Ward
+        - `arms/gladius.svg` by Christie L. Ward
+        - `arms/grenade.svg` by Jean-Paul Gibert
+        - `arms/helmetCorinthian.svg` by Chatsam
+        - `arms/rapier.svg` by Christie L. Ward
+        - `bugs/ladybird.svg` by Christie L. Ward
+        - `conventional/comet.svg` by Chatsam
+        - `fishes/salmon.svg` by Pierre Huttin
+        - `miscellaneous/chalice2.svg` by Anenja
+        - `miscellaneous/hourglass.svg` by Syryatsu
+        - `miscellaneous/lyre.svg` by Milenioscuro
+        - `molluscs/kraken.svg` by Abjiklam
+        - `molluscs/polypus.svg` by Christie L. Ward
+        - `ornaments/mantle.svg` by Bluebear2
+        - `ornaments/ribbon3.svg` by Gaeser
+        - `people/archer.svg` by Leonid 2
+        - `people/cossack.svg` by Alex Tora
+        - `plants/thistle.svg` by Sodacan
+        - `seafaring/drakkar.svg` by Spedona
+        - `seafaring/shipWheel.svg` by Lidingo
+        - `tools/fan.svg` by Mukai
+        - `tools/saw.svg` by Adalric67
+        - `tools/scalesHanging.svg` by Wikibelgiaan
+      - CC BY-SA 4.0 (<https://creativecommons.org/licenses/by-sa/4.0>):
+        - `arms/helmetGreat.svg` by Paladium
+        - `arms/trident.svg` by Wilfredor
+        - `beasts/ratRampant.svg` by Jacques63
+        - `bodyparts/bone.svg` by Heralder
+        - `bodyparts/crossedBones.svg` by Heralder
+        - `bugs/spider.svg` by MostEpic
+        - `bugs/wasp.svg` by Celbusro
+        - `miscellaneous/amphora.svg` by Baseluna014
+        - `miscellaneous/bookOpen.svg` by unknown author
+        - `miscellaneous/drum.svg` by Erlenmeyer
+        - `miscellaneous/feather.svg` by Madboy74
+        - `miscellaneous/scrollClosed.svg` by Jacques63
+        - `miscellaneous/violin.svg` by Jpgibert
+        - `ornaments/ribbon1.svg` by Eugenio Hansen, OFS
+        - `ornaments/ribbon2.svg` by Eugenio Hansen, OFS
+        - `ornaments/ribbon5.svg` by Eugenio Hansen, OFS
+        - `ornaments/ribbon6.svg` by Eugenio Hansen, OFS
+        - `ornaments/ribbon8.svg` by Eugenio Hansen, OFS
+        - `people/hermit.svg` by Jacques63
+        - `tools/trowel.svg` by Jacques63
+      - Free Art License 1.3 (<http://artlibre.org/licence/lal/en>):
+        - `miscellaneous/bookClosed2.svg` by Tzeentch
+    - inkland does not include the other 194 charge files of FMG: 183 have
+      the license CC BY-NC-SA 3.0, which does not permit commercial use, 10
+      have the GNU FDL 1.3, which needs its full text with each copy, and 1
+      has no license.
 - Test data copied into inkland:
   - The test maps `tests/fixtures/1.112.1.map` and `1.154.0.map`, with gzip
     and no other change. In inkland: `fixtures/azgaar/*.map.gz`. They come
