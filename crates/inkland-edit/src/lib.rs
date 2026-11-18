@@ -10,7 +10,7 @@
 //! inverse". `History` keeps the undo and redo stacks. A `Script` is a list
 //! of commands in a JSON file.
 
-use inkland_core::config::{Config, Point};
+use inkland_core::config::{Config, Point, RenameEntry};
 use inkland_core::error::{Error, ErrorCode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -74,6 +74,17 @@ pub enum Command {
     },
     /// Remove the brush stroke at `index`.
     RemoveBrush { index: usize },
+    /// Give a generated state, culture, religion, or province a name or
+    /// arms (`world.renames`). Without `index`, the entry replaces the
+    /// entry with the same kind and reference, or goes at the end. With
+    /// `index`, it goes in at that index.
+    NameArea {
+        rename: Box<RenameEntry>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<usize>,
+    },
+    /// Remove the rename at `index`.
+    RemoveRename { index: usize },
 }
 
 /// A list of commands in a file.
@@ -164,30 +175,44 @@ fn find(items: &[Value], list: PinList, id: &str) -> Result<usize, Error> {
     })
 }
 
-fn brushes_mut(v: &mut Value) -> &mut Vec<Value> {
+/// A list of the world part of a config value, for example `brushes`.
+fn world_list_mut<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
     v.as_object_mut()
         .expect("a config is an object")
         .entry("world")
         .or_insert_with(|| Value::Object(Default::default()))
         .as_object_mut()
         .expect("world is an object")
-        .entry("brushes")
+        .entry(key)
         .or_insert_with(|| Value::Array(Vec::new()))
         .as_array_mut()
-        .expect("brushes is an array")
+        .expect("a world list is an array")
 }
 
-/// Remove an empty brush list, so that a config without brushes keeps the
-/// same JSON as before.
-fn tidy_brushes(v: &mut Value) {
+fn brushes_mut(v: &mut Value) -> &mut Vec<Value> {
+    world_list_mut(v, "brushes")
+}
+
+/// Remove an empty list of the world part, so that a config without items
+/// keeps the same JSON as before.
+fn tidy(v: &mut Value, key: &str) {
     if let Some(world) = v.get_mut("world").and_then(Value::as_object_mut)
         && world
-            .get("brushes")
+            .get(key)
             .and_then(Value::as_array)
             .is_some_and(Vec::is_empty)
     {
-        world.remove("brushes");
+        world.remove(key);
     }
+}
+
+fn tidy_brushes(v: &mut Value) {
+    tidy(v, "brushes");
+}
+
+/// `true` if two renames name the same area: the same kind and reference.
+fn same_area(a: &RenameEntry, b: &RenameEntry) -> bool {
+    a.kind == b.kind && a.at == b.at && a.pin == b.pin
 }
 
 impl Command {
@@ -332,6 +357,51 @@ impl Command {
                     index: Some(*index),
                 }
             }
+            Command::NameArea { rename, index } => {
+                let entry = serde_json::to_value(rename).expect("a rename converts to JSON");
+                let items = world_list_mut(&mut v, "renames");
+                let at = match index {
+                    Some(_) => None,
+                    None => items.iter().position(|old| {
+                        serde_json::from_value::<RenameEntry>(old.clone())
+                            .is_ok_and(|old| same_area(&old, rename))
+                    }),
+                };
+                match (at, index) {
+                    (Some(k), _) => {
+                        let old = std::mem::replace(&mut items[k], entry);
+                        let old: RenameEntry = serde_json::from_value(old)
+                            .map_err(|_| invalid("/world/renames", "a rename is not valid"))?;
+                        Command::NameArea {
+                            rename: Box::new(old),
+                            index: None,
+                        }
+                    }
+                    (None, i) => {
+                        let k = i.unwrap_or(items.len()).min(items.len());
+                        items.insert(k, entry);
+                        Command::RemoveRename { index: k }
+                    }
+                }
+            }
+            Command::RemoveRename { index } => {
+                let items = world_list_mut(&mut v, "renames");
+                if *index >= items.len() {
+                    tidy(&mut v, "renames");
+                    return Err(invalid(
+                        "/world/renames",
+                        format!("there is no rename {index}"),
+                    ));
+                }
+                let old = items.remove(*index);
+                tidy(&mut v, "renames");
+                let old: RenameEntry = serde_json::from_value(old)
+                    .map_err(|_| invalid("/world/renames", "a rename is not valid"))?;
+                Command::NameArea {
+                    rename: Box::new(old),
+                    index: Some(*index),
+                }
+            }
         };
         Ok((to_config(v)?, inverse))
     }
@@ -440,6 +510,7 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use inkland_core::config::AreaKind;
     use proptest::prelude::*;
     use serde_json::json;
 
@@ -462,6 +533,40 @@ mod tests {
         let (back, _) = inverse.apply(&next).unwrap();
         assert_eq!(&back, c, "{cmd:?}");
         assert_eq!(to_value(&back), to_value(c));
+    }
+
+    #[test]
+    fn a_rename_replaces_the_same_area_and_undo_gives_back_the_config() {
+        let c = config();
+        let state = |name: &str| RenameEntry {
+            kind: AreaKind::State,
+            pin: Some("ostrey".into()),
+            name: Some(name.into()),
+            ..RenameEntry::default()
+        };
+        let add = Command::NameArea {
+            rename: Box::new(state("Ostrey")),
+            index: None,
+        };
+        undo_gives_back(&c, &add);
+        let (one, inv) = add.apply(&c).unwrap();
+        assert_eq!(inv, Command::RemoveRename { index: 0 });
+        assert_eq!(one.world.renames, vec![state("Ostrey")]);
+        // The same area again: the entry changes in place.
+        let change = Command::NameArea {
+            rename: Box::new(state("Ostreya")),
+            index: None,
+        };
+        undo_gives_back(&one, &change);
+        let (two, _) = change.apply(&one).unwrap();
+        assert_eq!(two.world.renames, vec![state("Ostreya")]);
+        // A remove gives back the entry at its index.
+        let remove = Command::RemoveRename { index: 0 };
+        undo_gives_back(&two, &remove);
+        let (none, _) = remove.apply(&two).unwrap();
+        assert!(none.world.renames.is_empty());
+        assert!(to_value(&none)["world"].get("renames").is_none());
+        assert!(Command::RemoveRename { index: 0 }.apply(&none).is_err());
     }
 
     #[test]
@@ -661,6 +766,26 @@ mod tests {
                 index: None
             }),
             (0usize..3).prop_map(|index| Command::RemoveBrush { index }),
+            (
+                0u8..4,
+                prop::option::of("[A-Z][a-z]{2,8}"),
+                prop::option::of(0usize..3)
+            )
+                .prop_map(|(k, name, index)| Command::NameArea {
+                    rename: Box::new(RenameEntry {
+                        kind: [
+                            AreaKind::State,
+                            AreaKind::Culture,
+                            AreaKind::Religion,
+                            AreaKind::Province
+                        ][usize::from(k)],
+                        pin: Some(["ostrey", "harrow"][usize::from(k) % 2].into()),
+                        name,
+                        ..RenameEntry::default()
+                    }),
+                    index,
+                }),
+            (0usize..3).prop_map(|index| Command::RemoveRename { index }),
         ]
     }
 
