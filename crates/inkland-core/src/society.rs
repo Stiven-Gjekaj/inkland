@@ -123,6 +123,11 @@ pub struct State {
     pub urban: f64,
     /// The coat of arms (`emblems.rs`).
     pub coa: Option<crate::emblems::Coa>,
+    /// The relation to each state, by state id. Entry 0 is the neutral
+    /// lands, and the entry of the state itself is `Relation::None`.
+    pub diplomacy: Vec<crate::diplomacy::Relation>,
+    /// Old wars, sorted by start, then the ongoing wars.
+    pub campaigns: Vec<crate::diplomacy::Campaign>,
 }
 
 impl Default for State {
@@ -146,6 +151,8 @@ impl Default for State {
             rural: 0.0,
             urban: 0.0,
             coa: None,
+            diplomacy: Vec::new(),
+            campaigns: Vec::new(),
         }
     }
 }
@@ -186,6 +193,8 @@ pub struct Society {
     pub cell_state: Vec<u32>,
     pub provinces: Vec<Province>,
     pub cell_province: Vec<u32>,
+    /// The diplomatic history: each record is a title and its lines.
+    pub chronicle: Vec<Vec<String>>,
 }
 
 /// What the society stage reads from the world.
@@ -322,6 +331,19 @@ pub fn build(input: &Input) -> Society {
     for p in &mut places {
         p.state = cell_state[p.cell];
     }
+    // Campaigns and relations (FMG generateCampaigns, generateDiplomacy).
+    let mut crng = Rand::new(tree.part_rng(Layer::States, "campaigns"));
+    crate::diplomacy::campaigns(&mut states, &chains, &mut crng);
+    let mut drng = Rand::new(tree.part_rng(Layer::States, "diplomacy"));
+    let chronicle = crate::diplomacy::generate(
+        &crate::diplomacy::Input {
+            cells: &cells,
+            features,
+            cell_state: &cell_state,
+        },
+        &mut states,
+        &mut drng,
+    );
 
     // Provinces come later, in `specify`.
     let provinces: Vec<Province> = Vec::new();
@@ -351,6 +373,7 @@ pub fn build(input: &Input) -> Society {
         cell_state,
         provinces,
         cell_province,
+        chronicle,
     }
 }
 

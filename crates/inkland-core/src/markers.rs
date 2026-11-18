@@ -581,20 +581,10 @@ const MONTHS: [&str; 12] = [
     "December",
 ];
 
-const WARS: [(&str, u32); 9] = [
-    ("War", 6),
-    ("Conflict", 2),
-    ("Campaign", 4),
-    ("Invasion", 2),
-    ("Rebellion", 2),
-    ("Conquest", 2),
-    ("Intervention", 1),
-    ("Expedition", 1),
-    ("Crusade", 1),
-];
+use crate::diplomacy::WARS;
 
 /// The calendar year of FMG.
-const YEAR: f64 = 1000.0;
+const YEAR: f64 = crate::diplomacy::YEAR;
 
 /// A marker kind: type, icon, min, each, multiplier.
 struct Kind {
@@ -1005,7 +995,28 @@ impl Gen<'_> {
             "battlefields" => {
                 let state = self.soc().cell_state[c];
                 if !self.campaigns.contains_key(&state) {
-                    let list = self.campaign(state);
+                    // The campaigns of the state (diplomacy), else new ones.
+                    let own: Vec<Campaign> = self
+                        .soc()
+                        .states
+                        .iter()
+                        .find(|s| s.id == state)
+                        .map(|s| {
+                            s.campaigns
+                                .iter()
+                                .map(|cp| Campaign {
+                                    name: cp.name.clone(),
+                                    start: cp.start,
+                                    end: cp.end.unwrap_or(YEAR),
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let list = if own.is_empty() {
+                        self.campaign(state)
+                    } else {
+                        own
+                    };
                     self.campaigns.insert(state, list);
                 }
                 let n = self.campaigns[&state].len();
