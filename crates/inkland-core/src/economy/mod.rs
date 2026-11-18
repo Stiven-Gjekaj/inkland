@@ -10,6 +10,8 @@
 //! - `output`, `routes`, `trade`, `production`, `orders`, `taxes`,
 //!   `corruption`, `deals`: the run of one day (`Production.produce`), then
 //!   the collection of the taxes (`Taxes.collect`).
+//! - `prosperity`: how well people live. FMG works it out on demand;
+//!   inkland works it out once in `build` and keeps it in `Economy`.
 //!
 //! `build` runs after the feature names, as `Markets.generate` does in the
 //! FMG pipeline.
@@ -24,6 +26,7 @@ pub mod markets;
 pub mod orders;
 pub mod output;
 pub mod production;
+pub mod prosperity;
 pub mod routes;
 pub mod taxes;
 pub mod trade;
@@ -110,6 +113,19 @@ pub struct Economy {
     pub decima: f64,
     /// The cell spacing of the first grid, in units (FMG `grid.spacing`).
     pub spacing: f64,
+    /// The rural output of each cell a day: good id and units
+    /// (`Output.getRural`).
+    pub rural_output: Vec<Vec<(u32, f64)>>,
+    /// The land cell whose people work each cell (`Output.getWorkingCell`).
+    pub working_cell: Vec<usize>,
+    /// The rural prosperity percent of each cell, 0 where no one lives
+    /// (FMG `cells.prosperity`).
+    pub prosperity: Vec<u8>,
+    /// The rural people of each cell (`Prosperity.getRuralCell`).
+    pub rural: Vec<Option<prosperity::RuralCell>>,
+    /// How the people of each place live, by place index
+    /// (`Prosperity.getBurg`).
+    pub burg_living: Vec<Option<prosperity::Living>>,
 }
 
 impl Economy {
@@ -248,9 +264,54 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
         corruption: corruption::Corruption::default(),
         decima: libm::hypot(w, h) / 10.0,
         spacing: libm::sqrt(w * h / crate::world::cell_count(config)),
+        rural_output: Vec::new(),
+        working_cell: Vec::new(),
+        prosperity: Vec::new(),
+        rural: Vec::new(),
+        burg_living: Vec::new(),
     };
     produce(input, soc, &links, &mut economy);
+    // The rural prosperity of the cells, as `produce` of FMG ends: before
+    // the collection of the taxes.
+    let mut cell_burg = vec![0u32; n];
+    for p in &soc.places {
+        cell_burg[p.cell] = p.id;
+    }
+    {
+        let e = &mut economy;
+        let land = output::Land {
+            grid,
+            cells: &soc.cells,
+            biomes: input.biomes,
+            development: &soc.development,
+            cell_culture: &soc.cell_culture,
+            cultures: &soc.cultures,
+            places: &soc.places,
+            cell_burg: &cell_burg,
+            cell_market: &e.cell_market,
+            cell_state: &soc.cell_state,
+        };
+        let infrastructure = prosperity::infrastructure(soc, &e.corruption);
+        e.rural = prosperity::rural(
+            &e.goods,
+            &land,
+            &e.markets,
+            &e.rural_output,
+            &infrastructure,
+        );
+        e.prosperity = prosperity::cells(&e.rural);
+        e.working_cell = (0..n).map(|c| land.working_cell(c)).collect();
+    }
     collect(soc, &economy);
+    // FMG reads these on demand after the run.
+    let infrastructure = prosperity::infrastructure(soc, &economy.corruption);
+    economy.burg_living = prosperity::burgs(
+        &economy.goods,
+        soc,
+        &economy.deals,
+        &economy.cell_market,
+        &infrastructure,
+    );
     economy
 }
 
@@ -369,6 +430,7 @@ fn produce(input: &Input, soc: &mut Society, links: &[Vec<(usize, bool)>], e: &m
     r.bill_licenses();
     let rural = r.w.land.rural(&e.goods);
     r.collect_rural(&rural);
+    e.rural_output = rural;
     r.initialize_prices();
 
     let markets = e.markets.len();
@@ -674,6 +736,24 @@ mod tests {
             e.places.len()
         );
         assert!(e.places.iter().any(|p| !p.production.is_empty()));
+    }
+
+    #[test]
+    fn rural_people_live_where_they_are() {
+        let w = world(8, "archipelago");
+        let e = &w.economy;
+        let cells = &w.society.cells;
+        for c in 0..w.grid.len() {
+            let peopled = cells.pop[c] > 0.0 && e.cell_market[c] != 0;
+            assert_eq!(e.prosperity[c] > 0, peopled, "cell {c}");
+            assert!(e.prosperity[c] <= 100);
+            assert_eq!(e.rural[c].is_some(), peopled);
+        }
+        for (b, p) in w.society.places.iter().enumerate() {
+            if let Some(l) = &e.burg_living[b] {
+                assert!((0.0..=1.0).contains(&l.prosperity), "{}", p.name);
+            }
+        }
     }
 
     #[test]
