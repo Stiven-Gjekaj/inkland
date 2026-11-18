@@ -563,6 +563,17 @@ fn zones_draw_with_the_hatches_of_fmg() {
 }
 
 #[test]
+fn lakes_of_the_ink_style_have_ripples() {
+    let ink = render_with(&[LayerName::Lakes], StyleName::Ink);
+    assert!(ink.contains("<mask id=\"lake-ripples-"));
+    assert!(ink.contains("mask=\"url(#lake-ripples-"));
+    parse_and_draw(&ink);
+    // The default style has no ripples.
+    let default = render_with(&[LayerName::Lakes], StyleName::Default);
+    assert!(!default.contains("lake-ripples-"));
+}
+
+#[test]
 fn precipitation_draws_the_arrows_of_the_winds() {
     let render = |wind: [f64; 6]| {
         let mut c = base_config();

@@ -360,6 +360,77 @@ pub fn landmass(s: &mut String, ctx: &Ctx) {
     );
 }
 
+/// The ripples of a lake, after its outline, with a mask that keeps them
+/// off the shore and off the islands in lakes (`drawLakeEmbellishments`).
+fn lake_ripples(ctx: &Ctx, o: &geom::Outline, group: &str) -> String {
+    let st = &ctx.style;
+    let p = ["lakes", group];
+    let kind = st
+        .option_str(&p, "embellishment")
+        .unwrap_or_else(|| "none".into());
+    if kind == "none" {
+        return String::new();
+    }
+    let look = super::ripples::Look {
+        embellishment: kind,
+        density: st.option_f64(&p, "density").unwrap_or(1.0),
+        length: st.option_f64(&p, "length").unwrap_or(1.0),
+        halo: st.option_f64(&p, "halo").unwrap_or(0.2),
+        width: st.option_f64(&p, "width").unwrap_or(0.3),
+    };
+    let px = ctx.px;
+    let points: Vec<[f64; 2]> = o
+        .shape
+        .points
+        .iter()
+        .map(|&q| px.from_world_px(q))
+        .collect();
+    let k = px.from_world_px([1.0, 0.0])[0] - px.from_world_px([0.0, 0.0])[0];
+    let spacing = spacing_px(ctx) * k;
+    let mut rng = Rand::new(
+        SeedTree::new(ctx.config.seed).part_rng(Layer::Decoration, &format!("lake-{}", o.feature)),
+    );
+    let r = super::ripples::lake_ripples(&points, spacing, &look, &mut rng);
+    if r.path.is_empty() {
+        return String::new();
+    }
+    let id = format!("lake-ripples-{}", o.feature);
+    let [x, y, w, h] = r.bounds;
+    let stroke = n(r.gap * 2.0);
+    let islands: String = ctx
+        .outlines
+        .iter()
+        .filter(|i| !i.lake && i.in_lake)
+        .map(|i| {
+            format!(
+                "<use href=\"#feature-{}\" fill=\"black\" stroke=\"black\"/>",
+                i.feature
+            )
+        })
+        .collect();
+    ctx.def(
+        &id,
+        format!(
+            "<mask id=\"{id}\" maskUnits=\"userSpaceOnUse\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"><use href=\"#feature-{}\" fill=\"white\" stroke=\"black\" stroke-width=\"{stroke}\" stroke-linejoin=\"round\"/><g stroke-width=\"{stroke}\" stroke-linejoin=\"round\">{islands}</g></mask>",
+            n(x),
+            n(y),
+            n(w),
+            n(h),
+            o.feature
+        ),
+    );
+    format!(
+        "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" stroke-dasharray=\"none\" stroke-linecap=\"round\" opacity=\"{}\" mask=\"url(#{id})\"/>",
+        r.path,
+        crate::extras::xml(
+            &st.option_str(&p, "color")
+                .unwrap_or_else(|| "#000000".into())
+        ),
+        n(look.width),
+        n(st.option_f64(&p, "opacity").unwrap_or(0.6))
+    )
+}
+
 /// The lake group of a lake feature.
 fn lake_group(ctx: &Ctx, feature: u32) -> &'static str {
     ctx.world
@@ -388,7 +459,13 @@ pub fn lakes(s: &mut String, ctx: &Ctx) {
             .outlines
             .iter()
             .filter(|o| o.lake && lake_group(ctx, o.feature) == group)
-            .map(|o| format!("<use href=\"#feature-{}\"/>", o.feature))
+            .map(|o| {
+                format!(
+                    "<use href=\"#feature-{}\"/>{}",
+                    o.feature,
+                    lake_ripples(ctx, o, &group)
+                )
+            })
             .collect();
         let _ = writeln!(
             s,

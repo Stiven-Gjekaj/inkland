@@ -10,6 +10,7 @@ mod military;
 mod notes;
 pub(crate) mod overlays;
 mod palette;
+mod ripples;
 pub(crate) mod text;
 
 pub use decor::boxes;
