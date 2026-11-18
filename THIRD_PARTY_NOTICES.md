@@ -56,6 +56,29 @@ Some data tables come from it. This file keeps its license notice.
     `src/index.html`, and the biome colours and relief pools, from
     `src/model/physical/biomes-generator.ts`. In inkland:
     `crates/inkland-render/src/fmg/`.
+  - The emblem generator data: tinctures, divisions, lines, ordinaries,
+    charge positions, charge categories and charge data, the charges of
+    each culture type, and the shield types, from `src/data/emblems/*.ts`.
+    In inkland: `crates/inkland-core/src/emblems/data.rs`. The shield of
+    each culture of the culture sets, from
+    `src/model/society/cultures-generator.ts`. In inkland:
+    `crates/inkland-core/src/culture_sets.rs`.
+  - The emblem drawing data: the shield shapes and charge positions, the
+    division and ordinary templates, the lines of partition, the tincture
+    colours, and the field patterns, from `src/renderers/emblems/*.ts`.
+    FMG ports them from Armoria (<https://github.com/Azgaar/Armoria>), by
+    the same author. In inkland:
+    `crates/inkland-render/src/emblem/data.rs`.
+  - 108 charge files (SVG), from `src/assets/icons/charges`. inkland
+    keeps only the files with the license CC0 1.0 (public domain); each
+    file names its author and its license in its `metadata` element, and
+    the files have no change. Authors: Azgaar, Celbusro, Fedor Taran,
+    Gothika, Inkscaper, Leonid 2, Madboy74, Marmelad, Rama, Zorlot,
+    spax89, toa267, and V. A. Lyakhor. In inkland:
+    `crates/inkland-render/assets/emblems/charges`. The other 245 charge
+    files of FMG have other licenses (CC BY-NC-SA 3.0, CC BY-SA, GNU FDL,
+    CC BY, Free Art License) or no license. inkland does not include
+    them.
 - Test data copied into inkland:
   - The test maps `tests/fixtures/1.112.1.map` and `1.154.0.map`, with gzip
     and no other change. In inkland: `fixtures/azgaar/*.map.gz`. They come
