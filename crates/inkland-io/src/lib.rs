@@ -10,4 +10,5 @@ pub mod geojson;
 pub mod query;
 pub mod report;
 pub mod schema;
+pub mod story;
 pub mod world;

@@ -114,7 +114,7 @@ pub fn world_value(world: &World, config: &Config) -> Value {
         "cell_development": world.society.development,
         "cultures": world.society.cultures.iter().map(culture_value).collect::<Vec<_>>(),
         "places": world.society.places.iter().map(place_value).collect::<Vec<_>>(),
-        "states": world.society.states.iter().map(state_value).collect::<Vec<_>>(),
+        "states": world.society.states.iter().map(|st| state_value(st, world)).collect::<Vec<_>>(),
         "provinces": world.society.provinces.iter().map(province_value).collect::<Vec<_>>(),
         "coastlines": world.coastlines.iter().map(|c| json!({
             "id": c.id,
@@ -135,6 +135,11 @@ pub fn world_value(world: &World, config: &Config) -> Value {
             .collect::<Vec<_>>()
     );
     v["harbor"] = json!(world.features.harbor);
+    // Diplomacy, economy, military, stability, zones, and the story (FMG
+    // `states[0].diplomacy`, `pack.markets`, `pack.deals`, `pack.zones`,
+    // `pack.journeys`, `pack.measurers`, `pack.legends`).
+    v["chronicle"] = json!(world.society.chronicle);
+    crate::story::add_to_world(&mut v, world);
     // Glaciers and icebergs (FMG `pack.ice`).
     v["ice"] = json!(
         world
@@ -213,8 +218,8 @@ fn place_value(p: &inkland_core::society::Place) -> Value {
     })
 }
 
-fn state_value(st: &inkland_core::society::State) -> Value {
-    json!({
+fn state_value(st: &inkland_core::society::State, world: &World) -> Value {
+    let mut v = json!({
         "id": st.id,
         "name": st.name,
         "full_name": st.full_name,
@@ -233,7 +238,9 @@ fn state_value(st: &inkland_core::society::State) -> Value {
         "rural": round(st.rural, 3),
         "urban": round(st.urban, 3),
         "coa": st.coa,
-    })
+    });
+    crate::story::add_to_state(&mut v, st, world);
+    v
 }
 
 fn province_value(pr: &inkland_core::society::Province) -> Value {
