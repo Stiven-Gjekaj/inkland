@@ -1,9 +1,15 @@
-//! The charge files of Azgaar's Fantasy Map Generator that are in the public
-//! domain (CC0; each file names its author and license), kept as data in
-//! `assets/emblems/charges`. A script made this list from the directory.
+//! The charge files of Azgaar's Fantasy Map Generator whose licenses permit
+//! use in inkland, kept as data in `assets/emblems/charges`: CC0, CC BY,
+//! CC BY-SA, and the Free Art License. Each file names its author and its
+//! license. Charges under CC BY-NC-SA, GFDL, or no license are not here.
+//! A script made this list from the directory.
 
 /// Each charge: its name and the text of its file, sorted by name.
 pub const FILES: &[(&str, &str)] = &[
+    (
+        "amphora",
+        include_str!("../../assets/emblems/charges/miscellaneous/amphora.svg"),
+    ),
     (
         "anchor",
         include_str!("../../assets/emblems/charges/seafaring/anchor.svg"),
@@ -15,6 +21,10 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "ant",
         include_str!("../../assets/emblems/charges/bugs/ant.svg"),
+    ),
+    (
+        "archer",
+        include_str!("../../assets/emblems/charges/people/archer.svg"),
     ),
     (
         "armEmbowedHoldingSabre",
@@ -31,6 +41,18 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "billet",
         include_str!("../../assets/emblems/charges/conventional/billet.svg"),
+    ),
+    (
+        "bone",
+        include_str!("../../assets/emblems/charges/bodyparts/bone.svg"),
+    ),
+    (
+        "bookClosed2",
+        include_str!("../../assets/emblems/charges/miscellaneous/bookClosed2.svg"),
+    ),
+    (
+        "bookOpen",
+        include_str!("../../assets/emblems/charges/miscellaneous/bookOpen.svg"),
     ),
     (
         "bowWithThreeArrows",
@@ -57,12 +79,24 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/fantastic/centaur.svg"),
     ),
     (
+        "chalice2",
+        include_str!("../../assets/emblems/charges/miscellaneous/chalice2.svg"),
+    ),
+    (
         "church",
         include_str!("../../assets/emblems/charges/architecture/church.svg"),
     ),
     (
+        "comet",
+        include_str!("../../assets/emblems/charges/conventional/comet.svg"),
+    ),
+    (
         "compassRose",
         include_str!("../../assets/emblems/charges/conventional/compassRose.svg"),
+    ),
+    (
+        "cossack",
+        include_str!("../../assets/emblems/charges/people/cossack.svg"),
     ),
     (
         "crescent",
@@ -225,6 +259,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/crosses/crossVoided.svg"),
     ),
     (
+        "crossedBones",
+        include_str!("../../assets/emblems/charges/bodyparts/crossedBones.svg"),
+    ),
+    (
         "crosslet",
         include_str!("../../assets/emblems/charges/crosses/crosslet.svg"),
     ),
@@ -237,12 +275,28 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/bugs/dragonfly.svg"),
     ),
     (
+        "drakkar",
+        include_str!("../../assets/emblems/charges/seafaring/drakkar.svg"),
+    ),
+    (
         "drawingCompass",
         include_str!("../../assets/emblems/charges/tools/drawingCompass.svg"),
     ),
     (
+        "drum",
+        include_str!("../../assets/emblems/charges/miscellaneous/drum.svg"),
+    ),
+    (
         "earOfWheat",
         include_str!("../../assets/emblems/charges/plants/earOfWheat.svg"),
+    ),
+    (
+        "fan",
+        include_str!("../../assets/emblems/charges/tools/fan.svg"),
+    ),
+    (
+        "feather",
+        include_str!("../../assets/emblems/charges/miscellaneous/feather.svg"),
     ),
     (
         "flamberge",
@@ -261,6 +315,14 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/conventional/fusil.svg"),
     ),
     (
+        "gear",
+        include_str!("../../assets/emblems/charges/conventional/gear.svg"),
+    ),
+    (
+        "gladius",
+        include_str!("../../assets/emblems/charges/arms/gladius.svg"),
+    ),
+    (
         "goutte",
         include_str!("../../assets/emblems/charges/conventional/goutte.svg"),
     ),
@@ -269,16 +331,52 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/plants/grapeBunch.svg"),
     ),
     (
+        "grenade",
+        include_str!("../../assets/emblems/charges/arms/grenade.svg"),
+    ),
+    (
         "heart",
         include_str!("../../assets/emblems/charges/conventional/heart.svg"),
+    ),
+    (
+        "helmetCorinthian",
+        include_str!("../../assets/emblems/charges/arms/helmetCorinthian.svg"),
+    ),
+    (
+        "helmetGreat",
+        include_str!("../../assets/emblems/charges/arms/helmetGreat.svg"),
     ),
     (
         "helmetZischagge",
         include_str!("../../assets/emblems/charges/arms/helmetZischagge.svg"),
     ),
     (
+        "hermit",
+        include_str!("../../assets/emblems/charges/people/hermit.svg"),
+    ),
+    (
+        "hourglass",
+        include_str!("../../assets/emblems/charges/miscellaneous/hourglass.svg"),
+    ),
+    (
+        "kraken",
+        include_str!("../../assets/emblems/charges/molluscs/kraken.svg"),
+    ),
+    (
+        "ladybird",
+        include_str!("../../assets/emblems/charges/bugs/ladybird.svg"),
+    ),
+    (
+        "lanceWithBanner",
+        include_str!("../../assets/emblems/charges/arms/lanceWithBanner.svg"),
+    ),
+    (
         "laurelWreath2",
         include_str!("../../assets/emblems/charges/miscellaneous/laurelWreath2.svg"),
+    ),
+    (
+        "lighthouse",
+        include_str!("../../assets/emblems/charges/architecture/lighthouse.svg"),
     ),
     (
         "lozenge",
@@ -293,12 +391,20 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/conventional/lozengePloye.svg"),
     ),
     (
+        "lyre",
+        include_str!("../../assets/emblems/charges/miscellaneous/lyre.svg"),
+    ),
+    (
         "mace",
         include_str!("../../assets/emblems/charges/arms/mace.svg"),
     ),
     (
         "maces",
         include_str!("../../assets/emblems/charges/arms/maces.svg"),
+    ),
+    (
+        "mantle",
+        include_str!("../../assets/emblems/charges/ornaments/mantle.svg"),
     ),
     (
         "mascle",
@@ -353,16 +459,56 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/architecture/pillar.svg"),
     ),
     (
+        "pincers",
+        include_str!("../../assets/emblems/charges/tools/pincers.svg"),
+    ),
+    (
         "pique",
         include_str!("../../assets/emblems/charges/conventional/pique.svg"),
+    ),
+    (
+        "polypus",
+        include_str!("../../assets/emblems/charges/molluscs/polypus.svg"),
     ),
     (
         "raft",
         include_str!("../../assets/emblems/charges/seafaring/raft.svg"),
     ),
     (
+        "rapier",
+        include_str!("../../assets/emblems/charges/arms/rapier.svg"),
+    ),
+    (
+        "ratRampant",
+        include_str!("../../assets/emblems/charges/beasts/ratRampant.svg"),
+    ),
+    (
+        "ribbon1",
+        include_str!("../../assets/emblems/charges/ornaments/ribbon1.svg"),
+    ),
+    (
+        "ribbon2",
+        include_str!("../../assets/emblems/charges/ornaments/ribbon2.svg"),
+    ),
+    (
+        "ribbon3",
+        include_str!("../../assets/emblems/charges/ornaments/ribbon3.svg"),
+    ),
+    (
         "ribbon4",
         include_str!("../../assets/emblems/charges/ornaments/ribbon4.svg"),
+    ),
+    (
+        "ribbon5",
+        include_str!("../../assets/emblems/charges/ornaments/ribbon5.svg"),
+    ),
+    (
+        "ribbon6",
+        include_str!("../../assets/emblems/charges/ornaments/ribbon6.svg"),
+    ),
+    (
+        "ribbon8",
+        include_str!("../../assets/emblems/charges/ornaments/ribbon8.svg"),
     ),
     (
         "roundel",
@@ -377,6 +523,14 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/conventional/rustre.svg"),
     ),
     (
+        "salmon",
+        include_str!("../../assets/emblems/charges/fishes/salmon.svg"),
+    ),
+    (
+        "saw",
+        include_str!("../../assets/emblems/charges/tools/saw.svg"),
+    ),
+    (
         "scale",
         include_str!("../../assets/emblems/charges/tools/scale.svg"),
     ),
@@ -385,12 +539,32 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/tools/scaleImbalanced.svg"),
     ),
     (
+        "scalesHanging",
+        include_str!("../../assets/emblems/charges/tools/scalesHanging.svg"),
+    ),
+    (
+        "scissors2",
+        include_str!("../../assets/emblems/charges/tools/scissors2.svg"),
+    ),
+    (
+        "scrollClosed",
+        include_str!("../../assets/emblems/charges/miscellaneous/scrollClosed.svg"),
+    ),
+    (
+        "scythe",
+        include_str!("../../assets/emblems/charges/agriculture/scythe.svg"),
+    ),
+    (
         "scythe2",
         include_str!("../../assets/emblems/charges/agriculture/scythe2.svg"),
     ),
     (
         "shears",
         include_str!("../../assets/emblems/charges/tools/shears.svg"),
+    ),
+    (
+        "shipWheel",
+        include_str!("../../assets/emblems/charges/seafaring/shipWheel.svg"),
     ),
     (
         "skull",
@@ -403,6 +577,14 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "snail",
         include_str!("../../assets/emblems/charges/molluscs/snail.svg"),
+    ),
+    (
+        "snowflake",
+        include_str!("../../assets/emblems/charges/miscellaneous/snowflake.svg"),
+    ),
+    (
+        "spider",
+        include_str!("../../assets/emblems/charges/bugs/spider.svg"),
     ),
     (
         "spiral",
@@ -425,6 +607,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../assets/emblems/charges/conventional/sunInSplendour.svg"),
     ),
     (
+        "thistle",
+        include_str!("../../assets/emblems/charges/plants/thistle.svg"),
+    ),
+    (
         "trefle",
         include_str!("../../assets/emblems/charges/conventional/trefle.svg"),
     ),
@@ -435,5 +621,25 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "trianglePierced",
         include_str!("../../assets/emblems/charges/conventional/trianglePierced.svg"),
+    ),
+    (
+        "trident",
+        include_str!("../../assets/emblems/charges/arms/trident.svg"),
+    ),
+    (
+        "trowel",
+        include_str!("../../assets/emblems/charges/tools/trowel.svg"),
+    ),
+    (
+        "violin",
+        include_str!("../../assets/emblems/charges/miscellaneous/violin.svg"),
+    ),
+    (
+        "wasp",
+        include_str!("../../assets/emblems/charges/bugs/wasp.svg"),
+    ),
+    (
+        "windmill",
+        include_str!("../../assets/emblems/charges/architecture/windmill.svg"),
     ),
 ];

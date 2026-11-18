@@ -42,7 +42,15 @@ fn the_art_list_agrees_with_the_generator() {
     assert_eq!(names, inkland_core::emblems::data::ART);
     for (name, text) in charges::FILES {
         assert!(text.contains(&format!("<g id=\"{name}\"")), "{name}");
-        assert!(text.contains("publicdomain/zero/1.0"), "{name}");
+        // Only licenses that permit use in inkland, also for sale.
+        let ok = [
+            "publicdomain/zero/1.0",
+            "licenses/by/",
+            "licenses/by-sa/",
+            "artlibre.org",
+        ];
+        assert!(ok.iter().any(|l| text.contains(l)), "{name}");
+        assert!(!text.contains("by-nc"), "{name}");
     }
     // Each shield of the generator has a shape.
     for s in inkland_core::emblems::shield_names() {
