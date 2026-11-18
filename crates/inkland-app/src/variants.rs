@@ -85,6 +85,7 @@ pub fn label_rows(c: &Config, v: usize) -> Vec<Row> {
                 ],
                 id: key,
                 pinned: true,
+                color: None,
             }
         })
         .collect()
@@ -116,6 +117,7 @@ pub fn variant_rows(c: &Config) -> Vec<Row> {
                 }),
             ],
             pinned: true,
+            color: None,
         })
         .collect()
 }
@@ -135,6 +137,7 @@ pub fn overlay_rows(c: &Config) -> Vec<Row> {
                 o.labels.len().to_string(),
             ],
             pinned: true,
+            color: None,
         })
         .collect()
 }

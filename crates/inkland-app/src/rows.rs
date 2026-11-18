@@ -7,19 +7,46 @@ use crate::pins::{anchor_text, waypoint_text};
 use inkland::{Config, World};
 use serde_json::Value;
 
-/// A row of a table: an id, the cell texts, and `true` for a pin.
+/// A row of a table: an id, the cell texts, `true` for a pin, and the
+/// color of the swatch before the first cell (`#rrggbb`), if any.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub id: String,
     pub cells: Vec<String>,
     pub pinned: bool,
+    pub color: Option<String>,
 }
 
-fn row(id: impl Into<String>, cells: Vec<String>, pinned: bool) -> Row {
+/// A row without a swatch.
+pub fn row(id: impl Into<String>, cells: Vec<String>, pinned: bool) -> Row {
     Row {
         id: id.into(),
         cells,
         pinned,
+        color: None,
+    }
+}
+
+impl Row {
+    /// The row with a swatch of the color `#rrggbb`.
+    pub fn with_color(mut self, color: impl Into<String>) -> Row {
+        self.color = Some(color.into());
+        self
+    }
+}
+
+/// The red, green, and blue of a color `#rrggbb` or `#rgb`. The case of
+/// the letters does not matter.
+pub fn hex_color(text: &str) -> Option<[u8; 3]> {
+    let hex = text.strip_prefix('#')?;
+    let digit = |i: usize| u8::from_str_radix(hex.get(i..=i)?, 16).ok();
+    match hex.len() {
+        6 => {
+            let byte = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
+            Some([byte(0)?, byte(2)?, byte(4)?])
+        }
+        3 => Some([digit(0)? * 17, digit(1)? * 17, digit(2)? * 17]),
+        _ => None,
     }
 }
 
@@ -541,6 +568,17 @@ mod tests {
         assert!(!culture_rows(&w).is_empty());
         assert!(!religion_rows(&w).is_empty());
         assert_eq!(province_rows(&w).len(), w.society.provinces.len());
+    }
+
+    #[test]
+    fn a_hex_color_gives_its_channels() {
+        assert_eq!(hex_color("#87CEFA"), Some([0x87, 0xce, 0xfa]));
+        assert_eq!(hex_color("#abc"), Some([0xaa, 0xbb, 0xcc]));
+        assert_eq!(hex_color("87cefa"), None);
+        assert_eq!(hex_color("#12345"), None);
+        assert_eq!(hex_color("#gg0000"), None);
+        let r = row("1", vec!["a".into()], false).with_color("#ffffff");
+        assert_eq!(r.color.as_deref(), Some("#ffffff"));
     }
 
     #[test]

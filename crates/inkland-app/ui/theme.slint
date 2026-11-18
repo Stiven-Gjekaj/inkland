@@ -403,6 +403,9 @@ export struct TableRow {
     cells: [string],
     // `true`: the row is a pin (it can be edited).
     pinned: bool,
+    // The color of the swatch before the first cell. A transparent color
+    // shows no swatch.
+    color: color,
 }
 
 // A table like the FMG overview dialogs: a header and rows. `widths` is the
@@ -456,8 +459,19 @@ export component Table inherits VerticalLayout {
                     padding-left: 4px;
                     padding-right: 2px;
                     spacing: 4px;
+                    if row.color.alpha > 0: Rectangle {
+                        width: 12px;
+                        Rectangle {
+                            width: 12px;
+                            height: 12px;
+                            background: row.color;
+                            border-width: 1px;
+                            border-color: #666666;
+                        }
+                    }
+                    // The swatch and its spacing come out of the first column.
                     for cell[j] in row.cells: Text {
-                        width: root.widths[j];
+                        width: root.widths[j] - (j == 0 && row.color.alpha > 0 ? 16px : 0px);
                         text: cell;
                         font-family: Theme.sans;
                         font-size: Theme.font-size;
@@ -480,6 +494,30 @@ export component Table inherits VerticalLayout {
             color: #999999;
             font-family: Theme.sans;
             font-size: Theme.font-size;
+        }
+    }
+}
+
+// A box of long text that scrolls, for example a note or a chronicle.
+export component TextBox inherits Rectangle {
+    in property <string> text;
+    in property <length> box-height: 120px;
+    height: root.box-height;
+    border-width: 1px;
+    border-color: #dddddd;
+    background: #ffffff;
+    Flickable {
+        x: 4px;
+        width: parent.width - 8px;
+        content-height: body.preferred-height + 8px;
+        body := Text {
+            y: 4px;
+            width: parent.width;
+            text: root.text;
+            wrap: word-wrap;
+            font-family: Theme.sans;
+            font-size: Theme.font-size;
+            color: Theme.dialog-text;
         }
     }
 }

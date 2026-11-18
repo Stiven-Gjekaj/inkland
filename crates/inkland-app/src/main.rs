@@ -208,6 +208,13 @@ fn table(rows: Vec<inkland_app::rows::Row>) -> ModelRc<TableRow> {
                 id: s(r.id),
                 cells: model(r.cells.into_iter().map(s).collect()),
                 pinned: r.pinned,
+                color: r
+                    .color
+                    .as_deref()
+                    .and_then(inkland_app::rows::hex_color)
+                    .map_or(slint::Color::from_argb_u8(0, 0, 0, 0), |[r, g, b]| {
+                        slint::Color::from_rgb_u8(r, g, b)
+                    }),
             })
             .collect(),
     )
@@ -930,10 +937,8 @@ impl Controller {
             {
                 let lines = inkland_app::rows::cell_lines(q)
                     .into_iter()
-                    .map(|(label, value)| inkland_app::rows::Row {
-                        id: label.clone(),
-                        cells: vec![label, value],
-                        pinned: false,
+                    .map(|(label, value)| {
+                        inkland_app::rows::row(label.clone(), vec![label, value], false)
                     })
                     .collect();
                 ui.global::<Lists>().set_cell_lines(table(lines));
