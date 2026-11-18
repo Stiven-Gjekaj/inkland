@@ -11,6 +11,8 @@
 //! - `routes`: the travel cost over the route network.
 //! - `deals`, `taxes`, `corruption`: the deal log, the tariffs and trade
 //!   terms, and corruption by province.
+//! - `trade`: prices, stock, quotes, carriage, rural spending, and the deal
+//!   log of the run.
 //!
 //! `build` runs after the feature names, as `Markets.generate` does in the
 //! FMG pipeline.
@@ -25,6 +27,7 @@ pub mod markets;
 pub mod output;
 pub mod routes;
 pub mod taxes;
+pub mod trade;
 
 use crate::config::Config;
 use crate::features::Features;
