@@ -64,6 +64,31 @@ enum Command {
         #[arg(long)]
         layers: Option<String>,
     },
+    /// Write the coat of arms of one state, province, or place as SVG.
+    #[command(group(clap::ArgGroup::new("item").required(true).args(["state", "province", "place"])))]
+    Emblem {
+        /// The `world.json` of a generated world.
+        #[arg(long)]
+        world: PathBuf,
+        /// A state: its id or its name.
+        #[arg(long)]
+        state: Option<String>,
+        /// A province: its id or its name.
+        #[arg(long)]
+        province: Option<String>,
+        /// A place: the id of its pin, its id, or its name.
+        #[arg(long)]
+        place: Option<String>,
+        /// Black and white, with the hatching of Petra Sancta.
+        #[arg(long)]
+        hatching: bool,
+        /// The width and height of the SVG, in mm.
+        #[arg(long, default_value_t = 50.0)]
+        size_mm: f64,
+        /// The SVG file to write.
+        #[arg(short = 'o', long = "out")]
+        out: PathBuf,
+    },
     /// Apply an edit script to a world file or to a config file.
     #[command(group(clap::ArgGroup::new("input").required(true).args(["world", "config"])))]
     Edit {
@@ -166,6 +191,23 @@ fn main() {
             layers,
         } => read_text(&world, "world")
             .and_then(|t| inkland::export(&t, &format, layers.as_deref()).map_err(|e| vec![e])),
+        Command::Emblem {
+            world,
+            state,
+            province,
+            place,
+            hatching,
+            size_mm,
+            out,
+        } => {
+            let of = match (state, province, place) {
+                (Some(k), _, _) => inkland::EmblemOf::State(k),
+                (None, Some(k), _) => inkland::EmblemOf::Province(k),
+                (None, None, Some(k)) => inkland::EmblemOf::Place(k),
+                (None, None, None) => unreachable!("clap asks for one item"),
+            };
+            read_text(&world, "world").and_then(|t| emblem(&t, &of, hatching, size_mm, &out))
+        }
         Command::Edit {
             world,
             config,
@@ -416,6 +458,45 @@ fn edit(
         "applied": applied,
         "undo": undo,
     }))
+}
+
+/// Write the coat of arms of one item of a world file.
+fn emblem(
+    world_text: &str,
+    of: &inkland::EmblemOf,
+    hatching: bool,
+    size_mm: f64,
+    out: &Path,
+) -> Result<Value, Vec<Error>> {
+    if !(size_mm > 0.0 && size_mm.is_finite()) {
+        return Err(vec![Error::new(
+            ErrorCode::CliUsage,
+            "",
+            "--size-mm must be more than 0",
+        )]);
+    }
+    let (config, world) = inkland::read_world(world_text).map_err(|e| vec![e])?;
+    let e = inkland::emblem(&world, &config, of, hatching, size_mm).map_err(|e| vec![e])?;
+    std::fs::write(out, &e.svg).map_err(|err| {
+        vec![
+            Error::new(
+                ErrorCode::IoWrite,
+                "",
+                format!("cannot write the SVG: {err}"),
+            )
+            .with("file", out.display().to_string()),
+        ]
+    })?;
+    let mut v = json!({
+        "svg": out.display().to_string(),
+        "id": e.id,
+        "name": e.name,
+        "coa": e.coa,
+    });
+    if hatching {
+        v["checks"] = json!(inkland::check_svg(&e.svg, &config));
+    }
+    Ok(v)
 }
 
 /// The text of an input file, or an `IO_READ` error.

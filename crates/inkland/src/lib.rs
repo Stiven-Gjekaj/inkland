@@ -33,6 +33,90 @@ pub fn query_at(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Er
     inkland_io::query::query(world, config, p)
 }
 
+/// The item whose coat of arms to draw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EmblemOf {
+    /// A state: its id, or its name.
+    State(String),
+    /// A province: its id, or its name.
+    Province(String),
+    /// A place: the id of its pin, its id, or its name.
+    Place(String),
+}
+
+/// A drawn coat of arms.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmblemSvg {
+    /// The SVG file.
+    pub svg: String,
+    /// The coat of arms, in the JSON shape of FMG.
+    pub coa: inkland_core::emblems::Coa,
+    /// `state-3`, `province-12`, or `burg-7`.
+    pub id: String,
+    pub name: String,
+}
+
+/// Draw the coat of arms of one state, province, or place of a world as an
+/// SVG file of `size_mm` x `size_mm`. `hatching`: black and white with the
+/// hatching of Petra Sancta, each line at least
+/// `render.min_line_width_pt` of the config wide. The error is
+/// `REF_UNKNOWN` when the world has no such item.
+pub fn emblem(
+    world: &World,
+    config: &Config,
+    of: &EmblemOf,
+    hatching: bool,
+    size_mm: f64,
+) -> Result<EmblemSvg, Error> {
+    let soc = &world.society;
+    let matches =
+        |key: &str, id: u32, names: &[&str]| key == id.to_string() || names.contains(&key);
+    let found = match of {
+        EmblemOf::State(k) => soc
+            .states
+            .iter()
+            .find(|x| matches(k, x.id, &[&x.name, &x.full_name]))
+            .map(|x| (format!("state-{}", x.id), x.name.clone(), x.coa.clone())),
+        EmblemOf::Province(k) => soc
+            .provinces
+            .iter()
+            .find(|x| matches(k, x.id, &[&x.name, &x.full_name]))
+            .map(|x| (format!("province-{}", x.id), x.name.clone(), x.coa.clone())),
+        EmblemOf::Place(k) => soc
+            .places
+            .iter()
+            .find(|x| x.pin.as_deref() == Some(k.as_str()))
+            .or_else(|| soc.places.iter().find(|x| matches(k, x.id, &[&x.name])))
+            .map(|x| (format!("burg-{}", x.id), x.name.clone(), x.coa.clone())),
+    };
+    let Some((id, name, Some(coa))) = found else {
+        let (what, key) = match of {
+            EmblemOf::State(k) => ("state", k),
+            EmblemOf::Province(k) => ("province", k),
+            EmblemOf::Place(k) => ("place", k),
+        };
+        return Err(Error::new(
+            ErrorCode::RefUnknown,
+            "",
+            format!("the world has no {what} {key:?}"),
+        ));
+    };
+    let prefix = format!("emblem-{id}");
+    let colour = inkland_render::emblem::Look::COLOUR;
+    let look = if hatching {
+        let view = inkland_render::emblem::draw(&coa, &prefix, &colour).view;
+        let line = inkland_render::page::line_mm(config.render.min_line_width_pt);
+        inkland_render::emblem::Look {
+            hatching: true,
+            min_line: line * view[2] / size_mm,
+        }
+    } else {
+        colour
+    };
+    let svg = inkland_render::emblem::document(&coa, &prefix, &look, size_mm);
+    Ok(EmblemSvg { svg, coa, id, name })
+}
+
 /// The GeoJSON export of a world file. `format` must be `geojson`. `layers`
 /// is a list `a,b,c` of layers, or `None` for all layers.
 pub fn export(world_text: &str, format: &str, layers: Option<&str>) -> Result<Value, Error> {

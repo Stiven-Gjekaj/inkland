@@ -420,6 +420,59 @@ fn query_answers_for_a_point_of_a_world() {
 }
 
 #[test]
+fn emblem_writes_the_arms_of_a_state_a_province_and_a_place() {
+    let dir = tempfile::tempdir().unwrap();
+    let world = generated_world(dir.path());
+    let w = world.to_str().unwrap();
+    for (flag, key) in [("--state", "1"), ("--province", "1"), ("--place", "ostrey")] {
+        let out = dir.path().join("arms.svg");
+        let (code, v) = run(&[
+            "emblem",
+            "--world",
+            w,
+            flag,
+            key,
+            "-o",
+            out.to_str().unwrap(),
+        ]);
+        assert_eq!(code, 0, "{v}");
+        assert!(v["coa"]["t1"].is_string());
+        let svg = std::fs::read_to_string(&out).unwrap();
+        assert!(svg.starts_with("<?xml") && svg.contains("width=\"50mm\""));
+    }
+    // The hatching passes the print checks.
+    let out = dir.path().join("print.svg");
+    let (code, v) = run(&[
+        "emblem",
+        "--world",
+        w,
+        "--place",
+        "Ostrey",
+        "--hatching",
+        "--size-mm",
+        "20",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "{v}");
+    let checks = v["checks"].as_array().unwrap();
+    assert!(
+        !checks.is_empty() && checks.iter().all(|c| c["pass"] == true),
+        "{v}"
+    );
+    let (code, check) = run(&["check", "--svg", out.to_str().unwrap()]);
+    assert_eq!(code, 0, "{check}");
+    // An unknown item is exit 2, and one item is required.
+    let (code, e) = run(&["emblem", "--world", w, "--state", "99", "-o", "x.svg"]);
+    assert_eq!(
+        (code, e["error"]["code"].as_str()),
+        (2, Some("REF_UNKNOWN"))
+    );
+    let (code, e) = run(&["emblem", "--world", w, "-o", "x.svg"]);
+    assert_eq!((code, e["error"]["code"].as_str()), (2, Some("CLI_USAGE")));
+}
+
+#[test]
 fn export_gives_geojson_of_the_asked_layers() {
     let dir = tempfile::tempdir().unwrap();
     let world = generated_world(dir.path());

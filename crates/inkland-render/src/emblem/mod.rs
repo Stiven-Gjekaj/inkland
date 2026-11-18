@@ -57,14 +57,15 @@ impl Drawn {
     }
 }
 
-/// A whole SVG file of one coat of arms, `size` pixels wide.
-pub fn document(coa: &Coa, prefix: &str, look: &Look, size: f64) -> String {
+/// A whole SVG file of one coat of arms, `size_mm` millimetres wide and
+/// high.
+pub fn document(coa: &Coa, prefix: &str, look: &Look, size_mm: f64) -> String {
     let d = draw(coa, prefix, look);
     format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" width=\"{s}\" height=\"{s}\" viewBox=\"{}\">\n{}</svg>\n",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" width=\"{s}mm\" height=\"{s}mm\" viewBox=\"{}\">\n{}</svg>\n",
         d.view_box(),
         d.body,
-        s = num(size)
+        s = num(size_mm)
     )
 }
 
