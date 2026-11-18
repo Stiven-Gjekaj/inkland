@@ -7,6 +7,7 @@ pub(crate) mod economy;
 mod lines;
 pub(crate) mod marks;
 mod military;
+mod notes;
 pub(crate) mod overlays;
 mod palette;
 pub(crate) mod text;
@@ -46,6 +47,7 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Trade => economy::trade(s, ctx),
         Emblems => marks::emblems(s, ctx),
         Markers => marks::markers(s, ctx),
+        Journeys => notes::journeys(s, ctx),
         Features => marks::features(s, ctx),
         Cells => overlays::cells(s, ctx),
         Grid => overlays::grid(s, ctx),

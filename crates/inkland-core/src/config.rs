@@ -1201,6 +1201,10 @@ pub enum LayerName {
     /// Markers. Only `colour` mode. Draws nothing when the world has no
     /// markers.
     Markers,
+    /// Journeys: the path of each journey, a curve for each segment in the
+    /// colour of the journey (FMG `journeys`). Only `colour` mode. Draws
+    /// nothing when the world has no journeys.
+    Journeys,
     /// A scale bar.
     ScaleBar,
     /// A dark edge around the map. Only `colour` mode.
@@ -1211,7 +1215,7 @@ pub enum LayerName {
 
 impl LayerName {
     /// All layer names, in the order of their declaration.
-    pub const ALL: [LayerName; 40] = [
+    pub const ALL: [LayerName; 41] = [
         LayerName::Coast,
         LayerName::Relief,
         LayerName::Rivers,
@@ -1249,6 +1253,7 @@ impl LayerName {
         LayerName::BurgIcons,
         LayerName::Military,
         LayerName::Markers,
+        LayerName::Journeys,
         LayerName::ScaleBar,
         LayerName::Vignette,
         LayerName::Legend,

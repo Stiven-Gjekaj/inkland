@@ -298,6 +298,7 @@ One of:
 - `"burg-icons"`: The symbols of the places.
 - `"military"`: The regiments of the states: a box in the colour of the state with the troops and the icon (FMG `military`). Only `colour` mode. Draws nothing when the world has no regiments.
 - `"markers"`: Markers. Only `colour` mode. Draws nothing when the world has no markers.
+- `"journeys"`: Journeys: the path of each journey, a curve for each segment in the colour of the journey (FMG `journeys`). Only `colour` mode. Draws nothing when the world has no journeys.
 - `"scale-bar"`: A scale bar.
 - `"vignette"`: A dark edge around the map. Only `colour` mode.
 - `"legend"`: A legend box. Only `colour` mode.

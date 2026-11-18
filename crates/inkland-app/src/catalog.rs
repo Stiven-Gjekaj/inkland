@@ -104,6 +104,7 @@ pub const LAYERS: &[LayerDef] = &[
     layer("labels", "Labels", Some('l'), Layer("labels")),
     layer("military", "Military", Some('m'), Layer("military")),
     layer("markers", "Markers", Some('k'), Layer("markers")),
+    layer("journeys", "Journeys", None, Layer("journeys")),
     layer("rulers", "Rulers", Some('='), Target::None),
     layer("scaleBar", "Scale Bar", Some('/'), Extra("scale_bar")),
     layer("vignette", "Vignette", Some('['), Layer("vignette")),

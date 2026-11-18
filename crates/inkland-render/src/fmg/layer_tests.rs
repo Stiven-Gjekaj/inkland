@@ -83,6 +83,7 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         Markets => Some("markets"),
         Trade => Some("trade-animation"),
         Military => Some("armies"),
+        Journeys => Some("journeys"),
         Texture | Ice | Population | Markers | Features => None,
         Coast | Regions | Roads | Places => None,
     }
@@ -668,4 +669,28 @@ fn military_draws_a_box_for_each_regiment() {
         }
     });
     assert!(!render_world(&empty, &[LayerName::Military]).contains("<g id=\"armies\""));
+}
+
+#[test]
+fn journeys_draw_their_segments_with_markers() {
+    let svg = render_with(&[LayerName::Journeys], StyleName::Default);
+    let w = world();
+    assert!(!w.journeys.is_empty(), "the test world has a journey");
+    assert!(svg.contains("<g id=\"journeys\" fill=\"none\" marker-start=\"url(#journey-start)\""));
+    assert!(
+        svg.contains("<marker id=\"journey-start\"")
+            && svg.contains("<marker id=\"journey-arrow\"")
+    );
+    for j in &w.journeys {
+        assert!(svg.contains(&format!("<g id=\"journey-{}\">", j.id)));
+        for g in j.segments.iter().filter(|g| g.points.len() > 1) {
+            let id = format!("<path id=\"segment-{}-{}\" d=\"M", j.id, g.id);
+            assert!(svg.contains(&id), "{id}");
+            assert!(svg.contains(&format!("stroke=\"{}\"/>", j.color)));
+        }
+    }
+    parse_and_draw(&svg);
+    let empty = world_with(|w| w.journeys.clear());
+    let svg = render_world(&empty, &[LayerName::Journeys]);
+    assert!(!svg.contains("<g id=\"journeys\"") && !svg.contains("journey-arrow"));
 }
