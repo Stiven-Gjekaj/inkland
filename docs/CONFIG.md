@@ -232,6 +232,30 @@ The size and the position of the map on the globe.
 | `longitude` | number |  |  | The west-east position in percent. 0 to 100. |
 | `map_size` | number |  |  | The map size in percent of the world. 1 to 100. 100 is the full globe from pole to pole. |
 
+### GoodEntry
+
+A change to the goods catalogue. An entry with the name of a good in the list changes the values that it gives, or removes the good with `remove`. An entry with a new name adds a good at the end of the list. The good ids follow the order of the list that results.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `biome_output` | object |  |  | Units for each rural population point, by biome id. |
+| `carriage` | number |  |  | The price to carry one unit over a decima. 0 or more. |
+| `clustering` | number |  |  | The chance that a deposit lands next to the one before it. 0 to 1. |
+| `color` | string |  |  | The color, as `#rrggbb`. |
+| `coverage` | map of name to number |  |  | How much of each need one unit covers: `food`, `utilities`, `construction`, `military`, `luxury`. |
+| `culture_type` | map of name to number |  |  | The production factors by culture type, for example `Hunting`. |
+| `deposit_yield` | number |  |  | The multiplier on the output of each deposit. 0 or more. |
+| `deposits` | array of 2 number |  |  | The least and the most deposits on the map. |
+| `development` | integer |  |  | The least development that a cell needs to make the good. 0 to 100. |
+| `distribution` | string |  |  | The spread expression of the deposits, for example `biome(5, 6) && minHeight(30)`. An empty text gives no deposits. |
+| `icon` | string |  |  | The icon id, for example `goods-wood`. |
+| `name` | string | yes |  | The name of the good, for example `Wood`. |
+| `recipes` | array of map of name to number |  |  | Alternative input sets: the amount of each good, by good name. Each recipe makes one unit. |
+| `remove` | boolean |  |  | Remove the good from the list. |
+| `tags` | array of string |  |  | Tags, for example `construction`, `fuel`, `ore`, `luxury`. |
+| `unit` | string |  |  | The unit name, for example `pile`. |
+| `value` | number |  |  | The base price. 0 or more. |
+
 ### Grid
 
 A grid.
@@ -528,6 +552,47 @@ One of:
 - [`AutoKeyword`](#autokeyword): Generation chooses the number from the land area.
 - integer: A fixed number of towns.
 
+### TransportDomain
+
+The travel domain of a transport.
+
+Type: `"land"`, `"water"`, `"air"`, `"stay"`
+
+### TransportEntry
+
+A change to the journey transports. An entry with the name of a transport in the list changes the values that it gives, or removes the transport with `remove`. An entry with a new name adds a transport; it must give `speed` and `domain`. The list must keep a transport of the domain `stay`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `domain` | [`TransportDomain`](#transportdomain) |  |  | The travel domain. |
+| `hours_per_day` | number |  |  | The hours of travel that one day sustains. More than 0, to 24. |
+| `name` | string | yes |  | The name of the transport, for example `Rowboat`. |
+| `remove` | boolean |  |  | Remove the transport from the list. |
+| `speed` | number |  |  | The speed in km/h. 0 or more. |
+
+### UnitEntry
+
+A change to the military units. An entry with the name of a unit in the list changes the values that it gives, or removes the unit with `remove`. An entry with a new name adds a unit; it must give `kind`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `crew` | number |  |  | The people of one unit. More than 0. |
+| `goods` | array of string |  |  | The names of the goods that equip the unit. |
+| `icon` | string |  |  | The glyph of the icon. |
+| `kind` | [`UnitKind`](#unitkind) |  |  | The unit type. |
+| `name` | string | yes |  | The name of the unit, for example `archers`. |
+| `power` | number |  |  | The battle power of one unit. 0 or more. |
+| `remove` | boolean |  |  | Remove the unit from the list. |
+| `rural` | number |  |  | The percent of the rural people that serve. 0 to 100. |
+| `separate` | boolean |  |  | `true` if the unit forms regiments of its own, as fleets do. |
+| `urban` | number |  |  | The percent of the urban people that serve. 0 to 100. |
+
+### UnitKind
+
+The type of a military unit.
+
+Type: `"levies"`, `"melee"`, `"ranged"`, `"mounted"`, `"machinery"`, `"naval"`
+
 ### Units
 
 The distance unit.
@@ -570,10 +635,12 @@ Generation options.
 | `culture_set` | string |  | `"european"` | Name of the culture set: `world`, `european`, `oriental`, `english`, `antique`, `high-fantasy`, `dark-fantasy`, or `random`. |
 | `cultures` | integer |  | `6` | Number of cultures. |
 | `emblem_shape` | string |  |  | The shield shape of the coats of arms: `culture` (the shield of the culture of each item, as Azgaar's Fantasy Map Generator does), `state` (the shield of the state), `random` (a random shield for each culture), or one shield name for all, for example `heater`, `spanish`, `round`, or `banner`. |
+| `goods` | array of [`GoodEntry`](#goodentry) |  |  | Changes to the goods catalogue of Azgaar's Fantasy Map Generator, in order. Empty: the default catalogue of 71 goods. |
 | `growth_rate` | number |  | `1.0` | How far cultures and states grow. 0.1 to 2. Cultures and states stop at a total cost that this value multiplies. |
 | `jitter` | number |  |  | How far each point of the first grid can move from its lattice position, as a fraction of half the distance between neighbor points. 0 to 0.9. 0 gives a regular lattice. |
 | `lake_elevation_limit` | integer |  |  | A land low point becomes a lake when its water cannot reach other water through cells lower than its height plus this limit, on the height scale 0 to 100. 0 to 80. 80 makes no such lakes. |
 | `lattice` | [`Lattice`](#lattice) |  |  | The lattice of the points of the first grid: `square`, `hex-pointy`, `hex-flat`, `diamond`, or `triangle`. |
+| `military_units` | array of [`UnitEntry`](#unitentry) |  |  | Changes to the military units of Azgaar's Fantasy Map Generator, in order. Empty: the default roster of 6 units. |
 | `places` | [`PlaceOptions`](#placeoptions) |  |  | Options for places that generation adds. |
 | `provinces_ratio` | integer |  | `20` | Provinces for each 100 places of a state. 0 to 100. A state gets at least 2 provinces when it has 2 places or more. 100: each place is the seat of a province. |
 | `religions` | integer |  | `4` | Number of religions. |
@@ -582,6 +649,7 @@ Generation options.
 | `states` | integer |  | `5` | Number of states. |
 | `template` | [`Template`](#template) |  | `"continents"` | Heightmap template: a template name, or a list of steps. |
 | `towns` | [`Towns`](#towns) |  | `"auto"` | Number of towns that generation adds, or `auto`. |
+| `transports` | array of [`TransportEntry`](#transportentry) |  |  | Changes to the journey transports of Azgaar's Fantasy Map Generator, in order. Empty: the default list of 20 transports. |
 
 ### XAxis
 

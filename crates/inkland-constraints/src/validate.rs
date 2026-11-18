@@ -221,6 +221,13 @@ impl<'a> Validator<'a> {
         self.render_style();
         let c = self.c;
         let w = &c.world;
+        // The tables of the config: goods, military units, and transports.
+        let tables = [
+            inkland_core::economy::goods::catalogue_from(&w.goods).err(),
+            inkland_core::military::units_from(&w.military_units).err(),
+            inkland_core::journeys::transports::transports_from(&w.transports).err(),
+        ];
+        self.errors.extend(tables.into_iter().flatten());
         for (i, b) in w.brushes.iter().enumerate() {
             if !(b.radius > 0.0 && b.radius.is_finite()) {
                 self.err(

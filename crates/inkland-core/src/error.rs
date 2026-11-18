@@ -105,6 +105,11 @@ codes! {
         /// division, an ordinary, a line, a charge, or a position that does
         /// not exist, or `state_coa` is on a place without `capital_of`.
         CoaInvalid = "COA_INVALID" => InvalidConfig,
+        /// A good, a military unit, or a transport in the config cannot be
+        /// used: a spread expression that cannot be read, an unknown need
+        /// or culture type, a new entry without a value that it must give,
+        /// or a list of transports without a stay.
+        TableInvalid = "TABLE_INVALID" => InvalidConfig,
         /// An edit of a world file sets or unsets a value that a
         /// `world.json` does not keep: an overlay, a variant, a render
         /// option, or a font directory.

@@ -495,3 +495,32 @@ fn a_charge_without_art_is_refused() {
         "/pins/points/0/coa/charges/0/charge",
     );
 }
+
+#[test]
+fn tables_of_goods_units_and_transports_are_checked() {
+    let c = with(json!({ "world": {
+        "goods": [{ "name": "Wood", "distribution": "biome(5" }],
+        "military_units": [{ "name": "pikemen" }],
+        "transports": [{ "name": "Stay", "remove": true }]
+    }}));
+    assert_eq!(
+        codes(&c),
+        vec![
+            (
+                ErrorCode::TableInvalid,
+                "/world/goods/0/distribution".to_owned()
+            ),
+            (
+                ErrorCode::TableInvalid,
+                "/world/military_units/0/kind".to_owned()
+            ),
+            (ErrorCode::TableInvalid, "/world/transports".to_owned()),
+        ]
+    );
+    let good = with(json!({ "world": {
+        "goods": [{ "name": "Wood", "value": 3 }, { "name": "Resin", "unit": "jar" }],
+        "military_units": [{ "name": "fleet", "remove": true }],
+        "transports": [{ "name": "Ox cart", "speed": 4, "domain": "land" }]
+    }}));
+    assert_eq!(codes(&good), vec![]);
+}

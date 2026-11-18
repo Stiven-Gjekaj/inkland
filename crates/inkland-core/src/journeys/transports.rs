@@ -67,6 +67,100 @@ pub fn default_transports() -> Vec<Transport> {
         .collect()
 }
 
+/// The transports with the changes of the config (`world.transports`).
+/// The list keeps a stay transport.
+pub fn transports_from(
+    entries: &[crate::config::TransportEntry],
+) -> Result<Vec<Transport>, crate::error::Error> {
+    use crate::config::TransportDomain;
+    use crate::error::{Error, ErrorCode};
+    let mut list = default_transports();
+    for (i, e) in entries.iter().enumerate() {
+        let path = format!("/world/transports/{i}");
+        let at = list.iter().position(|t| t.name == e.name);
+        if e.remove {
+            let Some(k) = at else {
+                return Err(Error::new(
+                    ErrorCode::RefUnknown,
+                    format!("{path}/name"),
+                    format!("no transport has the name \"{}\"", e.name),
+                ));
+            };
+            list.remove(k);
+            continue;
+        }
+        let k = match at {
+            Some(k) => k,
+            None => {
+                let (Some(speed), Some(domain)) = (e.speed, e.domain) else {
+                    return Err(Error::new(
+                        ErrorCode::TableInvalid,
+                        path,
+                        format!(
+                            "the new transport \"{}\" must give its speed and its domain",
+                            e.name
+                        ),
+                    ));
+                };
+                let domain = match domain {
+                    TransportDomain::Land => Domain::Land,
+                    TransportDomain::Water => Domain::Water,
+                    TransportDomain::Air => Domain::Air,
+                    TransportDomain::Stay => Domain::Stay,
+                };
+                list.push(Transport {
+                    id: 0,
+                    name: e.name.clone(),
+                    speed,
+                    domain,
+                    hours_per_day: fallback_hours_per_day(domain),
+                });
+                list.len() - 1
+            }
+        };
+        let t = &mut list[k];
+        if let Some(v) = e.speed {
+            if !(v.is_finite() && v >= 0.0) {
+                return Err(Error::new(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/speed"),
+                    format!("speed must be 0 or more, found {v}"),
+                ));
+            }
+            t.speed = v;
+        }
+        if let Some(v) = e.domain {
+            t.domain = match v {
+                TransportDomain::Land => Domain::Land,
+                TransportDomain::Water => Domain::Water,
+                TransportDomain::Air => Domain::Air,
+                TransportDomain::Stay => Domain::Stay,
+            };
+        }
+        if let Some(v) = e.hours_per_day {
+            if !(v > 0.0 && v <= MAX_HOURS_PER_DAY) {
+                return Err(Error::new(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/hours_per_day"),
+                    format!("hours_per_day must be more than 0, to 24, found {v}"),
+                ));
+            }
+            t.hours_per_day = v;
+        }
+    }
+    if !list.iter().any(|t| t.domain == Domain::Stay) {
+        return Err(Error::new(
+            ErrorCode::TableInvalid,
+            "/world/transports",
+            "the transports must keep a transport of the domain stay",
+        ));
+    }
+    for (k, t) in list.iter_mut().enumerate() {
+        t.id = k as u32 + 1;
+    }
+    Ok(list)
+}
+
 const RAW: [Raw; 20] = [
     t(1, "On foot (laden)", 3.0, Domain::Land, 8.0),
     t(2, "On foot (light)", 5.0, Domain::Land, 8.0),
@@ -180,5 +274,53 @@ mod tests {
             assert_eq!(t.id as usize, k + 1);
             assert_eq!(get(&l, &t.name).unwrap().id, t.id);
         }
+    }
+
+    #[test]
+    fn config_entries_change_add_and_remove_transports() {
+        use crate::config::{TransportDomain, TransportEntry};
+        let e = |name: &str| TransportEntry {
+            name: name.to_owned(),
+            ..TransportEntry::default()
+        };
+        let list = transports_from(&[
+            TransportEntry {
+                speed: Some(4.5),
+                ..e("Rowboat")
+            },
+            TransportEntry {
+                remove: true,
+                ..e("Train")
+            },
+            TransportEntry {
+                speed: Some(9.0),
+                domain: Some(TransportDomain::Land),
+                ..e("Ox cart")
+            },
+        ])
+        .unwrap();
+        assert_eq!(list.len(), 20);
+        assert!(list.iter().enumerate().all(|(k, t)| t.id as usize == k + 1));
+        assert_eq!(get(&list, "Rowboat").unwrap().speed, 4.5);
+        assert!(get(&list, "Train").is_none());
+        let cart = get(&list, "Ox cart").unwrap();
+        assert_eq!((cart.domain, cart.hours_per_day), (Domain::Land, 8.0));
+        let err = transports_from(&[e("Glider")]).unwrap_err();
+        assert_eq!(err.code, crate::error::ErrorCode::TableInvalid);
+        let err = transports_from(&[TransportEntry {
+            remove: true,
+            ..e("Stay")
+        }])
+        .unwrap_err();
+        assert_eq!(
+            (err.code, err.path.as_str()),
+            (crate::error::ErrorCode::TableInvalid, "/world/transports")
+        );
+        let err = transports_from(&[TransportEntry {
+            hours_per_day: Some(30.0),
+            ..e("Rowboat")
+        }])
+        .unwrap_err();
+        assert_eq!(err.path, "/world/transports/0/hours_per_day");
     }
 }

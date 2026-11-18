@@ -46,6 +46,17 @@ pub enum CultureType {
 }
 
 impl CultureType {
+    /// All types, in a fixed order.
+    pub const ALL: [CultureType; 7] = [
+        CultureType::Generic,
+        CultureType::Hunting,
+        CultureType::Highland,
+        CultureType::River,
+        CultureType::Lake,
+        CultureType::Naval,
+        CultureType::Nomadic,
+    ];
+
     pub fn name(self) -> &'static str {
         match self {
             CultureType::Generic => "Generic",

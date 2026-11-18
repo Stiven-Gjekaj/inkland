@@ -96,6 +96,88 @@ pub fn default_units() -> Vec<Unit> {
         .collect()
 }
 
+/// The roster with the changes of the config (`world.military_units`).
+pub fn units_from(entries: &[crate::config::UnitEntry]) -> Result<Vec<Unit>, crate::error::Error> {
+    use crate::error::{Error, ErrorCode};
+    let mut list = default_units();
+    for (i, e) in entries.iter().enumerate() {
+        let path = format!("/world/military_units/{i}");
+        let at = list.iter().position(|u| u.name == e.name);
+        if e.remove {
+            let Some(k) = at else {
+                return Err(Error::new(
+                    ErrorCode::RefUnknown,
+                    format!("{path}/name"),
+                    format!("no military unit has the name \"{}\"", e.name),
+                ));
+            };
+            list.remove(k);
+            continue;
+        }
+        let k = match at {
+            Some(k) => k,
+            None => {
+                let Some(kind) = e.kind else {
+                    return Err(Error::new(
+                        ErrorCode::TableInvalid,
+                        format!("{path}/kind"),
+                        format!("the new military unit \"{}\" must give its kind", e.name),
+                    ));
+                };
+                list.push(Unit {
+                    icon: DEFAULT_ICON.to_owned(),
+                    name: e.name.clone(),
+                    rural: 0.0,
+                    urban: 0.0,
+                    crew: 1.0,
+                    power: 1.0,
+                    kind: kind.name().to_owned(),
+                    separate: kind == crate::config::UnitKind::Naval,
+                    goods: Vec::new(),
+                });
+                list.len() - 1
+            }
+        };
+        let u = &mut list[k];
+        let check = |field: &str, v: f64, ok: bool, rule: &str| {
+            if ok && v.is_finite() {
+                Ok(v)
+            } else {
+                Err(Error::new(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/{field}"),
+                    format!("{field} must be {rule}, found {v}"),
+                ))
+            }
+        };
+        if let Some(v) = &e.icon {
+            u.icon = v.clone();
+        }
+        if let Some(v) = e.rural {
+            u.rural = check("rural", v, (0.0..=100.0).contains(&v), "0 to 100")?;
+        }
+        if let Some(v) = e.urban {
+            u.urban = check("urban", v, (0.0..=100.0).contains(&v), "0 to 100")?;
+        }
+        if let Some(v) = e.crew {
+            u.crew = check("crew", v, v > 0.0, "more than 0")?;
+        }
+        if let Some(v) = e.power {
+            u.power = check("power", v, v >= 0.0, "0 or more")?;
+        }
+        if let Some(v) = e.kind {
+            u.kind = v.name().to_owned();
+        }
+        if let Some(v) = e.separate {
+            u.separate = v;
+        }
+        if let Some(v) = &e.goods {
+            u.goods = v.clone();
+        }
+    }
+    Ok(list)
+}
+
 const RAW_UNITS: [RawUnit; 6] = [
     RawUnit {
         icon: "\u{1FA93}",
@@ -991,6 +1073,44 @@ mod tests {
                 assert!(goods.iter().any(|g| g.name == *name), "{name}");
             }
         }
+    }
+
+    #[test]
+    fn config_entries_change_add_and_remove_units() {
+        use crate::config::{UnitEntry, UnitKind};
+        let e = |name: &str| UnitEntry {
+            name: name.to_owned(),
+            ..UnitEntry::default()
+        };
+        let list = units_from(&[
+            UnitEntry {
+                power: Some(3.0),
+                ..e("archers")
+            },
+            UnitEntry {
+                remove: true,
+                ..e("artillery")
+            },
+            UnitEntry {
+                kind: Some(UnitKind::Mounted),
+                rural: Some(1.5),
+                ..e("camel riders")
+            },
+        ])
+        .unwrap();
+        assert_eq!(list.len(), 6);
+        assert_eq!(unit(&list, "archers").unwrap().power, 3.0);
+        assert!(unit(&list, "artillery").is_none());
+        let new = unit(&list, "camel riders").unwrap();
+        assert_eq!((new.kind.as_str(), new.rural), ("mounted", 1.5));
+        let err = units_from(&[e("pikemen")]).unwrap_err();
+        assert_eq!(err.code, crate::error::ErrorCode::TableInvalid);
+        let err = units_from(&[UnitEntry {
+            crew: Some(0.0),
+            ..e("fleet")
+        }])
+        .unwrap_err();
+        assert_eq!(err.path, "/world/military_units/0/crew");
     }
 
     fn world(seed: u64) -> World {

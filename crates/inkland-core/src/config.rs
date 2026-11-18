@@ -210,6 +210,181 @@ pub struct World {
     /// before the pins.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub brushes: Vec<Brush>,
+    /// Changes to the goods catalogue of Azgaar's Fantasy Map Generator, in
+    /// order. Empty: the default catalogue of 71 goods.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goods: Vec<GoodEntry>,
+    /// Changes to the military units of Azgaar's Fantasy Map Generator, in
+    /// order. Empty: the default roster of 6 units.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub military_units: Vec<UnitEntry>,
+    /// Changes to the journey transports of Azgaar's Fantasy Map Generator,
+    /// in order. Empty: the default list of 20 transports.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transports: Vec<TransportEntry>,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
+/// A change to the goods catalogue. An entry with the name of a good in the
+/// list changes the values that it gives, or removes the good with
+/// `remove`. An entry with a new name adds a good at the end of the list.
+/// The good ids follow the order of the list that results.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GoodEntry {
+    /// The name of the good, for example `Wood`.
+    pub name: String,
+    /// Remove the good from the list.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub remove: bool,
+    /// Tags, for example `construction`, `fuel`, `ore`, `luxury`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    /// The icon id, for example `goods-wood`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// The color, as `#rrggbb`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// The base price. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<f64>,
+    /// The price to carry one unit over a decima. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carriage: Option<f64>,
+    /// The unit name, for example `pile`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// The least and the most deposits on the map.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deposits: Option<[f64; 2]>,
+    /// The spread expression of the deposits, for example
+    /// `biome(5, 6) && minHeight(30)`. An empty text gives no deposits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distribution: Option<String>,
+    /// The least development that a cell needs to make the good. 0 to 100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub development: Option<u8>,
+    /// The multiplier on the output of each deposit. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deposit_yield: Option<f64>,
+    /// The chance that a deposit lands next to the one before it. 0 to 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clustering: Option<f64>,
+    /// Units for each rural population point, by biome id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub biome_output: Option<BTreeMap<u8, f64>>,
+    /// How much of each need one unit covers: `food`, `utilities`,
+    /// `construction`, `military`, `luxury`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<BTreeMap<String, f64>>,
+    /// The production factors by culture type, for example `Hunting`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub culture_type: Option<BTreeMap<String, f64>>,
+    /// Alternative input sets: the amount of each good, by good name. Each
+    /// recipe makes one unit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipes: Option<Vec<BTreeMap<String, f64>>>,
+}
+
+/// The type of a military unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum UnitKind {
+    Levies,
+    Melee,
+    Ranged,
+    Mounted,
+    Machinery,
+    Naval,
+}
+
+impl UnitKind {
+    /// The FMG name of the type.
+    pub fn name(self) -> &'static str {
+        match self {
+            UnitKind::Levies => "levies",
+            UnitKind::Melee => "melee",
+            UnitKind::Ranged => "ranged",
+            UnitKind::Mounted => "mounted",
+            UnitKind::Machinery => "machinery",
+            UnitKind::Naval => "naval",
+        }
+    }
+}
+
+/// A change to the military units. An entry with the name of a unit in the
+/// list changes the values that it gives, or removes the unit with
+/// `remove`. An entry with a new name adds a unit; it must give `kind`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UnitEntry {
+    /// The name of the unit, for example `archers`.
+    pub name: String,
+    /// Remove the unit from the list.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub remove: bool,
+    /// The glyph of the icon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// The percent of the rural people that serve. 0 to 100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rural: Option<f64>,
+    /// The percent of the urban people that serve. 0 to 100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub urban: Option<f64>,
+    /// The people of one unit. More than 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crew: Option<f64>,
+    /// The battle power of one unit. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power: Option<f64>,
+    /// The unit type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<UnitKind>,
+    /// `true` if the unit forms regiments of its own, as fleets do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub separate: Option<bool>,
+    /// The names of the goods that equip the unit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goods: Option<Vec<String>>,
+}
+
+/// The travel domain of a transport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TransportDomain {
+    Land,
+    Water,
+    Air,
+    Stay,
+}
+
+/// A change to the journey transports. An entry with the name of a
+/// transport in the list changes the values that it gives, or removes the
+/// transport with `remove`. An entry with a new name adds a transport; it
+/// must give `speed` and `domain`. The list must keep a transport of the
+/// domain `stay`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TransportEntry {
+    /// The name of the transport, for example `Rowboat`.
+    pub name: String,
+    /// Remove the transport from the list.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub remove: bool,
+    /// The speed in km/h. 0 or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+    /// The travel domain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain: Option<TransportDomain>,
+    /// The hours of travel that one day sustains. More than 0, to 24.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hours_per_day: Option<f64>,
 }
 
 /// One heightmap brush stroke: it adds `delta` at its centre, and less with
@@ -246,6 +421,9 @@ impl Default for World {
             emblem_shape: default_emblem_shape(),
             places: PlaceOptions::default(),
             brushes: Vec::new(),
+            goods: Vec::new(),
+            military_units: Vec::new(),
+            transports: Vec::new(),
         }
     }
 }

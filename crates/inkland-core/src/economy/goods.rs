@@ -13,7 +13,9 @@
 
 use super::demand::Need;
 use super::goods_data::{GOODS, RawGood};
+use crate::config::GoodEntry;
 use crate::cultures::CultureType;
+use crate::error::{Error, ErrorCode};
 use crate::features::Features;
 use crate::grid::Grid;
 use crate::population::Cells;
@@ -78,58 +80,279 @@ impl Good {
     }
 }
 
-fn resolve(raw: &RawGood, id: u32) -> Good {
+/// A good of the list before the ids: the recipes still name their goods.
+struct Draft {
+    good: Good,
+    recipes: Vec<Vec<(String, f64)>>,
+    /// The config path of the last entry that changed the good.
+    path: String,
+}
+
+fn draft(raw: &RawGood) -> Draft {
     let mut coverage = [0.0; 5];
     for &(need, v) in raw.coverage {
         coverage[need.index()] = v;
     }
-    // FMG keys a recipe by good id, so its ingredients go in id order.
-    let recipes = raw
-        .recipes
-        .iter()
-        .map(|r| {
-            let mut list: Vec<(u32, f64)> = r
-                .iter()
-                .map(|&(name, amount)| {
-                    let k = GOODS
-                        .iter()
-                        .position(|g| g.name == name)
-                        .expect("a recipe names a good of the catalogue");
-                    (k as u32 + 1, amount)
-                })
-                .collect();
-            list.sort_by_key(|&(id, _)| id);
-            list
-        })
-        .collect();
-    Good {
-        id,
-        name: raw.name.to_owned(),
-        tags: raw.tags.iter().map(|t| (*t).to_owned()).collect(),
-        icon: raw.icon.to_owned(),
-        color: raw.color.to_owned(),
-        value: raw.value,
-        carriage: raw.carriage,
-        unit: raw.unit.to_owned(),
-        deposits: raw.deposits,
-        deposit_yield: 1.0,
-        clustering: DEFAULT_CLUSTERING,
-        distribution: raw.distribution.map(str::to_owned),
-        development: raw.development,
-        biome_output: raw.biome_output.to_vec(),
-        recipes,
-        coverage,
-        culture_type: raw.culture_type.to_vec(),
+    Draft {
+        good: Good {
+            id: 0,
+            name: raw.name.to_owned(),
+            tags: raw.tags.iter().map(|t| (*t).to_owned()).collect(),
+            icon: raw.icon.to_owned(),
+            color: raw.color.to_owned(),
+            value: raw.value,
+            carriage: raw.carriage,
+            unit: raw.unit.to_owned(),
+            deposits: raw.deposits,
+            deposit_yield: 1.0,
+            clustering: DEFAULT_CLUSTERING,
+            distribution: raw.distribution.map(str::to_owned),
+            development: raw.development,
+            biome_output: raw.biome_output.to_vec(),
+            recipes: Vec::new(),
+            coverage,
+            culture_type: raw.culture_type.to_vec(),
+        },
+        recipes: raw
+            .recipes
+            .iter()
+            .map(|r| r.iter().map(|&(n, a)| (n.to_owned(), a)).collect())
+            .collect(),
+        path: "/world/goods".to_owned(),
     }
+}
+
+/// A new good with the values that an entry does not give.
+fn blank(name: &str) -> Draft {
+    Draft {
+        good: Good {
+            id: 0,
+            name: name.to_owned(),
+            tags: Vec::new(),
+            icon: String::new(),
+            color: "#808080".to_owned(),
+            value: 1.0,
+            carriage: 1.0,
+            unit: "unit".to_owned(),
+            deposits: None,
+            deposit_yield: 1.0,
+            clustering: DEFAULT_CLUSTERING,
+            distribution: None,
+            development: 0,
+            biome_output: Vec::new(),
+            recipes: Vec::new(),
+            coverage: [0.0; 5],
+            culture_type: Vec::new(),
+        },
+        recipes: Vec::new(),
+        path: String::new(),
+    }
+}
+
+fn range_error(path: String, what: &str, value: f64) -> Error {
+    Error::new(
+        ErrorCode::ValueOutOfRange,
+        path,
+        format!("{what}, found {value}"),
+    )
+}
+
+/// Put the values of an entry into a good.
+fn apply(d: &mut Draft, e: &GoodEntry, path: &str) -> Result<(), Error> {
+    let g = &mut d.good;
+    let at = |field: &str| format!("{path}/{field}");
+    let at_least_0 = |field: &str, v: f64| {
+        if v.is_finite() && v >= 0.0 {
+            Ok(v)
+        } else {
+            Err(range_error(
+                at(field),
+                &format!("{field} must be 0 or more"),
+                v,
+            ))
+        }
+    };
+    if let Some(v) = &e.tags {
+        g.tags = v.clone();
+    }
+    if let Some(v) = &e.icon {
+        g.icon = v.clone();
+    }
+    if let Some(v) = &e.color {
+        g.color = v.clone();
+    }
+    if let Some(v) = e.value {
+        g.value = at_least_0("value", v)?;
+    }
+    if let Some(v) = e.carriage {
+        g.carriage = at_least_0("carriage", v)?;
+    }
+    if let Some(v) = &e.unit {
+        g.unit = v.clone();
+    }
+    if let Some([lo, hi]) = e.deposits {
+        if !(lo.is_finite() && hi.is_finite() && lo >= 0.0 && lo <= hi) {
+            return Err(Error::new(
+                ErrorCode::ValueOutOfRange,
+                at("deposits"),
+                format!(
+                    "deposits must be [least, most] with 0 <= least <= most, found [{lo}, {hi}]"
+                ),
+            ));
+        }
+        g.deposits = Some([lo, hi]);
+    }
+    if let Some(text) = &e.distribution {
+        if text.trim().is_empty() {
+            g.distribution = None;
+        } else {
+            Distribution::parse(text).map_err(|why| {
+                Error::new(
+                    ErrorCode::TableInvalid,
+                    at("distribution"),
+                    format!("the spread expression \"{text}\" cannot be read: {why}"),
+                )
+            })?;
+            g.distribution = Some(text.clone());
+        }
+    }
+    if let Some(v) = e.development {
+        if v > 100 {
+            return Err(range_error(
+                at("development"),
+                "development must be 0 to 100",
+                f64::from(v),
+            ));
+        }
+        g.development = v;
+    }
+    if let Some(v) = e.deposit_yield {
+        g.deposit_yield = at_least_0("deposit_yield", v)?;
+    }
+    if let Some(v) = e.clustering {
+        if !(0.0..=1.0).contains(&v) {
+            return Err(range_error(
+                at("clustering"),
+                "clustering must be 0 to 1",
+                v,
+            ));
+        }
+        g.clustering = v;
+    }
+    if let Some(map) = &e.biome_output {
+        for (&b, &v) in map {
+            if usize::from(b) >= crate::biomes::NAMES.len() {
+                return Err(range_error(
+                    at(&format!("biome_output/{b}")),
+                    "a biome id must be a biome of the list",
+                    f64::from(b),
+                ));
+            }
+            at_least_0(&format!("biome_output/{b}"), v)?;
+        }
+        g.biome_output = map.iter().map(|(&b, &v)| (b, v)).collect();
+    }
+    if let Some(map) = &e.coverage {
+        let mut coverage = [0.0; 5];
+        for (name, &v) in map {
+            let Some(need) = Need::ALL.iter().find(|n| n.name() == name) else {
+                return Err(Error::new(
+                    ErrorCode::TableInvalid,
+                    at(&format!("coverage/{name}")),
+                    format!(
+                        "\"{name}\" is not a need: use food, utilities, construction, military, or luxury"
+                    ),
+                ));
+            };
+            coverage[need.index()] = at_least_0(&format!("coverage/{name}"), v)?;
+        }
+        g.coverage = coverage;
+    }
+    if let Some(map) = &e.culture_type {
+        let mut list = Vec::new();
+        for (name, &v) in map {
+            let Some(kind) = CultureType::ALL.iter().find(|k| k.name() == name) else {
+                return Err(Error::new(
+                    ErrorCode::TableInvalid,
+                    at(&format!("culture_type/{name}")),
+                    format!("\"{name}\" is not a culture type"),
+                ));
+            };
+            list.push((*kind, at_least_0(&format!("culture_type/{name}"), v)?));
+        }
+        g.culture_type = list;
+    }
+    if let Some(recipes) = &e.recipes {
+        for (k, r) in recipes.iter().enumerate() {
+            for (name, &v) in r {
+                at_least_0(&format!("recipes/{k}/{name}"), v)?;
+            }
+        }
+        d.recipes = recipes
+            .iter()
+            .map(|r| r.iter().map(|(n, &a)| (n.clone(), a)).collect())
+            .collect();
+    }
+    d.path = path.to_owned();
+    Ok(())
+}
+
+/// The catalogue with the changes of the config (`world.goods`). The good
+/// with id `k` is at index `k - 1`.
+pub fn catalogue_from(entries: &[GoodEntry]) -> Result<Vec<Good>, Error> {
+    let mut list: Vec<Draft> = GOODS.iter().map(draft).collect();
+    for (i, e) in entries.iter().enumerate() {
+        let path = format!("/world/goods/{i}");
+        let at = list.iter().position(|d| d.good.name == e.name);
+        if e.remove {
+            let Some(k) = at else {
+                return Err(Error::new(
+                    ErrorCode::RefUnknown,
+                    format!("{path}/name"),
+                    format!("no good has the name \"{}\"", e.name),
+                ));
+            };
+            list.remove(k);
+            continue;
+        }
+        let k = at.unwrap_or_else(|| {
+            list.push(blank(&e.name));
+            list.len() - 1
+        });
+        apply(&mut list[k], e, &path)?;
+    }
+    let names: Vec<String> = list.iter().map(|d| d.good.name.clone()).collect();
+    let mut out = Vec::with_capacity(list.len());
+    for (k, d) in list.into_iter().enumerate() {
+        let mut g = d.good;
+        g.id = k as u32 + 1;
+        // FMG keys a recipe by good id, so its ingredients go in id order.
+        for r in &d.recipes {
+            let mut ids = Vec::with_capacity(r.len());
+            for (name, amount) in r {
+                let Some(at) = names.iter().position(|n| n == name) else {
+                    return Err(Error::new(
+                        ErrorCode::RefUnknown,
+                        d.path.clone(),
+                        format!(
+                            "a recipe of {} names the good \"{name}\", which is not in the list",
+                            g.name
+                        ),
+                    ));
+                };
+                ids.push((at as u32 + 1, *amount));
+            }
+            ids.sort_by_key(|&(id, _)| id);
+            g.recipes.push(ids);
+        }
+        out.push(g);
+    }
+    Ok(out)
 }
 
 /// The default catalogue. The good with id `k` is at index `k - 1`.
 pub fn catalogue() -> Vec<Good> {
-    GOODS
-        .iter()
-        .enumerate()
-        .map(|(k, raw)| resolve(raw, k as u32 + 1))
-        .collect()
+    catalogue_from(&[]).expect("the default catalogue is valid")
 }
 
 /// The value of each good by id; entry 0 is 0.
@@ -684,5 +907,137 @@ mod tests {
                 .enumerate()
                 .any(|(c, &g)| g != 0 && cells.s[c] > 0.0)
         );
+    }
+
+    fn entry(name: &str) -> GoodEntry {
+        GoodEntry {
+            name: name.to_owned(),
+            ..GoodEntry::default()
+        }
+    }
+
+    #[test]
+    fn config_entries_change_add_and_remove_goods() {
+        let default = catalogue();
+        let wood = GoodEntry {
+            value: Some(7.5),
+            distribution: Some(String::new()),
+            ..entry("Wood")
+        };
+        let gone = GoodEntry {
+            remove: true,
+            ..entry(&default[1].name)
+        };
+        let resin = GoodEntry {
+            value: Some(2.0),
+            coverage: Some([("fuel".to_owned(), 1.0)].into()),
+            ..entry("Resin")
+        };
+        // An unknown need is not valid.
+        let e = catalogue_from(std::slice::from_ref(&resin)).unwrap_err();
+        assert_eq!(e.code, ErrorCode::TableInvalid);
+        assert_eq!(e.path, "/world/goods/0/coverage/fuel");
+        let resin = GoodEntry {
+            coverage: Some([("utilities".to_owned(), 0.5)].into()),
+            recipes: Some(vec![[("Wood".to_owned(), 2.0)].into()]),
+            ..resin
+        };
+        let list = catalogue_from(&[wood, gone, resin]).unwrap();
+        assert_eq!(list.len(), default.len());
+        assert!(list.iter().enumerate().all(|(k, g)| g.id as usize == k + 1));
+        assert_eq!(list[0].value, 7.5);
+        assert_eq!(list[0].distribution, None);
+        assert!(!list.iter().any(|g| g.name == default[1].name));
+        let r = list.last().unwrap();
+        assert_eq!(r.name, "Resin");
+        assert_eq!(r.covers(Need::Utilities), 0.5);
+        assert_eq!(r.recipes, vec![vec![(1, 2.0)]]);
+        // The recipes of the defaults follow the new ids.
+        for g in &list {
+            for recipe in &g.recipes {
+                for &(id, _) in recipe {
+                    assert!(id >= 1 && id as usize <= list.len(), "{}", g.name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_bad_entry_names_its_path() {
+        let cases = [
+            (
+                GoodEntry {
+                    remove: true,
+                    ..entry("Nothing")
+                },
+                ErrorCode::RefUnknown,
+                "/world/goods/0/name",
+            ),
+            (
+                GoodEntry {
+                    value: Some(-1.0),
+                    ..entry("Wood")
+                },
+                ErrorCode::ValueOutOfRange,
+                "/world/goods/0/value",
+            ),
+            (
+                GoodEntry {
+                    deposits: Some([3.0, 1.0]),
+                    ..entry("Wood")
+                },
+                ErrorCode::ValueOutOfRange,
+                "/world/goods/0/deposits",
+            ),
+            (
+                GoodEntry {
+                    distribution: Some("biome(1".to_owned()),
+                    ..entry("Wood")
+                },
+                ErrorCode::TableInvalid,
+                "/world/goods/0/distribution",
+            ),
+            (
+                GoodEntry {
+                    culture_type: Some([("Pirate".to_owned(), 2.0)].into()),
+                    ..entry("Wood")
+                },
+                ErrorCode::TableInvalid,
+                "/world/goods/0/culture_type/Pirate",
+            ),
+            (
+                GoodEntry {
+                    recipes: Some(vec![[("Nothing".to_owned(), 1.0)].into()]),
+                    ..entry("Glue")
+                },
+                ErrorCode::RefUnknown,
+                "/world/goods/0",
+            ),
+        ];
+        for (e, code, path) in cases {
+            let err = catalogue_from(&[e]).unwrap_err();
+            assert_eq!(
+                (err.code, err.path.as_str()),
+                (code, path),
+                "{}",
+                err.message
+            );
+        }
+        // A default good that a recipe uses cannot go.
+        let used = catalogue()
+            .iter()
+            .find(|g| {
+                catalogue()
+                    .iter()
+                    .any(|o| o.recipes.iter().flatten().any(|&(id, _)| id == g.id))
+            })
+            .map(|g| g.name.clone())
+            .expect("a recipe uses a good");
+        let err = catalogue_from(&[GoodEntry {
+            remove: true,
+            ..entry(&used)
+        }])
+        .unwrap_err();
+        assert_eq!(err.code, ErrorCode::RefUnknown);
     }
 }
