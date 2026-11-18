@@ -35,6 +35,7 @@
 
 use crate::features::{FeatureKind, Features, NO_HAVEN};
 use crate::grid::Grid;
+use crate::meander::{Anchor, Line, meander};
 use std::collections::BTreeMap;
 
 /// No receiver: the cell is water, a sink, or a depression.
@@ -57,7 +58,7 @@ const LENGTH_FACTOR: f64 = 200.0;
 const LENGTH_PROGRESSION: [f64; 9] = [1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0];
 
 /// The default map of FMG: 1280 x 800 px with 10000 points. Its point
-/// spacing scales the distances of the river meander count.
+/// spacing scales the distances of the river meander.
 const FMG_SPACING: f64 = 10.119_288_512_538_814;
 
 /// The least flux of a river cell. The cell count does not change it; the
@@ -147,8 +148,13 @@ pub struct River {
     /// The cells from the source to the cell before the mouth. A river that
     /// passes a lake has the lake cells where it enters and leaves it.
     pub cells: Vec<usize>,
-    /// The line from the source to the mouth, in units.
+    /// The meandered line from the source to the mouth, in units (FMG
+    /// `addMeandering`).
     pub points: Vec<[f64; 2]>,
+    /// The index in `points` of each anchor of the line: the site of each
+    /// cell, then the end point if the river has one. The anchors are
+    /// exact, so a pinned river passes its points.
+    pub anchors: Vec<usize>,
     pub mouth: Mouth,
     /// The river that this river flows into, if it is a tributary.
     pub parent: Option<u32>,
@@ -163,7 +169,7 @@ pub struct River {
     pub width_factor: f64,
     /// The width at the mouth, in km (FMG `width`).
     pub width: f64,
-    /// The length of the line, in units.
+    /// The length of the meandered line, in units.
     pub length: f64,
 }
 
@@ -236,43 +242,6 @@ fn nearest_edge_point(p: [f64; 2], width: f64, height: f64) -> [f64; 2] {
         2 => [p[0], 0.0],
         _ => [p[0], height],
     }
-}
-
-/// The number of points of the meandered line of a river (FMG `meander`),
-/// which sets its width. The distances of FMG are in pixels of its default
-/// map, so they scale with the cell spacing. A river that starts in water
-/// starts with step 1, else with step 10.
-fn meander_count(grid: &Grid, cells: &[i64], start_step: usize) -> usize {
-    let scale = FMG_SPACING / grid.lattice.spacing;
-    let at = |i: usize| -> [f64; 2] {
-        let c = cells[i];
-        if c >= 0 {
-            grid.points[c as usize]
-        } else {
-            let prev = grid.points[cells[i - 1].max(0) as usize];
-            nearest_edge_point(prev, grid.width, grid.height)
-        }
-    };
-    let count = cells.len();
-    let mut points = 0;
-    for (i, step) in (0..count).zip(start_step..) {
-        points += 1;
-        if i + 1 == count {
-            break;
-        }
-        if cells[i + 1] >= 0 {
-            let (a, b) = (at(i), at(i + 1));
-            let d2 = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)) * scale * scale;
-            if !(d2 <= 25.0 && count >= 6) {
-                if step < 20 && (d2 > 64.0 || (d2 > 36.0 && count < 5)) {
-                    points += 2;
-                } else if d2 > 25.0 || count < 6 {
-                    points += 1;
-                }
-            }
-        }
-    }
-    points
 }
 
 /// The width offset at a point of a river (FMG `getOffset`).
@@ -754,6 +723,7 @@ pub fn generate(input: &Input) -> Output {
         .map(|(i, raw)| (raw.id, i as u32 + 1))
         .collect();
     let mut rivers: Vec<River> = Vec::with_capacity(raws.len());
+    let mut anchors_of: Vec<Vec<Anchor>> = Vec::with_capacity(raws.len());
     for raw in &raws {
         let id = new_id[&raw.id];
         let parent = (raw.parent != 0 && raw.parent != raw.id)
@@ -809,10 +779,6 @@ pub fn generate(input: &Input) -> Output {
         if let Some(p) = end {
             points.push(p);
         }
-        let length = points
-            .windows(2)
-            .map(|w| ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt())
-            .sum();
         let discharge = fl[end_cell];
         let width_factor = if parent.is_none() {
             default_width_factor * 1.2
@@ -820,36 +786,73 @@ pub fn generate(input: &Input) -> Output {
             default_width_factor
         };
         let sw = source_width(fl[cells[0]]);
-        let mut full: Vec<i64> = cells.iter().map(|&c| c as i64).collect();
-        match mouth {
-            Mouth::Water(c) | Mouth::Join(c) => full.push(c as i64),
-            Mouth::Edge => full.push(-1),
-            Mouth::Sink => {}
+        // The anchors of the line, for the meander after this loop.
+        let mut marks: Vec<Anchor> = points
+            .iter()
+            .zip(&cells)
+            .map(|(&at, &c)| Anchor {
+                at,
+                water: input.heights[c] < sea,
+                edge: false,
+            })
+            .collect();
+        if let Some(at) = end {
+            marks.push(Anchor {
+                at,
+                water: matches!(mouth, Mouth::Water(_)),
+                edge: mouth == Mouth::Edge,
+            });
         }
-        let width = mouth_width(offset(
-            discharge,
-            meander_count(
-                grid,
-                &full,
-                if input.heights[cells[0]] < sea { 1 } else { 10 },
-            ),
-            width_factor,
-            sw,
-        ));
+        anchors_of.push(marks);
         rivers.push(River {
             id,
             course: raw.course,
             cells,
             points,
+            anchors: Vec::new(),
             mouth,
             parent,
             basin: id,
             flux: discharge,
             source_width: sw,
             width_factor,
-            width,
-            length,
+            width: 0.0,
+            length: 0.0,
         });
+    }
+    // The meandered lines (FMG `addMeandering`), the lengths, and the
+    // widths at the mouth, which grow with the number of line points.
+    let scale = FMG_SPACING / grid.lattice.spacing;
+    let lines: Vec<Line> = rivers
+        .iter()
+        .zip(&anchors_of)
+        .map(|(river, marks)| {
+            let start_step = if input.heights[river.cells[0]] < sea {
+                1
+            } else {
+                10
+            };
+            let join = match river.mouth {
+                Mouth::Join(j) => join_direction(&rivers, &anchors_of, river.id, j),
+                _ => None,
+            };
+            meander(marks, start_step, scale, join)
+        })
+        .collect();
+    for (river, line) in rivers.iter_mut().zip(lines) {
+        river.length = line
+            .points
+            .windows(2)
+            .map(|w| ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt())
+            .sum();
+        river.width = mouth_width(offset(
+            river.flux,
+            line.points.len(),
+            river.width_factor,
+            river.source_width,
+        ));
+        river.points = line.points;
+        river.anchors = line.anchors;
     }
     // Basins: the end of the chain of parents (FMG `getBasin`).
     let parent_of: BTreeMap<u32, Option<u32>> = rivers.iter().map(|r| (r.id, r.parent)).collect();
@@ -907,6 +910,26 @@ pub fn generate(input: &Input) -> Output {
         lakes,
         heights,
     }
+}
+
+/// The flow of the river that passes the cell `j`, where the river `id`
+/// joins it (FMG `getJoinDirection`): from the anchor before `j` to the
+/// anchor after it.
+fn join_direction(
+    rivers: &[River],
+    anchors: &[Vec<Anchor>],
+    id: u32,
+    j: usize,
+) -> Option<[f64; 2]> {
+    rivers.iter().zip(anchors).find_map(|(r, a)| {
+        if r.id == id {
+            return None;
+        }
+        let k = r.cells.iter().position(|&c| c == j)?;
+        let next = a.get(k + 1)?;
+        let prev = a[k.saturating_sub(1)];
+        Some([next.at[0] - prev.at[0], next.at[1] - prev.at[1]])
+    })
 }
 
 /// `true` for a land cell of the river cells, where -1 is the frame edge.
@@ -1495,6 +1518,36 @@ mod tests {
         assert_eq!(r[0], 3);
         assert_eq!(parents.get(&2), Some(&3));
         assert_eq!(conf[0], 74);
+    }
+
+    #[test]
+    fn a_river_line_meanders_between_its_cell_sites() {
+        let g = grid();
+        let h = dome(&g);
+        let (_, out) = run(&g, &h, &[]);
+        let mut bent = 0;
+        for r in &out.rivers {
+            // Each cell site is an anchor, in order; the end point follows.
+            let ends = usize::from(r.mouth != Mouth::Sink);
+            assert_eq!(r.anchors.len(), r.cells.len() + ends, "river {}", r.id);
+            assert!(r.anchors.windows(2).all(|w| w[0] < w[1]));
+            assert_eq!(r.anchors[0], 0);
+            assert_eq!(*r.anchors.last().unwrap(), r.points.len() - 1);
+            for (k, &c) in r.cells.iter().enumerate() {
+                assert_eq!(r.points[r.anchors[k]], g.points[c]);
+            }
+            bent += r.points.len() - r.anchors.len();
+            // The width grows with the number of line points (FMG `getWidth`).
+            let o = offset(r.flux, r.points.len(), r.width_factor, r.source_width);
+            assert_eq!(r.width, mouth_width(o));
+            let length: f64 = r
+                .points
+                .windows(2)
+                .map(|w| ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt())
+                .sum();
+            assert_eq!(r.length, length);
+        }
+        assert!(bent > 0);
     }
 
     #[test]

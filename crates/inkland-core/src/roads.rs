@@ -686,14 +686,16 @@ pub(crate) fn finish(
             .iter()
             .position(|&c| c == cells[mid])
             .unwrap_or(0);
-        let p = river.points[k];
-        let q = river.points[(k + 1).min(river.points.len() - 1)];
-        let o = if k + 1 < river.points.len() {
+        // The anchors of the river line: the cell sites and the end point.
+        let line: Vec<[f64; 2]> = river.anchors.iter().map(|&a| river.points[a]).collect();
+        let p = line[k];
+        let q = line[(k + 1).min(line.len() - 1)];
+        let o = if k + 1 < line.len() {
             p
         } else {
-            river.points[k.saturating_sub(1)]
+            line[k.saturating_sub(1)]
         };
-        let dir = if k + 1 < river.points.len() {
+        let dir = if k + 1 < line.len() {
             [q[0] - p[0], q[1] - p[1]]
         } else {
             [p[0] - o[0], p[1] - o[1]]

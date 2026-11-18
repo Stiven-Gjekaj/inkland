@@ -5,6 +5,7 @@
 use super::super::Ctx;
 use super::super::geom::{catmull_rom, catmull_rom_into, n};
 use inkland_core::config::RoadKind;
+use inkland_core::rivers::Mouth;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
@@ -171,51 +172,6 @@ pub fn offset(flux: f64, index: usize, width_factor: f64, start: f64) -> f64 {
     width_factor * (length_width + flux_width) + start
 }
 
-/// Bends between the points of a river (`meander`). Each point of the
-/// course stays where it is. The result is the points and, for each point,
-/// the index of its course point or `None`.
-pub fn meander(points: &[[f64; 2]], water_last: bool) -> Vec<([f64; 2], Option<usize>)> {
-    let meandering: f64 = 0.5;
-    let count = points.len();
-    let mut out: Vec<([f64; 2], Option<usize>)> = Vec::new();
-    let mut step: f64 = 10.0;
-    for i in 0..count {
-        let [x1, y1] = points[i];
-        out.push(([x1, y1], Some(i)));
-        if i + 1 == count {
-            break;
-        }
-        let [x2, y2] = points[i + 1];
-        let dist2 = (x2 - x1).powi(2) + (y2 - y1).powi(2);
-        step += 1.0;
-        if dist2 <= 25.0 && count >= 6 {
-            continue;
-        }
-        let mut m = meandering + 1.0 / (step - 1.0) + (meandering - (step - 1.0) / 100.0).max(0.0);
-        if water_last && i + 2 == count {
-            m *= 0.25;
-        }
-        let angle = libm::atan2(y2 - y1, x2 - x1);
-        let (sin_m, cos_m) = (libm::sin(angle) * m, libm::cos(angle) * m);
-        if step - 1.0 < 20.0 && (dist2 > 64.0 || (dist2 > 36.0 && count < 5)) {
-            out.push((
-                [(x1 * 2.0 + x2) / 3.0 - sin_m, (y1 * 2.0 + y2) / 3.0 + cos_m],
-                None,
-            ));
-            out.push((
-                [
-                    (x1 + x2 * 2.0) / 3.0 + sin_m / 2.0,
-                    (y1 + y2 * 2.0) / 3.0 - cos_m / 2.0,
-                ],
-                None,
-            ));
-        } else if dist2 > 25.0 || count < 6 {
-            out.push(([(x1 + x2) / 2.0 - sin_m, (y1 + y2) / 2.0 + cos_m], None));
-        }
-    }
-    out
-}
-
 /// The outline of a river with its width (`getRiverPath`).
 pub fn river_path(points: &[([f64; 2], f64)], width_factor: f64, start: f64) -> String {
     let m = points.len();
@@ -286,13 +242,23 @@ pub fn rivers(s: &mut String, ctx: &Ctx) {
             Some(k) => format!("river-{}", cfg.pins.rivers[k].id),
             None => format!("river-{}", r.id),
         };
-        // The water of each course point (FMG `cells.fl`).
-        let flux_at = |i: usize| -> f64 { r.cells.get(i).map_or(r.flux, |&c| w.drainage.flux[c]) };
-        let pts: Vec<[f64; 2]> = r.points.iter().map(|&p| ctx.p(p)).collect();
-        let water_last = r.points.len() > r.cells.len();
-        let bent: Vec<([f64; 2], f64)> = meander(&pts, water_last)
-            .into_iter()
-            .map(|(p, k)| (p, k.map_or(0.0, flux_at)))
+        // The water at each anchor of the line (FMG `addMeandering`): the
+        // water of its cell. The end takes the water of the cell that it
+        // flows into, or of the last cell at the frame edge.
+        let fl = &w.drainage.flux;
+        let mut flux = vec![0.0; r.points.len()];
+        for (k, &i) in r.anchors.iter().enumerate() {
+            flux[i] = match (r.cells.get(k), r.mouth) {
+                (Some(&c), _) => fl[c],
+                (None, Mouth::Water(c) | Mouth::Join(c)) => fl[c],
+                (None, _) => r.cells.last().map_or(0.0, |&c| fl[c]),
+            };
+        }
+        let bent: Vec<([f64; 2], f64)> = r
+            .points
+            .iter()
+            .zip(flux)
+            .map(|(&p, f)| (ctx.p(p), f))
             .collect();
         // The width factor and the source width of the river stage.
         items.push((
@@ -333,14 +299,5 @@ mod tests {
     fn a_river_is_wider_at_its_mouth() {
         assert!(offset(5000.0, 20, 1.0, 0.1) > offset(10.0, 1, 1.0, 0.1));
         assert_eq!(offset(5000.0, 0, 1.0, 0.1), 0.1);
-    }
-
-    #[test]
-    fn meander_keeps_the_course_points() {
-        let pts = [[0.0, 0.0], [20.0, 0.0], [40.0, 10.0], [60.0, 10.0]];
-        let m = meander(&pts, false);
-        let kept: Vec<[f64; 2]> = m.iter().filter(|x| x.1.is_some()).map(|x| x.0).collect();
-        assert_eq!(kept, pts.to_vec());
-        assert!(m.len() > pts.len());
     }
 }
