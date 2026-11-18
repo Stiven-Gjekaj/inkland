@@ -16,6 +16,7 @@ _A faithful remake of Azgaar's Fantasy Map Generator, with hard pins, print-safe
 <p align="center">
   <a href="#overview"><b>Overview</b></a> |
   <a href="#gallery"><b>Gallery</b></a> |
+  <a href="#speed"><b>Speed</b></a> |
   <a href="#install"><b>Install</b></a> |
   <a href="#use"><b>Use</b></a> |
   <a href="#the-desktop-app"><b>App</b></a> |
@@ -86,8 +87,8 @@ The engine fits the world around the pins, and never moves them.
 - Each edit has an exact undo.
 - The print checks run on each SVG: line widths, fonts, and black and
   white only.
-- A 20000-cell world, with all stages and one colour map, takes about
-  0.35 s.
+- Up to 8 times faster than FMG: a 100 000-cell world takes 0.45 s with
+  all stages. [Speed](#speed) gives the measures.
 - `docs/CONFIG.md` comes from the JSON Schema of the config.
 
 </td>
@@ -134,6 +135,76 @@ The engine fits the world around the pins, and never moves them.
 </table>
 
 The four maps come from one config: `fixtures/configs/full.json`.
+
+---
+
+## Speed
+
+inkland generates a world **5 to 8 times faster** than FMG. The gap grows
+with the cell count. The render of one colour map is a little faster than
+in FMG.
+
+**Generation**: all stages, from the heightmap to the journeys
+
+```text
+10K cells   FMG      ███▊                                       342 ms
+            inkland  ▊                                           70 ms   4.9x faster
+
+20K cells   FMG      ███████▉                                   733 ms
+            inkland  █▎                                         120 ms   6.1x faster
+
+50K cells   FMG      ████████████████████▏                     1870 ms
+            inkland  ██▋                                        247 ms   7.6x faster
+
+100K cells  FMG      ████████████████████████████████████████  3708 ms
+            inkland  ████▉                                      452 ms   8.2x faster
+```
+
+**Render**: the layers of one colour map
+
+```text
+10K cells   FMG      ██████████████████▊                         60 ms
+            inkland  ███████████████▋                            50 ms   1.2x faster
+
+20K cells   FMG      ████████████████████████▍                   78 ms
+            inkland  ███████████████████                         61 ms   1.3x faster
+
+50K cells   FMG      ███████████████████████████████▎           100 ms
+            inkland  █████████████████████████▎                  81 ms   1.2x faster
+
+100K cells  FMG      ████████████████████████████████████████   128 ms
+            inkland  ██████████████████████████████████████▏    122 ms   1.0x faster
+```
+
+| Cells | FMG generate | inkland generate | Faster | FMG render | inkland render | Faster |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10 000 | 342 ms | **70 ms** | 4.9x | 60 ms | **50 ms** | 1.2x |
+| 20 000 | 733 ms | **120 ms** | 6.1x | 78 ms | **61 ms** | 1.3x |
+| 50 000 | 1870 ms | **247 ms** | 7.6x | 100 ms | **81 ms** | 1.2x |
+| 100 000 | 3708 ms | **452 ms** | 8.2x | 128 ms | **122 ms** | 1.0x |
+
+<details>
+<summary><b>How we measured</b></summary>
+
+- One machine: Apple M5, 16 GB, macOS 27.2. inkland and Chrome did not
+  run at the same time.
+- FMG 1.158.0 from azgaar.github.io, in headless Chrome 157, at
+  1024 x 681 pixels. The times are the "Generation Pipeline" and "Layers
+  Rendering" measures that FMG records. Two runs of
+  `scripts/bench-fmg.sh` made 12 maps for each cell count, with random
+  seeds and templates, after 1 map to warm up.
+- inkland 1.1.0, release build, one thread. The times are `World::build`
+  and the SVG of one colour variant in the `default` style. Each cell
+  count makes 6 maps: the seeds 1 to 6 with 6 FMG templates.
+  `cargo run --release -p inkland --example timing` runs this test.
+- Each number is a median.
+- After the regraph step, the maps have about the same number of cells.
+  At 100 000 cells the median is 48 200 in FMG and 45 100 in inkland.
+- The render of FMG counts only the build of the SVG elements. The browser
+  draws them after this, and that time is not in the table. The render of
+  inkland makes the full SVG text.
+
+</details>
 
 ---
 
