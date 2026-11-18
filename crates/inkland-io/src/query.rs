@@ -79,6 +79,20 @@ fn with_coa(mut owner: Value, coa: Option<&inkland_core::emblems::Coa>) -> Value
 }
 
 /// The facts about the point `p` of a world.
+/// Whether a point is inside a closed ring, by the even-odd rule.
+fn inside(ring: &[[f64; 2]], p: [f64; 2]) -> bool {
+    let mut odd = false;
+    for w in ring.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if (a[1] > p[1]) != (b[1] > p[1])
+            && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]
+        {
+            odd = !odd;
+        }
+    }
+    odd
+}
+
 pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error> {
     if p[0] < 0.0 || p[1] < 0.0 || p[0] > world.width || p[1] > world.height {
         return Err(Error::new(
@@ -268,6 +282,16 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
                 "name": n.and_then(|n| n.name.clone()),
             })
         }),
+        "coast": {
+            "distance": world.features.distance.get(c),
+            "haven": world.features.haven.get(c).filter(|&&h| h != inkland_core::features::NO_HAVEN),
+            "harbor": world.features.harbor.get(c),
+        },
+        "ice": world
+            .ice
+            .iter()
+            .find(|i| inside(&i.points, p))
+            .map(|i| json!({ "id": i.id, "type": i.kind.name() })),
         "biome": inkland_core::biomes::NAMES[world.biomes[c] as usize],
         "temperature_c": round(world.temperature[c], 3),
         "precipitation": round(world.precipitation[c], 3),
@@ -355,6 +379,41 @@ mod tests {
         assert!((0.0..=1.0).contains(&st));
         assert!(q["zones"].is_array());
         assert!(q["nearest_regiment"]["name"].is_string());
+    }
+
+    #[test]
+    fn a_coastal_cell_gives_its_haven_and_harbor_and_ice_covers_a_point() {
+        let (mut w, c) = world();
+        let f = &w.features;
+        let coastal = (0..w.grid.len())
+            .find(|&k| f.distance[k] == 1)
+            .expect("the test world has a coast");
+        let site = w.grid.points[coastal];
+        let q = query(&w, &c, site).unwrap();
+        assert_eq!(q["cell"]["id"], coastal);
+        assert_eq!(q["coast"]["distance"], 1);
+        let haven = q["coast"]["haven"].as_u64().unwrap() as usize;
+        assert!(!w.features.is_land(haven));
+        assert!(q["coast"]["harbor"].as_u64().unwrap() >= 1);
+        assert!(q["ice"].is_null() || w.ice.iter().any(|i| q["ice"]["id"] == i.id));
+        // A glacier over the point.
+        w.ice = vec![inkland_core::ice::Ice {
+            id: 7,
+            kind: inkland_core::ice::IceKind::Glacier,
+            points: vec![
+                [site[0] - 1.0, site[1] - 1.0],
+                [site[0] + 1.0, site[1] - 1.0],
+                [site[0] + 1.0, site[1] + 1.0],
+                [site[0] - 1.0, site[1] + 1.0],
+                [site[0] - 1.0, site[1] - 1.0],
+            ],
+            cell: None,
+            size: None,
+        }];
+        let q = query(&w, &c, site).unwrap();
+        assert_eq!(q["ice"], json!({ "id": 7, "type": "glacier" }));
+        let away = query(&w, &c, [site[0] + 5.0, site[1]].map(|v| v.min(399.0))).unwrap();
+        assert!(away["ice"].is_null());
     }
 
     #[test]
