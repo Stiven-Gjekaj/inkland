@@ -35,7 +35,11 @@ as FMG for the same seed. This is not a goal.
   development, and the sort function of each culture.
 - Culture types, expansionism, and the expansion costs of each type.
 - Capitals and towns with the spacing rules and the auto town count of
-  FMG. Ports by water body. Burg groups, population, and buildings.
+  FMG. The auto count is `populated / 5 / (cells / 10000) ^ 0.8`. `populated`
+  is the number of populated cells with a culture in the second grid.
+  `cells` is the number of cells of the first grid, as in FMG
+  (`grid.points.length`). The second grid has fewer cells, so a count on it
+  gives too many towns. Ports by water body. Burg groups, population, and buildings.
 - State costs, forms, form names, full names, statistics, and colors.
 - Province forms and wild provinces (islands, colonies, territories).
 - Route groups (`roads`, `trails`, `searoutes`), Urquhart graphs, path
