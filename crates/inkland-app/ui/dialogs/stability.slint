@@ -1,0 +1,48 @@
+// The Stability Overview of FMG for the selected state: each part of the
+// stability, for or against, the total, and the provinces, least stable
+// first. It does not edit, because the config has no stability.
+
+import { Theme, Label, Select, FormRow, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component StabilityDialog inherits Dialog {
+    id: "stability";
+    title: "Stability Overview";
+    content-width: 540px;
+    pos-x: 460px;
+    pos-y: 60px;
+    FormRow {
+        label: "Stability of";
+        label-width: 90px;
+        Select {
+            dialog: true;
+            horizontal-stretch: 1;
+            model: Lists.state-names;
+            current-index <=> AppState.overview-state;
+            selected(i) => { Actions.selection-changed(); }
+        }
+    }
+    Table {
+        header: ["Part", "Percent"];
+        widths: [160px, 60px];
+        rows: Lists.stability-parts;
+        list-height: 164px;
+    }
+    Label {
+        dialog: true;
+        text: AppState.stability-total == "" ? "The state has no stability data." : AppState.stability-total;
+        font-weight: 700;
+    }
+    Label { dialog: true; text: "Provinces"; font-weight: 700; }
+    Table {
+        header: ["Province", "People", "Remoteness", "Minorities", "Corruption", "Infrastructure", "Stability"];
+        widths: [110px, 50px, 70px, 64px, 66px, 80px, 56px];
+        rows: Lists.stability-provinces;
+        list-height: 140px;
+    }
+    Tip {
+        dialog: true;
+        text: "People is the share of the people of the state. A state with one province shows no provinces.";
+    }
+}

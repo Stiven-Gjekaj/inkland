@@ -305,6 +305,98 @@ pub fn zone_rows(world: &World, unit: &str) -> Vec<Row> {
         .collect()
 }
 
+/// A share with a sign, in whole percent: `+12`, `-3`.
+fn signed(v: f64) -> String {
+    let r = rn(v.abs() * 100.0, 0);
+    format!("{}{}", if v >= 0.0 { "+" } else { "-" }, num(r, 0))
+}
+
+/// The Stability Overview of FMG for one state: the parts (name and signed
+/// percent), the total, and the provinces, least stable first.
+pub struct StabilityView {
+    pub parts: Vec<Row>,
+    pub total: String,
+    pub provinces: Vec<Row>,
+}
+
+/// The FMG labels of the stability parts, in `Parts::NAMES` order.
+const PART_LABELS: [&str; 8] = [
+    "Base",
+    "Prosperity",
+    "Court",
+    "Army",
+    "Remoteness",
+    "Minorities",
+    "Corruption",
+    "Tax burden",
+];
+
+/// The stability of a state, or `None` if it has none (no accounts or no
+/// people).
+pub fn stability_view(world: &World, selected: u32) -> Option<StabilityView> {
+    let soc = &world.society;
+    let s = state(world, selected)?;
+    let st = world.stability.state(selected)?;
+    let parts = PART_LABELS
+        .iter()
+        .zip(st.parts.values())
+        .enumerate()
+        .map(|(k, (label, v))| {
+            let color = if v >= 0.0 { "#208040" } else { "#c02020" };
+            row(k.to_string(), vec![(*label).to_owned(), signed(v)], false).with_color(color)
+        })
+        .collect();
+    let infrastructure =
+        inkland_core::economy::orders::infrastructure(&world.economy.corruption, s);
+    let mut list: Vec<&inkland_core::stability::ProvinceStability> =
+        world.stability.provinces(selected).iter().collect();
+    // FMG shows the provinces only for two or more.
+    if list.len() < 2 {
+        list.clear();
+    }
+    list.sort_by(|a, b| {
+        a.stability
+            .total_cmp(&b.stability)
+            .then(a.province.id.cmp(&b.province.id))
+    });
+    let provinces = list
+        .iter()
+        .map(|p| {
+            let d = &p.province;
+            let name =
+                d.id.checked_sub(1)
+                    .and_then(|k| soc.provinces.get(k as usize))
+                    .map_or_else(|| "-".to_owned(), |x| x.name.clone());
+            let corruption = world
+                .economy
+                .corruption
+                .of_province(s, d, s.economy.collected);
+            let served = infrastructure
+                .iter()
+                .find(|(id, _)| *id == d.id)
+                .map_or(0.0, |x| x.1);
+            row(
+                d.id.to_string(),
+                vec![
+                    name,
+                    percent(d.share),
+                    percent(d.remoteness),
+                    percent(d.diversity),
+                    format!("{}%", num(corruption, 0)),
+                    percent(served),
+                    percent(p.stability),
+                ],
+                false,
+            )
+        })
+        .collect();
+    Some(StabilityView {
+        parts,
+        total: format!("Stability: {}", percent(st.stability)),
+        provinces,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,5 +522,34 @@ mod tests {
             assert!(z.color.contains(r.cells[5].as_str()), "{}", z.color);
             assert!(!r.cells[5].contains('('));
         }
+    }
+
+    #[test]
+    fn the_stability_view_gives_the_parts_and_the_provinces() {
+        let (_, w) = world();
+        let s = w
+            .society
+            .states
+            .iter()
+            .find(|s| w.stability.state(s.id).is_some())
+            .expect("a state has a stability");
+        let st = w.stability.state(s.id).unwrap();
+        let v = stability_view(&w, s.id).unwrap();
+        assert_eq!(v.parts.len(), 8);
+        assert_eq!(v.parts[0].cells[0], "Base");
+        assert_eq!(v.parts[1].cells[1], signed(st.parts.prosperity));
+        assert_eq!(v.total, format!("Stability: {}", percent(st.stability)));
+        let n = w.stability.provinces(s.id).len();
+        assert_eq!(v.provinces.len(), if n < 2 { 0 } else { n });
+        // The least stable province is first.
+        let values: Vec<f64> = v
+            .provinces
+            .iter()
+            .map(|r| r.cells[6].trim_end_matches('%').parse().unwrap())
+            .collect();
+        assert!(values.windows(2).all(|p| p[0] <= p[1]), "{values:?}");
+        assert!(stability_view(&w, 0).is_none());
+        assert_eq!(signed(0.123), "+12");
+        assert_eq!(signed(-0.03), "-3");
     }
 }

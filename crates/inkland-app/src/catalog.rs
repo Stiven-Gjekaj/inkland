@@ -394,6 +394,7 @@ pub const TOOLS: &[ToolDef] = &[
     tool("religions", "Religions", "Edit", "Shift+R", true),
     tool("rivers", "Rivers", "Edit", "Shift+V", true),
     tool("routes", "Routes", "Edit", "Shift+U", true),
+    tool("stability", "Stability", "Edit", "", true),
     tool("states", "States", "Edit", "Shift+S", true),
     tool("units", "Units", "Edit", "Shift+Q", true),
     tool("zones", "Zones", "Edit", "", true),
