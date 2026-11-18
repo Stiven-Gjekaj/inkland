@@ -228,6 +228,24 @@ impl<'a> Validator<'a> {
             inkland_core::journeys::transports::transports_from(&w.transports).err(),
         ];
         self.errors.extend(tables.into_iter().flatten());
+        for (i, m) in w.measurers.iter().enumerate() {
+            let least = if m.kind == inkland_core::annotations::MeasurerKind::Planimeter {
+                3
+            } else {
+                2
+            };
+            if m.points.len() < least {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("/world/measurers/{i}/points"),
+                    format!(
+                        "a {} needs {least} points or more, found {}",
+                        m.kind.name(),
+                        m.points.len()
+                    ),
+                );
+            }
+        }
         for (i, e) in w.renames.iter().enumerate() {
             self.errors.extend(inkland_core::renames::check(c, i, e));
             for f in e.coa.iter().flat_map(inkland_core::emblems::validate) {

@@ -227,6 +227,75 @@ pub struct World {
     /// later stages use the new names.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub renames: Vec<RenameEntry>,
+    /// Notes of the map, as the Notes editor of Azgaar's Fantasy Map
+    /// Generator writes them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<NoteEntry>,
+    /// `false`: no default ruler across the largest landmass.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub default_ruler: bool,
+    /// Measurers after the default ruler: rulers, opisometers, and
+    /// planimeters.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub measurers: Vec<MeasurerEntry>,
+    /// Legend boxes: a title and colored items.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub legends: Vec<LegendEntry>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn is_true(v: &bool) -> bool {
+    *v
+}
+
+/// A note of the map.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NoteEntry {
+    /// The title of the note.
+    pub name: String,
+    /// The text of the note.
+    #[serde(default)]
+    pub note: String,
+}
+
+/// A measurer: its kind and its points `[x, y]`, in units.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MeasurerEntry {
+    /// The kind: `ruler`, `opisometer`, `route-opisometer`, or
+    /// `planimeter`.
+    pub kind: crate::annotations::MeasurerKind,
+    /// 2 or more points. A planimeter closes its points into an area.
+    pub points: Vec<Point>,
+}
+
+/// One item of a legend box.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LegendItemEntry {
+    /// The color of the swatch, as `#rrggbb`.
+    pub color: String,
+    /// The text of the item.
+    pub text: String,
+}
+
+/// A legend box.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LegendEntry {
+    /// The title of the box.
+    pub name: String,
+    /// The items, in order.
+    #[serde(default)]
+    pub items: Vec<LegendItemEntry>,
+    /// The top left corner of the box `[x, y]`, in units. Default: the
+    /// next free place in the bottom right of the map.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Point>,
 }
 
 /// The kind of a generated area that a rename names.
@@ -483,6 +552,10 @@ impl Default for World {
             military_units: Vec::new(),
             transports: Vec::new(),
             renames: Vec::new(),
+            notes: Vec::new(),
+            default_ruler: true,
+            measurers: Vec::new(),
+            legends: Vec::new(),
         }
     }
 }

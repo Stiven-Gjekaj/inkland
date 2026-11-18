@@ -334,6 +334,49 @@ One of:
 - `"vignette"`: A dark edge around the map. Only `colour` mode.
 - `"legend"`: A legend box. Only `colour` mode.
 
+### LegendEntry
+
+A legend box.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `at` | array of 2 number |  |  | The top left corner of the box `[x, y]`, in units. Default: the next free place in the bottom right of the map. |
+| `items` | array of [`LegendItemEntry`](#legenditementry) |  | `[]` | The items, in order. |
+| `name` | string | yes |  | The title of the box. |
+
+### LegendItemEntry
+
+One item of a legend box.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `color` | string | yes |  | The color of the swatch, as `#rrggbb`. |
+| `text` | string | yes |  | The text of the item. |
+
+### MeasurerEntry
+
+A measurer: its kind and its points `[x, y]`, in units.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `kind` | [`MeasurerKind`](#measurerkind) | yes |  | The kind: `ruler`, `opisometer`, `route-opisometer`, or `planimeter`. |
+| `points` | array of array of 2 number | yes |  | 2 or more points. A planimeter closes its points into an area. |
+
+### MeasurerKind
+
+The kind of a measurer (FMG `MeasurerType`).
+
+Type: `"ruler"`, `"opisometer"`, `"route-opisometer"`, `"planimeter"`
+
+### NoteEntry
+
+A note of the map.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | yes |  | The title of the note. |
+| `note` | string |  | `""` | The text of the note. |
+
 ### Ordinary
 
 An ordinary: a band, a cross, a border, and so on.
@@ -653,13 +696,17 @@ Generation options.
 | `climate` | [`Climate`](#climate) |  |  | Climate options. |
 | `culture_set` | string |  | `"european"` | Name of the culture set: `world`, `european`, `oriental`, `english`, `antique`, `high-fantasy`, `dark-fantasy`, or `random`. |
 | `cultures` | integer |  | `6` | Number of cultures. |
+| `default_ruler` | boolean |  |  | `false`: no default ruler across the largest landmass. |
 | `emblem_shape` | string |  |  | The shield shape of the coats of arms: `culture` (the shield of the culture of each item, as Azgaar's Fantasy Map Generator does), `state` (the shield of the state), `random` (a random shield for each culture), or one shield name for all, for example `heater`, `spanish`, `round`, or `banner`. |
 | `goods` | array of [`GoodEntry`](#goodentry) |  |  | Changes to the goods catalogue of Azgaar's Fantasy Map Generator, in order. Empty: the default catalogue of 71 goods. |
 | `growth_rate` | number |  | `1.0` | How far cultures and states grow. 0.1 to 2. Cultures and states stop at a total cost that this value multiplies. |
 | `jitter` | number |  |  | How far each point of the first grid can move from its lattice position, as a fraction of half the distance between neighbor points. 0 to 0.9. 0 gives a regular lattice. |
 | `lake_elevation_limit` | integer |  |  | A land low point becomes a lake when its water cannot reach other water through cells lower than its height plus this limit, on the height scale 0 to 100. 0 to 80. 80 makes no such lakes. |
 | `lattice` | [`Lattice`](#lattice) |  |  | The lattice of the points of the first grid: `square`, `hex-pointy`, `hex-flat`, `diamond`, or `triangle`. |
+| `legends` | array of [`LegendEntry`](#legendentry) |  |  | Legend boxes: a title and colored items. |
+| `measurers` | array of [`MeasurerEntry`](#measurerentry) |  |  | Measurers after the default ruler: rulers, opisometers, and planimeters. |
 | `military_units` | array of [`UnitEntry`](#unitentry) |  |  | Changes to the military units of Azgaar's Fantasy Map Generator, in order. Empty: the default roster of 6 units. |
+| `notes` | array of [`NoteEntry`](#noteentry) |  |  | Notes of the map, as the Notes editor of Azgaar's Fantasy Map Generator writes them. |
 | `places` | [`PlaceOptions`](#placeoptions) |  |  | Options for places that generation adds. |
 | `provinces_ratio` | integer |  | `20` | Provinces for each 100 places of a state. 0 to 100. A state gets at least 2 provinces when it has 2 places or more. 100: each place is the seat of a province. |
 | `religions` | integer |  | `4` | Number of religions. |

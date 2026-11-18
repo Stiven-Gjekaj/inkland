@@ -903,6 +903,41 @@ fn empty_legend_boxes_add_nothing_to_the_legend() {
 }
 
 #[test]
+fn the_legend_boxes_of_the_world_draw_with_their_items() {
+    use inkland_core::annotations::{Legend, LegendItem};
+    let w = world_with(|w| {
+        w.legends = vec![
+            Legend {
+                name: "Trade goods".into(),
+                items: vec![
+                    LegendItem {
+                        color: "#966f33".into(),
+                        text: "Wood".into(),
+                    },
+                    LegendItem {
+                        color: "#979ea2".into(),
+                        text: "Stone & ore".into(),
+                    },
+                ],
+                at: None,
+            },
+            Legend {
+                name: "Empty".into(),
+                items: Vec::new(),
+                at: Some([20.0, 20.0]),
+            },
+        ]
+    });
+    let svg = render_world(&w, &[LayerName::Legend]);
+    assert!(svg.contains("<g id=\"legend-box-1\" data-legend=\"true\""));
+    assert!(svg.contains("<g id=\"legend-box-2\" data-legend=\"true\""));
+    assert!(svg.contains(">Trade goods</text>"));
+    assert!(svg.contains(">Stone &amp; ore</text>"));
+    assert!(svg.contains("fill=\"#966f33\""));
+    parse_and_draw(&svg);
+}
+
+#[test]
 fn the_new_layers_draw_nothing_in_print_safe_mode() {
     use LayerName::*;
     let new = [Zones, Goods, Markets, Trade, Military, Journeys, Rulers];

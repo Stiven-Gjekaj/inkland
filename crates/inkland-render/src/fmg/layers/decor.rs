@@ -353,9 +353,57 @@ pub fn legend(s: &mut String, ctx: &Ctx) {
                 .collect(),
         )
     };
-    if items.is_empty() {
-        return;
+    if !items.is_empty() {
+        let at = |width: f64, height: f64, zoom: f64| {
+            let [mx, my, mw, mh] = ctx.px.map_rect();
+            [
+                mx + mw * 0.99 - width * zoom,
+                my + mh * 0.93 - height * zoom,
+            ]
+        };
+        legend_box(s, ctx, "legend", title, &items, &at);
     }
+    // The legend boxes of the world (`pack.legends`), down from the top left
+    // of the map, or at their own place.
+    let mut stack = 0.0;
+    for (k, l) in ctx.world.legends.iter().enumerate() {
+        let items: Vec<(String, String)> = l
+            .items
+            .iter()
+            .map(|i| (i.color.clone(), i.text.clone()))
+            .collect();
+        let place = |_: f64, _: f64, _: f64| match l.at {
+            Some(p) => ctx.p(p),
+            None => {
+                let [mx, my, mw, mh] = ctx.px.map_rect();
+                [mx + mw * 0.01, my + mh * 0.01 + stack]
+            }
+        };
+        let height = legend_box(
+            s,
+            ctx,
+            &format!("legend-box-{}", k + 1),
+            &l.name,
+            &items,
+            &place,
+        );
+        if l.at.is_none() {
+            stack += height + 4.0;
+        }
+    }
+}
+
+/// Draw one legend box with its title and items, and give back its height
+/// on the page. `place` gives the top left corner from the width, the
+/// height, and the zoom of the box.
+fn legend_box(
+    s: &mut String,
+    ctx: &Ctx,
+    id: &str,
+    title: &str,
+    items: &[(String, String)],
+    place: &dyn Fn(f64, f64, f64) -> [f64; 2],
+) -> f64 {
     let st = &ctx.style;
     let size = st.attr_f64(&["legend"], "font-size").unwrap_or(13.0);
     let zoom = bar_zoom(ctx.config, &ctx.px, size);
@@ -367,7 +415,7 @@ pub fn legend(s: &mut String, ctx: &Ctx) {
     let box_s = (size / 1.7).round();
     let col_off = size;
     let v_off = size / 2.0;
-    let columns = items.len().div_ceil(per_col);
+    let columns = items.len().div_ceil(per_col).max(1);
     let lines = items.len().div_ceil(columns);
     let f = crate::metrics::FontMetrics::of(
         &st.attr(&["legend"], "font-family")
@@ -380,10 +428,8 @@ pub fn legend(s: &mut String, ctx: &Ctx) {
         + box_s * 1.6
         + col_off;
     let width = col_off * 2.0 + col_w * columns as f64;
-    let height = line_h * (lines as f64 + 1.0) + v_off * 2.0;
-    let [mx, my, mw, mh] = ctx.px.map_rect();
-    let x = mx + mw * 0.99 - width * zoom;
-    let y = my + mh * 0.93 - height * zoom;
+    let height = line_h * (lines.max(1) as f64 + 1.0) + v_off * 2.0;
+    let [x, y] = place(width, height, zoom);
     let mut body = String::new();
     for (i, (color, name)) in items.iter().enumerate() {
         let col = i / lines;
@@ -404,7 +450,12 @@ pub fn legend(s: &mut String, ctx: &Ctx) {
     }
     let _ = writeln!(
         s,
-        "<g id=\"legend\" transform=\"translate({} {}) scale({})\"{}><rect x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" stroke=\"none\"{}/><text x=\"{}\" y=\"{}\" text-anchor=\"middle\" font-weight=\"bold\" font-size=\"1.2em\" stroke=\"none\">{title}</text>{body}</g>",
+        "<g id=\"{id}\"{} transform=\"translate({} {}) scale({})\"{}><rect x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" stroke=\"none\"{}/><text x=\"{}\" y=\"{}\" text-anchor=\"middle\" font-weight=\"bold\" font-size=\"1.2em\" stroke=\"none\">{}</text>{body}</g>",
+        if id == "legend" {
+            ""
+        } else {
+            " data-legend=\"true\""
+        },
         n(x),
         n(y),
         inkland_core::num::fixed(zoom, 4),
@@ -413,8 +464,10 @@ pub fn legend(s: &mut String, ctx: &Ctx) {
         n(height),
         ctx.attrs(&["legend", "box"], &[]),
         n(width / 2.0),
-        n(size * 1.1 + v_off / 2.0)
+        n(size * 1.1 + v_off / 2.0),
+        crate::extras::xml(title)
     );
+    height * zoom
 }
 
 /// The boxes of the compass and the scale bar of `colour` mode on the page,

@@ -102,6 +102,8 @@ pub struct World {
     pub measurers: Vec<crate::annotations::Measurer>,
     /// Legend boxes. Generation adds none (FMG `Legends.initiate`).
     pub legends: Vec<crate::annotations::Legend>,
+    /// The notes of the config (`world.notes`).
+    pub user_notes: Vec<crate::config::NoteEntry>,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -523,7 +525,10 @@ impl World {
         );
         // The journeys run last, as in FMG (`Journeys.generate`). Later
         // stages go before them.
-        let measurers = crate::annotations::default_ruler(&grid, &features, society.cells.px);
+        let measurers = crate::annotations::measurers(
+            config,
+            crate::annotations::default_ruler(&grid, &features, society.cells.px),
+        );
         let journeys = crate::journeys::generate(&crate::journeys::Input {
             config,
             grid: &grid,
@@ -577,7 +582,8 @@ impl World {
             zones,
             journeys,
             measurers,
-            legends: Vec::new(),
+            legends: crate::annotations::legends(config),
+            user_notes: config.world.notes.clone(),
         })
     }
 

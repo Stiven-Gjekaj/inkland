@@ -12,7 +12,10 @@ use crate::features::Features;
 use crate::grid::Grid;
 
 /// The kind of a measurer (FMG `MeasurerType`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
 pub enum MeasurerKind {
     Ruler,
     Opisometer,
@@ -61,6 +64,42 @@ pub struct LegendItem {
 pub struct Legend {
     pub name: String,
     pub items: Vec<LegendItem>,
+    /// The top left corner of the box, in world units. `None`: the box
+    /// goes in the next free place.
+    pub at: Option<[f64; 2]>,
+}
+
+/// The measurers of a world: the default ruler unless the config turns it
+/// off, then the measurers of the config.
+pub fn measurers(config: &crate::config::Config, default: Vec<Measurer>) -> Vec<Measurer> {
+    let w = &config.world;
+    let mut out = if w.default_ruler { default } else { Vec::new() };
+    out.extend(w.measurers.iter().map(|m| Measurer {
+        kind: m.kind,
+        points: m.points.clone(),
+    }));
+    out
+}
+
+/// The legend boxes of the config.
+pub fn legends(config: &crate::config::Config) -> Vec<Legend> {
+    config
+        .world
+        .legends
+        .iter()
+        .map(|l| Legend {
+            name: l.name.clone(),
+            items: l
+                .items
+                .iter()
+                .map(|i| LegendItem {
+                    color: i.color.clone(),
+                    text: i.text.clone(),
+                })
+                .collect(),
+            at: l.at,
+        })
+        .collect()
 }
 
 /// The FMG margin of the default ruler, in FMG pixels.
@@ -104,7 +143,8 @@ pub fn default_ruler(grid: &Grid, features: &Features, px: f64) -> Vec<Measurer>
 /// A note of an entity of the world (FMG `NoteEntry`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Note {
-    /// The entity type: `state`, `marker`, `regiment`, or `zone`.
+    /// The entity type: `custom`, `state`, `marker`, `regiment`, or
+    /// `zone`.
     pub kind: &'static str,
     /// The id of the entity. A regiment has the id of its state first.
     pub id: String,
@@ -113,9 +153,20 @@ pub struct Note {
     pub note: String,
 }
 
-/// All notes of a world, grouped by entity type (`Notes.list`).
+/// All notes of a world, grouped by entity type (`Notes.list`). The notes
+/// of the config come first, with the type `custom`.
 pub fn notes(world: &crate::world::World) -> Vec<Note> {
-    let mut out = Vec::new();
+    let mut out: Vec<Note> = world
+        .user_notes
+        .iter()
+        .enumerate()
+        .map(|(k, n)| Note {
+            kind: "custom",
+            id: (k + 1).to_string(),
+            name: n.name.clone(),
+            note: n.note.clone(),
+        })
+        .collect();
     for st in &world.society.states {
         for r in &st.military {
             if !r.note.is_empty() {
@@ -192,5 +243,35 @@ mod tests {
         let markers = w.markers.iter().filter(|m| m.legend.is_some()).count();
         assert_eq!(notes.iter().filter(|n| n.kind == "marker").count(), markers);
         assert!(notes.iter().all(|n| !n.note.is_empty()));
+    }
+
+    #[test]
+    fn the_notes_measurers_and_legends_of_the_config_reach_the_world() {
+        let base = world(3);
+        assert_eq!(base.measurers.len(), 1, "the default ruler");
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 3, "frame": { "width": 400, "height": 300 },
+            "world": {
+                "cells": 3000, "template": "continents",
+                "notes": [{ "name": "The Old Road", "note": "Built by the first kings." }],
+                "default_ruler": false,
+                "measurers": [{ "kind": "opisometer", "points": [[10, 10], [40, 50], [70, 50]] }],
+                "legends": [{ "name": "Goods", "items": [{ "color": "#966f33", "text": "Wood" }] }]
+            }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        assert_eq!(w.measurers.len(), 1);
+        assert_eq!(w.measurers[0].kind, MeasurerKind::Opisometer);
+        assert_eq!(w.measurers[0].length(), 50.0 + 30.0);
+        assert_eq!(w.legends[0].name, "Goods");
+        assert_eq!(w.legends[0].items[0].text, "Wood");
+        let first = &notes(&w)[0];
+        assert_eq!(
+            (first.kind, first.id.as_str(), first.name.as_str()),
+            ("custom", "1", "The Old Road")
+        );
+        // Only the annotations differ from the world without them.
+        assert_eq!(w.society, base.society);
     }
 }
