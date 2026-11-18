@@ -7,8 +7,9 @@
 //! Pinned roads come first, in config order. A pinned road goes from its
 //! start place through its `via` points to its end place. With a
 //! `target_length`, a road that is too short gets a detour: a waypoint to
-//! one side of its longest leg, at a distance that a search finds so that
-//! the length is in the tolerance. The points of a pinned road move in
+//! one side of a leg, at a distance that a search finds so that the length
+//! is in the tolerance. The search tries the longest leg first, and on each
+//! leg the middle first, then the quarter points. The points of a pinned road move in
 //! their cells to cut the zigzag between cell sites, and the length is the
 //! length of that line. A road that is too long cannot become
 //! shorter; the report gives its real length, and its check fails.
@@ -432,22 +433,26 @@ fn route_pinned(
         return Ok(base);
     }
 
-    // A detour on the longest leg: a waypoint at distance `d` to one side
-    // of the middle of the leg.
-    let (leg, _) = stops
+    // A detour: a waypoint at distance `d` to one side of a point of a
+    // leg. The search tries the longest leg first, and on each leg the
+    // middle first, then the quarter points.
+    let mut legs: Vec<(usize, f64)> = stops
         .windows(2)
         .enumerate()
         .map(|(i, w)| (i, dist(grid.points[w[0]], grid.points[w[1]])))
-        .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
-        .expect("a road has a leg");
-    let a = grid.points[stops[leg]];
-    let b = grid.points[stops[leg + 1]];
-    let mid = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
-    let len_ab = dist(a, b).max(1e-9);
-    let normal = [-(b[1] - a[1]) / len_ab, (b[0] - a[0]) / len_ab];
+        .collect();
+    legs.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
     let (w, h) = (grid.width, grid.height);
-    let detour = |d: f64, side: f64| -> Option<(Vec<usize>, f64)> {
-        let p = [mid[0] + normal[0] * d * side, mid[1] + normal[1] * d * side];
+    let detour = |leg: usize, at: f64, d: f64, side: f64| -> Option<(Vec<usize>, f64)> {
+        let a = grid.points[stops[leg]];
+        let b = grid.points[stops[leg + 1]];
+        let len_ab = dist(a, b).max(1e-9);
+        let normal = [-(b[1] - a[1]) / len_ab, (b[0] - a[0]) / len_ab];
+        let base = [a[0] + (b[0] - a[0]) * at, a[1] + (b[1] - a[1]) * at];
+        let p = [
+            base[0] + normal[0] * d * side,
+            base[1] + normal[1] * d * side,
+        ];
         if p[0] < 0.0 || p[1] < 0.0 || p[0] > w || p[1] > h {
             return None;
         }
@@ -478,42 +483,48 @@ fn route_pinned(
             *best = Some((miss, cells));
         }
     };
-    for side in [1.0, -1.0] {
-        let mut prev: Option<(f64, f64)> = None;
-        for i in 1..=steps {
-            let d = max_d * i as f64 / steps as f64;
-            let Some((cells, l)) = detour(d, side) else {
-                continue;
-            };
-            consider(&mut best, cells, l);
-            if let Some((pd, pl)) = prev
-                && pl < lo
-                && l > hi
-            {
-                // Halve between pd and d.
-                let (mut x0, mut x1) = (pd, d);
-                for _ in 0..24 {
-                    let xm = (x0 + x1) / 2.0;
-                    let Some((cells, lm)) = detour(xm, side) else {
-                        break;
+    let found = |best: &Option<(f64, Vec<usize>)>| best.as_ref().is_some_and(|(m, _)| *m == 0.0);
+    'search: for &(leg, _) in &legs {
+        for at in [0.5, 0.25, 0.75] {
+            for side in [1.0, -1.0] {
+                let mut prev: Option<(f64, f64)> = None;
+                for i in 1..=steps {
+                    let d = max_d * i as f64 / steps as f64;
+                    let Some((cells, l)) = detour(leg, at, d, side) else {
+                        continue;
                     };
-                    consider(&mut best, cells, lm);
-                    if lm < lo {
-                        x0 = xm;
-                    } else if lm > hi {
-                        x1 = xm;
-                    } else {
+                    consider(&mut best, cells, l);
+                    if let Some((pd, pl)) = prev
+                        && pl < lo
+                        && l > hi
+                    {
+                        // Halve between pd and d.
+                        let (mut x0, mut x1) = (pd, d);
+                        for _ in 0..24 {
+                            let xm = (x0 + x1) / 2.0;
+                            let Some((cells, lm)) = detour(leg, at, xm, side) else {
+                                break;
+                            };
+                            consider(&mut best, cells, lm);
+                            if lm < lo {
+                                x0 = xm;
+                            } else if lm > hi {
+                                x1 = xm;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    if found(&best) {
+                        break 'search;
+                    }
+                    if l > hi {
+                        // A longer offset gives a longer road.
                         break;
                     }
+                    prev = Some((d, l));
                 }
             }
-            if best.as_ref().is_some_and(|(m, _)| *m == 0.0) {
-                break;
-            }
-            prev = Some((d, l));
-        }
-        if best.as_ref().is_some_and(|(m, _)| *m == 0.0) {
-            break;
         }
     }
     Ok(best.map_or(base, |(_, cells)| cells))
@@ -754,7 +765,7 @@ mod tests {
 
     #[test]
     fn a_road_meets_its_target_at_each_cell_count() {
-        for cells in [10_000, 20_000, 50_000] {
+        for cells in [10_000, 20_000, 30_000, 50_000] {
             let w = World::build(&book(cells)).unwrap();
             let r = pinned(&w, 0);
             assert!(
