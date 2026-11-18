@@ -56,6 +56,23 @@ pub struct Feature {
     pub height: f64,
 }
 
+impl Feature {
+    /// The points of the outline, clipped to the frame (FMG `clipPoly` in
+    /// `addFeature`). The loop is closed: the last point is the first. The
+    /// result is empty when the feature has no outline.
+    pub fn outline_points(&self, grid: &Grid) -> Vec<[f64; 2]> {
+        let Some((_, ring)) = self.outline.split_last() else {
+            return Vec::new();
+        };
+        let pts: Vec<[f64; 2]> = ring.iter().map(|&v| grid.vertices[v as usize]).collect();
+        let mut out = crate::geom::clip_polygon(&pts, [0.0, 0.0, grid.width, grid.height]);
+        if let Some(&first) = out.first() {
+            out.push(first);
+        }
+        out
+    }
+}
+
 /// No cell: a land cell with no water next to it has no haven.
 pub const NO_HAVEN: u32 = u32::MAX;
 
@@ -566,6 +583,26 @@ mod tests {
         }
         let total: f64 = f.list.iter().map(|x| x.area).sum();
         assert!(total > 400.0 * 300.0);
+        // The outline points are in the frame and closed. A feature at the
+        // frame edge has points on the edge.
+        let mut on_edge = 0;
+        for x in f.list.iter().filter(|x| x.kind != FeatureKind::Ocean) {
+            let pts = x.outline_points(&g);
+            assert!(pts.len() >= 4);
+            assert_eq!(pts.first(), pts.last());
+            for p in &pts {
+                assert!(p[0] >= 0.0 && p[0] <= g.width && p[1] >= 0.0 && p[1] <= g.height);
+                if p[0] == 0.0 || p[1] == 0.0 || p[0] == g.width || p[1] == g.height {
+                    on_edge += 1;
+                }
+            }
+        }
+        assert_eq!(
+            on_edge > 0,
+            f.list
+                .iter()
+                .any(|x| x.border && x.kind != FeatureKind::Ocean)
+        );
     }
 
     #[test]

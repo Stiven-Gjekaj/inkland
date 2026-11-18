@@ -70,7 +70,7 @@ pub fn world_value(world: &World, config: &Config) -> Value {
                 "cells": f.cells,
                 "border": f.border,
                 "area": round(f.area, 3),
-                "outline": f.outline.iter().map(|&v| point(world.grid.vertices[v as usize])).collect::<Vec<_>>(),
+                "outline": f.outline_points(&world.grid).into_iter().map(point).collect::<Vec<_>>(),
             });
             if f.kind == inkland_core::features::FeatureKind::Lake {
                 v["height"] = json!(round(f.height, 3));
