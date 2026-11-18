@@ -39,7 +39,8 @@ These notes describe `render.mode: "colour"`. The code is in
 | ice | `draw-ice.ts` | Glaciers and icebergs of `World::ice`. |
 | cells, grid, coordinates | `draw-cells.ts`, `draw-grid.ts`, `draw-coordinates.ts` | Also in print-safe mode. |
 | temperature, precipitation | `draw-temperature.ts`, `draw-precipitation.ts` | First grid. No wind arrows. |
-| population, emblems, markers | `draw-population.ts`, `draw-emblems.ts`, `draw-markers.ts` | Read `fmg::data`; the world has no such data yet. |
+| population, markers | `draw-population.ts`, `draw-markers.ts` | Read `fmg::data`. |
+| emblems | `draw-emblems.ts`, `renderers/emblems/*.ts` | Sizes, poles, collision, and hidden groups of FMG. See `docs/notes/emblems.md`. |
 | compass | `index.html` | The FMG rose with its lines, through the water mask. |
 | scale bar, vignette, legend | `draw-scalebar.ts`, `draw-vignette.ts`, `draw-legend.ts` | The legend lists the states, cultures, religions, or biomes. |
 | labels | `labels-renderer.ts`, `label-groups.ts` | The inkland placer, with the fonts, colours, and case of the label groups. |
@@ -66,5 +67,6 @@ These notes describe `render.mode: "colour"`. The code is in
 - `render.coastline: "fractal"` draws the FMG coastline in black.
 - `cells`, `grid`, `coordinates`, `coastline`, `ocean`, `borders`,
   `routes`, `burg-icons`, `scale-bar`, and `compass` have black and white
-  drawings. The other new layers draw nothing.
+  drawings. `emblems` has a drawing with hatching when
+  `render.emblems.hatching` is `true`. The other new layers draw nothing.
 - The river width comes from `River::width`, the FMG width.
