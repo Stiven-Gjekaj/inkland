@@ -59,6 +59,9 @@ Some data tables come from it. This file keeps its license notice.
     Noun Project, and Azgaar edited some of them. 7 files have the license
     CC0 1.0 (public domain). In inkland:
     `crates/inkland-render/assets/fmg/icons/goods`.
+  - 7 paper textures (JPEG files) and 5 ocean patterns (PNG files) that the
+    style presets name, from `public/images/textures` and `public/images`,
+    with no change. In inkland: `crates/inkland-render/assets/fmg/images`.
   - The SVG filters, the compass rose, the grid patterns, and the hatch
     patterns, from `src/index.html`, and the biome colours and relief pools, from
     `src/model/physical/biomes-generator.ts`. In inkland:
