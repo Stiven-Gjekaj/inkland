@@ -238,8 +238,14 @@ impl Labels {
 struct Candidate {
     geometry: Geometry,
     boxes: Vec<Obb>,
+    /// Font size, in mm.
+    size: f64,
     spacing: f64,
     cost: f64,
+    /// Lower tiers are tried first. A candidate of tier 1 is a second
+    /// choice: the placer uses it only when no candidate of tier 0 has a
+    /// free place.
+    tier: u8,
     /// The river that the label is for. A label does not cost more for
     /// crossing its own river.
     river: Option<usize>,
@@ -253,7 +259,6 @@ struct Request {
     group: &'static str,
     text: String,
     family: String,
-    size: f64,
     required: bool,
     /// Lower ranks are placed first.
     rank: u8,
@@ -334,8 +339,10 @@ fn point_candidates(
                 anchor,
                 angle: 0,
             },
+            size,
             spacing: 0.0,
             cost: 0.1 * i as f64,
+            tier: 0,
             river: None,
         })
         .collect()
@@ -366,10 +373,26 @@ fn depths(world: &World, area: &[bool]) -> Vec<u32> {
 
 /// The least distance between two anchors of an area label, in mm.
 const ANCHOR_GAP: f64 = 3.0;
+/// The sizes of an area label, as parts of its full size, largest first.
+/// The smallest is the smallest size of a state label in the original
+/// program (`MIN_FONT_SIZE` of `fit-state-label.ts`).
+const AREA_STEPS: [f64; 5] = [1.0, 0.85, 0.7, 0.55, 0.4];
+/// The part of the run of an area that the text of its label can use
+/// (`PATH_USAGE` of `fit-state-label.ts`).
+const FIT: f64 = 0.9;
+/// The smallest font size that an area label gets when it becomes smaller
+/// to fit, in points. A label with a smaller full size keeps its size.
+pub const MIN_LABEL_PT: f64 = 5.0;
 /// The most anchors of an area label.
 const MAX_ANCHORS: usize = 40;
 
 /// Candidates for the label of an area, on its deepest cells.
+///
+/// On each anchor, the label gets the largest size of `AREA_STEPS` that
+/// fits in the run of the area, as the original program fits state labels.
+/// Smaller sizes and tighter letters are candidates of tier 1, for a label
+/// that finds no free place. `halo` is the reach of the halo, as a part of
+/// the font size.
 #[allow(clippy::too_many_arguments)]
 fn area_candidates(
     world: &World,
@@ -379,7 +402,7 @@ fn area_candidates(
     text: &str,
     f: &FontMetrics,
     size: f64,
-    pad: f64,
+    halo: f64,
     spread: (f64, f64),
 ) -> Vec<Candidate> {
     let g = &world.grid;
@@ -400,8 +423,14 @@ fn area_candidates(
         .collect();
     cells.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     let n = text.chars().count();
-    let w0 = f.width(text, size, 0.0);
-    let (ch, dd) = (f.cap(size), 0.6 * f.descent(size));
+    let least = pt(MIN_LABEL_PT).min(size);
+    let mut sizes: Vec<f64> = Vec::new();
+    for k in AREA_STEPS {
+        let s = (size * k).max(least);
+        if sizes.last().is_none_or(|&l| l - s > 1e-9) {
+            sizes.push(s);
+        }
+    }
     // Anchor cells: the deepest cells first, each at least `ANCHOR_GAP` from
     // the anchors before it, so the candidates spread over the area.
     let mut anchors: Vec<(u32, [f64; 2])> = Vec::new();
@@ -440,85 +469,110 @@ fn area_candidates(
             };
             let (back, ahead) = (walk(-1.0), walk(1.0));
             let run = back + ahead;
-            let spaced = if n > 1 {
-                ((0.7 * run - w0) / (n - 1) as f64).clamp(spread.0 * size, spread.1 * size)
-            } else {
-                0.0
-            };
-            // Spaced letters first; tight letters as a second choice.
-            for (tight, spacing) in [(false, spaced), (true, spread.0 * size)] {
-                if tight && (n < 2 || spacing >= spaced) {
-                    continue;
-                }
-                let w = w0 + spacing * n.saturating_sub(1) as f64;
-                // The middle of the run, moved so that the text stays in the map.
-                let mid = (ahead - back) / 2.0;
-                let mut centre = [q[0] + axis[0] * mid, q[1] + axis[1] * mid];
-                let half = w / 2.0 + pad;
-                let (lo, hi, k) = if turn == 0 {
-                    (inner[0] + half, inner[2] - half, 0)
+            // The largest size with tight letters in the run, or the
+            // smallest size.
+            let fit = sizes
+                .iter()
+                .position(|&s| f.width(text, s, spread.0 * s) <= FIT * run)
+                .unwrap_or(sizes.len() - 1);
+            for (step, &size) in sizes.iter().enumerate().skip(fit) {
+                let tier = u8::from(step > fit);
+                let pad = pad_of(size, halo);
+                let w0 = f.width(text, size, 0.0);
+                let (ch, dd) = (f.cap(size), 0.6 * f.descent(size));
+                let spaced = if n > 1 {
+                    ((0.7 * run - w0) / (n - 1) as f64).clamp(spread.0 * size, spread.1 * size)
                 } else {
-                    (inner[1] + half, inner[3] - half, 1)
+                    0.0
                 };
-                if lo > hi {
-                    continue;
-                }
-                centre[k] = centre[k].clamp(lo, hi);
-                // The baseline: glyphs from `cap` above it to `dd` below it,
-                // centred on the line through the cell.
-                let lift = (ch - dd) / 2.0;
-                let (bx, by) = if turn == 0 {
-                    (centre[0], centre[1] + lift)
+                // Spaced letters first; tight letters as a second choice. In
+                // tier 1, tight letters and letters without space.
+                let spacings = if tier == 0 {
+                    [(false, spaced), (true, spread.0 * size)]
                 } else {
-                    (centre[0] + lift, centre[1])
+                    [(true, spread.0 * size), (true, 0.0)]
                 };
-                let b = Obb {
-                    c: centre,
-                    u: axis,
-                    h: [half, (ch + dd) / 2.0 + pad],
-                };
-                // The part of the label outside the area costs more.
-                let mut outside = 0;
-                for i in 0..5 {
-                    for j in 0..3 {
-                        let s = -b.h[0] + 2.0 * b.h[0] * f64::from(i) / 4.0;
-                        let t = -b.h[1] + b.h[1] * f64::from(j);
-                        let p = [
-                            b.c[0] + b.u[0] * s - b.u[1] * t,
-                            b.c[1] + b.u[1] * s + b.u[0] * t,
-                        ];
-                        if !in_area(p) {
-                            outside += 1;
+                for (tight, spacing) in spacings {
+                    if tight && tier == 0 && (n < 2 || spacing >= spaced) {
+                        continue;
+                    }
+                    if tier == 1 && spacing == 0.0 && (n < 2 || spread.0 == 0.0) {
+                        continue;
+                    }
+                    let w = w0 + spacing * n.saturating_sub(1) as f64;
+                    // The middle of the run, moved so that the text stays in the map.
+                    let mid = (ahead - back) / 2.0;
+                    let mut centre = [q[0] + axis[0] * mid, q[1] + axis[1] * mid];
+                    let half = w / 2.0 + pad;
+                    let (lo, hi, k) = if turn == 0 {
+                        (inner[0] + half, inner[2] - half, 0)
+                    } else {
+                        (inner[1] + half, inner[3] - half, 1)
+                    };
+                    if lo > hi {
+                        continue;
+                    }
+                    centre[k] = centre[k].clamp(lo, hi);
+                    // The baseline: glyphs from `cap` above it to `dd` below it,
+                    // centred on the line through the cell.
+                    let lift = (ch - dd) / 2.0;
+                    let (bx, by) = if turn == 0 {
+                        (centre[0], centre[1] + lift)
+                    } else {
+                        (centre[0] + lift, centre[1])
+                    };
+                    let b = Obb {
+                        c: centre,
+                        u: axis,
+                        h: [half, (ch + dd) / 2.0 + pad],
+                    };
+                    // The part of the label outside the area costs more.
+                    let mut outside = 0;
+                    for i in 0..5 {
+                        for j in 0..3 {
+                            let s = -b.h[0] + 2.0 * b.h[0] * f64::from(i) / 4.0;
+                            let t = -b.h[1] + b.h[1] * f64::from(j);
+                            let p = [
+                                b.c[0] + b.u[0] * s - b.u[1] * t,
+                                b.c[1] + b.u[1] * s + b.u[0] * t,
+                            ];
+                            if !in_area(p) {
+                                outside += 1;
+                            }
                         }
                     }
-                }
-                // Skip a candidate that is almost the same as one before it.
-                if out.iter().any(|o| match o.geometry {
-                    Geometry::Point { x, y, angle, .. } => {
-                        angle == turn
-                            && (o.spacing - spacing).abs() < 1e-9
-                            && (x - bx).abs() < 1.0
-                            && (y - by).abs() < 1.0
+                    // Skip a candidate that is almost the same as one before it.
+                    if out.iter().any(|o| match o.geometry {
+                        Geometry::Point { x, y, angle, .. } => {
+                            angle == turn
+                                && (o.size - size).abs() < 1e-9
+                                && (o.spacing - spacing).abs() < 1e-9
+                                && (x - bx).abs() < 1.0
+                                && (y - by).abs() < 1.0
+                        }
+                        Geometry::Path { .. } => false,
+                    }) {
+                        continue;
                     }
-                    Geometry::Path { .. } => false,
-                }) {
-                    continue;
+                    out.push(Candidate {
+                        boxes: vec![b],
+                        geometry: Geometry::Point {
+                            x: bx,
+                            y: by,
+                            anchor: "middle",
+                            angle: turn,
+                        },
+                        size,
+                        spacing,
+                        cost: 3.0 * f64::from(outside) / 15.0
+                            + 0.5 * (1.0 - f64::from(d) / f64::from(max_depth))
+                            + if turn == 0 { 0.0 } else { 0.4 }
+                            + if tight { 0.3 } else { 0.0 }
+                            + 2.0 * (1.0 - size / sizes[0]),
+                        tier,
+                        river: None,
+                    });
                 }
-                out.push(Candidate {
-                    boxes: vec![b],
-                    geometry: Geometry::Point {
-                        x: bx,
-                        y: by,
-                        anchor: "middle",
-                        angle: turn,
-                    },
-                    spacing,
-                    cost: 3.0 * f64::from(outside) / 15.0
-                        + 0.5 * (1.0 - f64::from(d) / f64::from(max_depth))
-                        + if turn == 0 { 0.0 } else { 0.4 }
-                        + if tight { 0.3 } else { 0.0 },
-                    river: None,
-                });
             }
         }
     }
@@ -624,8 +678,10 @@ fn river_candidates(
                     offset: gap,
                 },
                 boxes,
+                size,
                 spacing,
                 cost: middle + 2.0 * (1.0 - straight),
+                tier: 0,
                 river: Some(river),
             });
         }
@@ -857,7 +913,6 @@ pub fn place_with(
             group,
             text,
             family: look.family,
-            size,
             required,
             rank,
         });
@@ -897,7 +952,6 @@ pub fn place_with(
         let look = style("river");
         let name = look.text(&name);
         let f = FontMetrics::of(&look.family);
-        let spacing = 0.1 * size;
         requests.push(Request {
             place: None,
             candidates: river_candidates(
@@ -908,14 +962,13 @@ pub fn place_with(
                 f,
                 size,
                 pad_of(size, look.halo),
-                spacing,
+                0.1 * size,
             ),
             id: format!("label-river-{key}"),
             kind: Kind::River,
             group: "river",
             text: name,
             family: look.family,
-            size,
             required,
             rank: if required { 1 } else { 6 },
         });
@@ -948,7 +1001,7 @@ pub fn place_with(
                 &name,
                 f,
                 size,
-                pad_of(size, look.halo),
+                look.halo,
                 (0.05, 0.3),
             ),
             id: format!("label-lake-{}", n.id),
@@ -956,7 +1009,6 @@ pub fn place_with(
             group: "lake",
             text: name,
             family: look.family,
-            size,
             required: false,
             rank: 6,
         });
@@ -991,7 +1043,7 @@ pub fn place_with(
                     &name,
                     f,
                     size,
-                    pad_of(size, look.halo),
+                    look.halo,
                     (0.1, 0.6),
                 ),
                 id: format!("label-water-{}", n.id),
@@ -999,7 +1051,6 @@ pub fn place_with(
                 group: "ocean",
                 text: name,
                 family: look.family,
-                size,
                 required: false,
                 rank: 6,
             });
@@ -1040,7 +1091,7 @@ pub fn place_with(
                 &name,
                 f,
                 size,
-                pad_of(size, look.halo),
+                look.halo,
                 (0.15, 0.8),
             ),
             id: format!("label-state-{}", st.id),
@@ -1048,7 +1099,6 @@ pub fn place_with(
             group: "state",
             text: name,
             family: look.family,
-            size,
             required: capital_in_view,
             rank: 2,
         });
@@ -1084,7 +1134,7 @@ pub fn place_with(
                 &name,
                 f,
                 size,
-                pad_of(size, look.halo),
+                look.halo,
                 (0.05, 0.5),
             ),
             id: format!("label-region-{}", pin.id),
@@ -1092,7 +1142,6 @@ pub fn place_with(
             group: "region",
             text: name,
             family: look.family,
-            size,
             required: true,
             rank: 2,
         });
@@ -1138,7 +1187,7 @@ pub fn place_with(
                     &name,
                     f,
                     size,
-                    pad_of(size, look.halo),
+                    look.halo,
                     (0.05, 0.5),
                 )
             } else {
@@ -1152,7 +1201,6 @@ pub fn place_with(
                 group: "feature",
                 text: name,
                 family: look.family,
-                size,
                 required: true,
                 rank: 1,
             });
@@ -1203,49 +1251,57 @@ pub fn place_with(
         };
         let mut best: Option<(f64, usize, Vec<usize>)> = None;
         let mut any_inside = false;
-        for &hide in passes {
-            for (k, cand) in req.candidates.iter().enumerate() {
-                if !cand.boxes.iter().all(|b| b.inside(inner)) {
-                    continue;
-                }
-                any_inside = true;
-                let mut covered: Vec<usize> = Vec::new();
-                let hit = cand.boxes.iter().any(|b| {
-                    index.near(b.bounds()).into_iter().any(|i| {
-                        if gone[i] || !obstacles[i].overlaps(b) {
-                            return false;
-                        }
-                        if hide && hideable[i].is_some() {
-                            if !covered.contains(&i) {
-                                covered.push(i);
+        let tiers = req.candidates.iter().map(|c| c.tier).max().unwrap_or(0);
+        'passes: for &hide in passes {
+            for tier in 0..=tiers {
+                for (k, cand) in req.candidates.iter().enumerate() {
+                    if cand.tier != tier {
+                        continue;
+                    }
+                    if !cand.boxes.iter().all(|b| b.inside(inner)) {
+                        continue;
+                    }
+                    any_inside = true;
+                    let mut covered: Vec<usize> = Vec::new();
+                    let hit = cand.boxes.iter().any(|b| {
+                        index.near(b.bounds()).into_iter().any(|i| {
+                            if gone[i] || !obstacles[i].overlaps(b) {
+                                return false;
                             }
-                            return false;
-                        }
-                        true
-                    })
-                });
-                if hit {
-                    continue;
-                }
-                let mut crossed: Vec<usize> = Vec::new();
-                for b in &cand.boxes {
-                    for s in seg_index.near(b.bounds()) {
-                        let (river, p, q) = segments[s];
-                        if Some(river) != cand.river && !crossed.contains(&river) && b.crosses(p, q)
-                        {
-                            crossed.push(river);
+                            if hide && hideable[i].is_some() {
+                                if !covered.contains(&i) {
+                                    covered.push(i);
+                                }
+                                return false;
+                            }
+                            true
+                        })
+                    });
+                    if hit {
+                        continue;
+                    }
+                    let mut crossed: Vec<usize> = Vec::new();
+                    for b in &cand.boxes {
+                        for s in seg_index.near(b.bounds()) {
+                            let (river, p, q) = segments[s];
+                            if Some(river) != cand.river
+                                && !crossed.contains(&river)
+                                && b.crosses(p, q)
+                            {
+                                crossed.push(river);
+                            }
                         }
                     }
+                    let cost = cand.cost
+                        + RIVER_COST * crossed.len() as f64
+                        + HIDE_COST * covered.len() as f64;
+                    if best.as_ref().is_none_or(|(c, _, _)| cost < *c) {
+                        best = Some((cost, k, covered));
+                    }
                 }
-                let cost = cand.cost
-                    + RIVER_COST * crossed.len() as f64
-                    + HIDE_COST * covered.len() as f64;
-                if best.as_ref().is_none_or(|(c, _, _)| cost < *c) {
-                    best = Some((cost, k, covered));
+                if best.is_some() {
+                    break 'passes;
                 }
-            }
-            if best.is_some() {
-                break;
             }
         }
         match best {
@@ -1269,7 +1325,7 @@ pub fn place_with(
                     group: req.group,
                     text: req.text,
                     family: req.family,
-                    size: req.size,
+                    size: cand.size,
                     spacing: cand.spacing,
                     geometry: cand.geometry,
                     boxes: cand.boxes,
@@ -1452,6 +1508,66 @@ mod tests {
         assert!(u.required);
         assert_eq!(u.reason, "outside");
         assert!(labels.placed.iter().all(|l| l.id != "label-region-hills"));
+    }
+
+    #[test]
+    fn an_area_label_gets_smaller_to_fit_its_area() {
+        let big = inkland_core::config::FontSizes {
+            region: 40.0,
+            ..Default::default()
+        };
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({ "render": {
+                "font_sizes_pt": serde_json::to_value(&big).unwrap()
+            }}),
+        );
+        let labels = check_no_overlap(&w, &c);
+        let l = labels
+            .placed
+            .iter()
+            .find(|l| l.id == "label-region-hills")
+            .expect("placed");
+        assert!(l.size < pt(40.0) - 1e-9, "{}", l.size);
+        assert!(l.size >= 0.4 * pt(40.0) - 1e-9, "{}", l.size);
+    }
+
+    #[test]
+    fn smaller_sizes_and_tighter_letters_are_a_second_choice() {
+        let (w, c) = world(3, "pangea", json!({}));
+        let page = Page::new(&c, &c.variants[0]);
+        let [mx, my, mw, mh] = page.map_rect();
+        let inner = [mx + 0.5, my + 0.5, mx + mw - 0.5, my + mh - 0.5];
+        let area: Vec<bool> = (0..w.grid.len()).map(|c| w.features.is_land(c)).collect();
+        let f = FontMetrics::of("IM Fell English SC");
+        let size = pt(10.0);
+        let cands = area_candidates(
+            &w,
+            &page,
+            inner,
+            &area,
+            "Long Name",
+            f,
+            size,
+            0.0,
+            (0.15, 0.8),
+        );
+        let first: Vec<&Candidate> = cands.iter().filter(|c| c.tier == 0).collect();
+        let second: Vec<&Candidate> = cands.iter().filter(|c| c.tier == 1).collect();
+        assert!(!first.is_empty() && !second.is_empty());
+        let largest = first.iter().map(|c| c.size).fold(0.0, f64::max);
+        assert!((largest - size).abs() < 1e-9);
+        assert!(second.iter().all(|c| c.size < size));
+        assert!(second.iter().any(|c| c.spacing == 0.0));
+        // No label is smaller than 0.4 of its size or than the least size.
+        for c in &cands {
+            assert!(
+                c.size >= (0.4 * size).max(pt(MIN_LABEL_PT)) - 1e-9,
+                "{}",
+                c.size
+            );
+        }
     }
 
     #[test]
