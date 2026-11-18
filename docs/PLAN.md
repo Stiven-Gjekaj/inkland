@@ -499,12 +499,19 @@ and the test that closes each milestone. We stop for a review after each one.
   more on slopes, in wetland, and into a river (a bridge or a ford). A cell
   that a road uses costs less, so roads share their paths.
 - A pinned road goes from its start place, through its `via` points in
-  order, to its end place. A later leg does not go back over an earlier leg.
+  order, to its end place. A step of a later leg into a cell of an earlier
+  leg costs four times more. A later leg goes back over an earlier leg only
+  where no other way is near. A block can wall in a stop.
+- The line of a pinned road is taut: each point moves in its cell toward
+  the middle of its neighbours, so that the line has no zigzag between the
+  cell sites. The ends and the cells of places do not move. The length of
+  the road is the length of this line, and the SVG draws this line.
 - Target length: if the road is too long with terrain costs, the router
   uses the shortest path by distance. If the road is too short, it gets a
-  detour: a waypoint to one side of the middle of its longest leg. A scan of
-  the offset on both sides, and halving where the length passes the target,
-  finds an offset that gives a length in the tolerance. A road cannot be
+  detour: a waypoint to one side of a leg. The search tries the longest leg
+  first, and on each leg the middle first, then the quarter points. A scan
+  of the offset on both sides, and halving where the length passes the
+  target, finds an offset that gives a length in the tolerance. A road cannot be
   shorter than its shortest path: then the report gives
   `within_tolerance: false`, the check `pinned_road_length` fails, the
   files are written, and the exit code is 1.
