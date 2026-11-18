@@ -139,6 +139,12 @@ export global Ui {
     in-out property <int> tab: 0;
     // The top of the stack of the dialogs.
     in-out property <int> dialog-top: 10;
+    // The place of a dialog for the session: its last place, or the
+    // default that the dialog gives.
+    pure callback dialog-x(string, length) -> length;
+    pure callback dialog-y(string, length) -> length;
+    // A dialog moved: its id and its new place.
+    callback dialog-moved(string, length, length);
 }
 
 export global Actions {

@@ -15,7 +15,11 @@ export component Dialog inherits Rectangle {
     in-out property <length> pos-y: 60px;
     // The place in the stack of the dialogs. `DialogStack.top` is the top.
     in-out property <int> stack;
-    init => { root.raise(); }
+    init => {
+        root.pos-x = Ui.dialog-x(root.id, root.pos-x);
+        root.pos-y = Ui.dialog-y(root.id, root.pos-y);
+        root.raise();
+    }
     function raise() {
         Ui.dialog-top += 1;
         root.stack = Ui.dialog-top;
@@ -57,6 +61,7 @@ export component Dialog inherits Rectangle {
                     if self.pressed {
                         root.pos-x += self.mouse-x - self.pressed-x;
                         root.pos-y += self.mouse-y - self.pressed-y;
+                        Ui.dialog-moved(root.id, root.pos-x, root.pos-y);
                     }
                 }
             }

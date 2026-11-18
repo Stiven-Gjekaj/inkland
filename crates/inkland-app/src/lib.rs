@@ -11,6 +11,7 @@ pub mod options;
 pub mod overlay;
 pub mod overviews;
 pub mod pins;
+pub mod positions;
 pub mod rows;
 pub mod snapshot;
 pub mod variants;

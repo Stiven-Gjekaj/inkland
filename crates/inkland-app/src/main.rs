@@ -201,6 +201,8 @@ struct Controller {
     idle: slint::Timer,
     /// The file for the window image of `INKLAND_APP_SNAPSHOT`.
     snapshot: RefCell<Option<PathBuf>>,
+    /// The places of the dialogs for the session.
+    positions: RefCell<inkland_app::positions::Positions>,
 }
 
 fn s(text: impl AsRef<str>) -> SharedString {
@@ -1814,6 +1816,7 @@ fn main() -> Result<(), slint::PlatformError> {
         results,
         idle: slint::Timer::default(),
         snapshot: RefCell::new(std::env::var_os("INKLAND_APP_SNAPSHOT").map(PathBuf::from)),
+        positions: RefCell::default(),
     });
 
     let a = ui.global::<Actions>();
@@ -1986,6 +1989,15 @@ fn main() -> Result<(), slint::PlatformError> {
     });
     let c = Rc::clone(&app);
     a.on_open_tool(move |id| c.open_tool(&id));
+    {
+        let u = ui.global::<Ui>();
+        let c = Rc::clone(&app);
+        u.on_dialog_x(move |id, x| c.positions.borrow().get(&id, [x, 0.0])[0]);
+        let c = Rc::clone(&app);
+        u.on_dialog_y(move |id, y| c.positions.borrow().get(&id, [0.0, y])[1]);
+        let c = Rc::clone(&app);
+        u.on_dialog_moved(move |id, x, y| c.positions.borrow_mut().set(&id, [x, y]));
+    }
     let c = Rc::clone(&app);
     a.on_emblem_select(move |kind, index| {
         let ui = c.ui();
