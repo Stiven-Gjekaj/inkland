@@ -461,6 +461,22 @@ fn select_form(
     match s.form.as_str() {
         "Monarchy" => {
             let form = MONARCHY[tier];
+            // Vassal forms: some vassal duchies on the borderland, English
+            // vassals, and some other vassals.
+            let vassal = crate::diplomacy::is_vassal(s);
+            if form == "Duchy"
+                && s.neighbors.len() > 1
+                && (rng.rand(0, 6) as usize) < s.neighbors.len()
+                && vassal
+            {
+                return name("Marches");
+            }
+            if base == 1 && rng.p(0.3) && vassal {
+                return name("Dominion");
+            }
+            if rng.p(0.3) && vassal {
+                return name("Protectorate");
+            }
             let empire_or_kingdom = form == "Empire" || form == "Kingdom";
             let duchy = form == "Grand Duchy" || form == "Duchy";
             let special = match base {
@@ -600,5 +616,30 @@ mod tests {
         if s.states.len() > 1 {
             assert!(s.states.iter().any(|st| !st.neighbors.is_empty()));
         }
+    }
+
+    #[test]
+    fn only_vassals_take_the_vassal_forms() {
+        let mut seen = 0;
+        for seed in 0..16 {
+            let c: Config = serde_json::from_value(json!({
+                "version": 1, "seed": seed, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea", "states": 12 }
+            }))
+            .unwrap();
+            let w = World::build(&c).unwrap();
+            for st in &w.society.states {
+                if ["Marches", "Dominion", "Protectorate"].contains(&st.form_name.as_str()) {
+                    assert!(
+                        crate::diplomacy::is_vassal(st),
+                        "{} is no vassal",
+                        st.full_name
+                    );
+                    assert_eq!(st.form, "Monarchy");
+                    seen += 1;
+                }
+            }
+        }
+        assert!(seen > 0, "no vassal form in 16 worlds");
     }
 }
