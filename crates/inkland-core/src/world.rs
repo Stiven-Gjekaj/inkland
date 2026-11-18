@@ -546,7 +546,7 @@ impl World {
             roads: &roads,
             sea_routes: &sea_routes,
             transports: &transports,
-        });
+        })?;
         Ok(World {
             seed: config.seed,
             width: w,

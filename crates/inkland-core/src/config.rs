@@ -255,6 +255,33 @@ pub struct World {
     /// Changes to the regiments: add, change, move, split, or remove.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub regiments: Vec<RegimentEntry>,
+    /// Changes to the journeys: add a journey, or remove one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub journeys: Vec<JourneyEntry>,
+}
+
+/// A change to the journeys. With `remove`, the entry removes the journey
+/// `id`. Else it adds a journey through its stops, in order: one segment
+/// for each pair of stops, with one transport.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct JourneyEntry {
+    /// The journey to remove.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<u32>,
+    /// Remove the journey `id`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub remove: bool,
+    /// The name. Default: the first and the last stop, with an arrow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The stops `[[x, y], ...]`, in units: the cell at each point. 2 or
+    /// more.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stops: Vec<Point>,
+    /// The name of the transport. Default: the first land transport.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
 }
 
 /// A change to the regiments. With `add`, the entry adds a regiment of the
@@ -738,6 +765,7 @@ impl Default for World {
             finance: Vec::new(),
             markets: Vec::new(),
             regiments: Vec::new(),
+            journeys: Vec::new(),
         }
     }
 }

@@ -296,6 +296,18 @@ A grid.
 |---|---|---|---|---|
 | `step` | number | yes |  | Distance between grid lines, in units. |
 
+### JourneyEntry
+
+A change to the journeys. With `remove`, the entry removes the journey `id`. Else it adds a journey through its stops, in order: one segment for each pair of stops, with one transport.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `id` | integer |  |  | The journey to remove. |
+| `name` | string |  |  | The name. Default: the first and the last stop, with an arrow. |
+| `remove` | boolean |  |  | Remove the journey `id`. |
+| `stops` | array of array of 2 number |  |  | The stops `[[x, y], ...]`, in units: the cell at each point. 2 or more. |
+| `transport` | string |  |  | The name of the transport. Default: the first land transport. |
+
 ### LabelOptions
 
 Label options.
@@ -772,6 +784,7 @@ Generation options.
 | `goods` | array of [`GoodEntry`](#goodentry) |  |  | Changes to the goods catalogue of Azgaar's Fantasy Map Generator, in order. Empty: the default catalogue of 71 goods. |
 | `growth_rate` | number |  | `1.0` | How far cultures and states grow. 0.1 to 2. Cultures and states stop at a total cost that this value multiplies. |
 | `jitter` | number |  |  | How far each point of the first grid can move from its lattice position, as a fraction of half the distance between neighbor points. 0 to 0.9. 0 gives a regular lattice. |
+| `journeys` | array of [`JourneyEntry`](#journeyentry) |  |  | Changes to the journeys: add a journey, or remove one. |
 | `lake_elevation_limit` | integer |  |  | A land low point becomes a lake when its water cannot reach other water through cells lower than its height plus this limit, on the height scale 0 to 100. 0 to 80. 80 makes no such lakes. |
 | `lattice` | [`Lattice`](#lattice) |  |  | The lattice of the points of the first grid: `square`, `hex-pointy`, `hex-flat`, `diamond`, or `triangle`. |
 | `legends` | array of [`LegendEntry`](#legendentry) |  |  | Legend boxes: a title and colored items. |

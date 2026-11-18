@@ -132,6 +132,10 @@ codes! {
         /// state, an unknown unit, a negative number of troops, a regiment
         /// too small to split, or no regiment to change.
         RegimentInvalid = "REGIMENT_INVALID" => Infeasible,
+        /// An entry of `world.journeys` removes a journey that does not
+        /// exist, adds a journey with fewer than 2 stops or an unknown
+        /// transport, or a leg has no valid path for the transport.
+        JourneyInvalid = "JOURNEY_INVALID" => Infeasible,
         /// An edit of a world file sets or unsets a value that a
         /// `world.json` does not keep: an overlay, a variant, a render
         /// option, or a font directory.

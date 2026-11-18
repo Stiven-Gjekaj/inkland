@@ -111,13 +111,111 @@ pub struct Journey {
 /// The journeys of a new map: one random journey, or none when the map
 /// has fewer than two places with a path between them
 /// (`Journeys.generate`).
-pub fn generate(input: &Input) -> Vec<Journey> {
+pub fn generate(input: &Input) -> Result<Vec<Journey>, crate::error::Error> {
     let map = Map::new(input);
     let mut rng = Rand::new(SeedTree::new(input.config.seed).part_rng(Layer::Journeys, "story"));
     let ratio = distance_unit_ratio(&input.config.units.name);
-    random_journey(&map, &mut rng, 1, ratio)
+    let mut out: Vec<Journey> = random_journey(&map, &mut rng, 1, ratio)
         .into_iter()
-        .collect()
+        .collect();
+    apply_config(input, &map, ratio, &mut out)?;
+    Ok(out)
+}
+
+/// Apply the journey changes of the config, in order (`world.journeys`).
+fn apply_config(
+    input: &Input,
+    map: &Map,
+    ratio: f64,
+    out: &mut Vec<Journey>,
+) -> Result<(), crate::error::Error> {
+    use crate::error::{Error, ErrorCode};
+    for (i, e) in input.config.world.journeys.iter().enumerate() {
+        let path = format!("/world/journeys/{i}");
+        let bad = |m: String| Error::new(ErrorCode::JourneyInvalid, path.clone(), m);
+        if e.remove {
+            let id = e.id.ok_or_else(|| bad("remove needs id".into()))?;
+            let k = out
+                .iter()
+                .position(|j| j.id == id)
+                .ok_or_else(|| bad(format!("there is no journey {id}")))?;
+            out.remove(k);
+            continue;
+        }
+        if e.stops.len() < 2 {
+            return Err(bad("a journey needs 2 stops or more".into()));
+        }
+        let transport = match &e.transport {
+            Some(name) => transports::get(&map.transports, name)
+                .ok_or_else(|| bad(format!("no transport has the name \"{name}\"")))?,
+            None => transports::by_domain(&map.transports, Domain::Land)
+                .ok_or_else(|| bad("the transports have no land transport".into()))?,
+        };
+        let cells: Vec<usize> = e
+            .stops
+            .iter()
+            .map(|p| input.grid.find_cell(p[0], p[1]))
+            .collect();
+        let place = |c: usize| {
+            map.burgs
+                .iter()
+                .find(|b| b.cell == c)
+                .map_or_else(|| format!("cell {c}"), |b| b.name.clone())
+        };
+        let mut segments = Vec::new();
+        for (k, w) in cells.windows(2).enumerate() {
+            let (from, to) = (w[0], w[1]);
+            let domain = transport.domain;
+            let r = map.find_path(from, to, domain, false);
+            if r.error.is_some()
+                || r.points.is_empty()
+                || !Pathfinder::is_valid_path(map, &r.points, domain)
+            {
+                return Err(bad(format!(
+                    "no path for {} goes from stop {} to stop {}",
+                    transport.name,
+                    k + 1,
+                    k + 2
+                )));
+            }
+            segments.push(Segment {
+                id: k as u32 + 1,
+                name: format!("{} \u{2192} {}", place(from), place(to)),
+                from,
+                to,
+                transport: transport.name.clone(),
+                domain,
+                hours_per_day: transports::resolve_hours_per_day(transport),
+                speed: transport.speed,
+                distance: r.distance,
+                points: r.points,
+                avoid_roads: false,
+                duration: None,
+                hours: 0.0,
+                elapsed_hours: 0.0,
+                note: None,
+            });
+        }
+        let id = out.iter().map(|j| j.id + 1).max().unwrap_or(1);
+        let name = e.name.clone().unwrap_or_else(|| {
+            format!(
+                "{} \u{2192} {}",
+                place(cells[0]),
+                place(cells[cells.len() - 1])
+            )
+        });
+        let mut journey = Journey {
+            id,
+            name,
+            kind: lore::DEFAULT_JOURNEY_TYPE,
+            color: crate::colors::cardinal_color(id as usize - 1).to_string(),
+            segments,
+            totals: Totals::default(),
+        };
+        finish(&mut journey, ratio);
+        out.push(journey);
+    }
+    Ok(())
 }
 
 /// A story journey, else the fallback journey, with the id `id`
@@ -566,6 +664,51 @@ mod tests {
             }
             assert_eq!(j.totals, totals(s, distance_unit_ratio("mile")));
             assert!(j.totals.distance > 0.0 && j.totals.days > 0.0);
+        }
+    }
+
+    #[test]
+    fn journey_entries_add_and_remove_journeys() {
+        let (mut c, w, _) = map::tests::world_map(11);
+        let places: Vec<[f64; 2]> = w
+            .society
+            .places
+            .iter()
+            .filter(|p| p.capital)
+            .map(|p| p.at)
+            .take(3)
+            .collect();
+        assert!(places.len() >= 2, "the test world has capitals");
+        c.world.journeys = serde_json::from_value(serde_json::json!([
+            { "id": 1, "remove": true },
+            { "stops": places, "name": "The Grand Tour", "transport": "Horseback (spare horse)" }
+        ]))
+        .unwrap();
+        let w2 = crate::world::World::build(&c).unwrap();
+        assert_eq!(w2.journeys.len(), 1);
+        let j = &w2.journeys[0];
+        assert_eq!(j.name, "The Grand Tour");
+        assert_eq!(j.segments.len(), places.len() - 1);
+        assert!(
+            j.segments
+                .iter()
+                .all(|s| s.transport == "Horseback (spare horse)")
+        );
+        assert!(j.totals.distance > 0.0);
+        for w2 in j.segments.windows(2) {
+            assert_eq!(w2[1].from, w2[0].to);
+        }
+        for bad in [
+            serde_json::json!([{ "id": 9, "remove": true }]),
+            serde_json::json!([{ "stops": [places[0]] }]),
+            serde_json::json!([{ "stops": places, "transport": "Broom" }]),
+        ] {
+            c.world.journeys = serde_json::from_value(bad).unwrap();
+            let e = crate::world::World::build(&c).unwrap_err();
+            assert_eq!(
+                (e.code, e.path.as_str()),
+                (crate::error::ErrorCode::JourneyInvalid, "/world/journeys/0")
+            );
         }
     }
 
