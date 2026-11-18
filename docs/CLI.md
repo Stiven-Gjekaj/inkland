@@ -120,6 +120,31 @@ The coordinates are config units of the frame with 3 decimals, not WGS84.
 `crs` is `inkland:local`. Each feature has `layer`, an id, and, where they
 apply, a pin id, a name, a kind, and a length.
 
+## `inkland emblem`
+
+Write the coat of arms of one state, province, or place as an SVG file.
+
+```bash
+inkland emblem --world out/world.json --state 3 -o state-3.svg
+inkland emblem --world out/world.json --place ostrey --hatching --size-mm 20 -o ostrey.svg
+```
+
+| Flag | Meaning |
+|---|---|
+| `--world FILE` | The `world.json` of a generated world. |
+| `--state ID` | A state: its id or its name. |
+| `--province ID` | A province: its id or its name. |
+| `--place ID` | A place: the id of its pin, its id, or its name. |
+| `--hatching` | Black and white, with the heraldic hatching of Petra Sancta. Each line is at least `render.min_line_width_pt` of the config wide at the given size. |
+| `--size-mm N` | The width and height of the SVG, in mm. Default 50. |
+| `-o FILE`, `--out FILE` | The SVG file to write. |
+
+Give exactly one of `--state`, `--province`, and `--place`. An item that
+the world does not have is `REF_UNKNOWN`. The output on stdout gives `svg`
+(the file), `id` (for example `state-3`), `name`, and `coa` (the coat of
+arms in the JSON shape of Azgaar's Fantasy Map Generator). With
+`--hatching`, it also gives `checks`, the print checks of the SVG.
+
 ## `inkland edit`
 
 Apply an edit script to a world file or to a config file.
