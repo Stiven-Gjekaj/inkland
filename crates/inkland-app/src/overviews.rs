@@ -458,6 +458,62 @@ pub fn goods_rows(world: &World) -> Vec<Row> {
         .collect()
 }
 
+/// The name of a state, or `Neutrals` for the id 0.
+fn state_name(world: &World, id: u32) -> String {
+    state(world, id).map_or_else(|| "Neutrals".to_owned(), |s| s.name.clone())
+}
+
+/// The Markets Overview of FMG: the market (its center), the owner state,
+/// the cells, the burgs, the stock, the sales, the buys, and the value
+/// (sales less buys, plus the stock at its price).
+pub fn market_rows(world: &World) -> Vec<Row> {
+    let e = &world.economy;
+    let soc = &world.society;
+    e.markets
+        .iter()
+        .map(|m| {
+            let center = m
+                .center
+                .checked_sub(1)
+                .and_then(|k| soc.places.get(k as usize));
+            let name = center.map_or_else(|| format!("Market {}", m.id), |p| p.name.clone());
+            let owner = center.map_or_else(String::new, |p| state_name(world, p.state));
+            let cells = e.cell_market.iter().filter(|c| **c == m.id).count();
+            let burgs = soc
+                .places
+                .iter()
+                .filter(|p| e.cell_market.get(p.cell) == Some(&m.id))
+                .count();
+            let stock = m.goods.iter().fold(0.0, |t, g| t + g.stock);
+            let stock_value = m.goods.iter().fold(0.0, |t, g| t + g.stock * g.price);
+            let (mut sales, mut buys) = (0.0, 0.0);
+            for d in e.deals.iter().filter(|d| d.market == m.id) {
+                let income = d.market_income(m.fee_paid);
+                if income > 0.0 {
+                    sales += income;
+                } else {
+                    buys -= income;
+                }
+            }
+            row(
+                m.id.to_string(),
+                vec![
+                    name,
+                    owner,
+                    cells.to_string(),
+                    burgs.to_string(),
+                    num(stock, 2),
+                    num(sales, 2),
+                    num(buys, 2),
+                    num(sales - buys + stock_value, 2),
+                ],
+                false,
+            )
+            .with_color(m.color.clone())
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -647,5 +703,27 @@ mod tests {
                 .sum::<f64>();
         }
         assert_eq!(rows[k].cells[3], num(units, 0));
+    }
+
+    #[test]
+    fn the_market_rows_count_the_cells_and_sum_the_deals() {
+        let (_, w) = world();
+        let e = &w.economy;
+        let rows = market_rows(&w);
+        assert_eq!(rows.len(), e.markets.len());
+        assert!(!rows.is_empty(), "the world has markets");
+        let cells: usize = rows
+            .iter()
+            .map(|r| r.cells[2].parse::<usize>().unwrap())
+            .sum();
+        assert_eq!(cells, e.cell_market.iter().filter(|m| **m != 0).count());
+        for (r, m) in rows.iter().zip(&e.markets) {
+            let center = &w.society.places[m.center as usize - 1];
+            assert_eq!(r.cells[0], center.name);
+            assert_eq!(r.color.as_deref(), Some(m.color.as_str()));
+            let sales: f64 = r.cells[5].parse().unwrap();
+            let buys: f64 = r.cells[6].parse().unwrap();
+            assert!(sales >= 0.0 && buys >= 0.0);
+        }
     }
 }

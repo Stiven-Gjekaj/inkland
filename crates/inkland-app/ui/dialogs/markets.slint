@@ -1,0 +1,26 @@
+// The Markets Overview of FMG: the markets of the shown world, with the
+// color, the center, the owner state, the cells, the burgs, the stock, the
+// sales, the buys, and the value. It does not edit, because the config has
+// no markets.
+
+import { Theme, Label, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { Lists } from "../globals.slint";
+
+export component MarketsDialog inherits Dialog {
+    id: "markets";
+    title: "Markets Overview";
+    content-width: 640px;
+    pos-x: 420px;
+    pos-y: 60px;
+    Table {
+        header: ["Market", "Owner", "Cells", "Burgs", "Stock", "Sales", "Buys", "Value"];
+        widths: [110px, 100px, 44px, 44px, 66px, 66px, 66px, 70px];
+        rows: Lists.markets;
+        list-height: 260px;
+    }
+    Tip {
+        dialog: true;
+        text: "Markets: " + Lists.markets.length + ". Sales is the market income less taxes and tariffs. Buys is what the market paid to burgs. Value is sales less buys, plus the stock at its price.";
+    }
+}
