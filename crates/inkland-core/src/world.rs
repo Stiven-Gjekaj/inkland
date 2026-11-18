@@ -86,6 +86,8 @@ pub struct World {
     pub markers: Vec<crate::markers::Marker>,
     /// Goods, markets, and the production run of one day.
     pub economy: crate::economy::Economy,
+    /// The roster of military units (FMG `options.military`).
+    pub military_units: Vec<crate::military::Unit>,
     /// The stability of the states and their provinces, after the
     /// military.
     pub stability: crate::stability::Stability,
@@ -462,6 +464,7 @@ impl World {
         );
         // The military (FMG `Military.generate`), after the taxes.
         let era = crate::markers::era(config.seed);
+        let military_units = crate::military::default_units();
         crate::military::generate(
             &crate::military::Input {
                 config,
@@ -471,6 +474,7 @@ impl World {
                 religions: &religions,
                 economy: &economy,
                 era: &era,
+                units: &military_units,
             },
             &mut society,
         );
@@ -557,6 +561,7 @@ impl World {
             religions,
             markers,
             economy,
+            military_units,
             stability,
             zones,
             journeys,

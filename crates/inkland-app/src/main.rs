@@ -1235,9 +1235,12 @@ impl Controller {
         l.set_markers(rows(w, &ov::marker_rows));
         let sel = g.get_selected_marker();
         g.set_marker_text(s(w.map(|w| ov::marker_text(w, &sel)).unwrap_or_default()));
-        l.set_military_header(model(ov::military_header().iter().map(s).collect()));
-        l.set_regiment_header(model(ov::regiment_header().iter().map(s).collect()));
         let w = open(d.get_military());
+        let header = |f: fn(&World) -> Vec<String>| {
+            model(w.map(f).unwrap_or_default().iter().map(s).collect())
+        };
+        l.set_military_header(header(ov::military_header));
+        l.set_regiment_header(header(ov::regiment_header));
         l.set_military(rows(w, &ov::military_rows));
         l.set_regiments(rows(w, &|w| ov::regiment_rows(w, selected)));
     }

@@ -115,12 +115,13 @@ fn percent(v: f64) -> String {
 
 /// The header of the Military Overview: the state, each unit, and the
 /// totals.
-pub fn military_header() -> Vec<String> {
+pub fn military_header(world: &World) -> Vec<String> {
     let mut h = vec!["State".to_owned()];
     h.extend(
-        inkland_core::military::UNITS
+        world
+            .military_units
             .iter()
-            .map(|u| crate::catalog::title_case(u.name)),
+            .map(|u| crate::catalog::title_case(&u.name)),
     );
     h.extend(
         ["Total", "Population", "Rate", "Alert", "Upkeep", "Power"]
@@ -134,20 +135,21 @@ pub fn military_header() -> Vec<String> {
 /// the personnel with the crew, the people, the rate, the war alert, the
 /// upkeep, and the power.
 pub fn military_rows(world: &World) -> Vec<Row> {
-    use inkland_core::military::{POPULATION_SCALE, UNITS, URBANIZATION_RATE, troops};
+    use inkland_core::military::{POPULATION_SCALE, URBANIZATION_RATE, troops};
     let e = &world.economy;
+    let units = &world.military_units;
     world
         .society
         .states
         .iter()
         .map(|s| {
-            let forces: Vec<f64> = UNITS
+            let forces: Vec<f64> = units
                 .iter()
-                .map(|u| s.military.iter().fold(0.0, |t, r| t + r.of(u.name)))
+                .map(|u| s.military.iter().fold(0.0, |t, r| t + r.of(&u.name)))
                 .collect();
             let points = s.rural + s.urban * URBANIZATION_RATE;
             let population = rn(points * POPULATION_SCALE, 0);
-            let total = UNITS
+            let total = units
                 .iter()
                 .zip(&forces)
                 .fold(0.0, |t, (u, f)| t + f * u.crew);
@@ -171,12 +173,13 @@ pub fn military_rows(world: &World) -> Vec<Row> {
 
 /// The header of the Regiments Overview: the name, each unit, the total,
 /// and the power.
-pub fn regiment_header() -> Vec<String> {
+pub fn regiment_header(world: &World) -> Vec<String> {
     let mut h = vec!["Regiment".to_owned()];
     h.extend(
-        inkland_core::military::UNITS
+        world
+            .military_units
             .iter()
-            .map(|u| crate::catalog::title_case(u.name)),
+            .map(|u| crate::catalog::title_case(&u.name)),
     );
     h.push("Total".to_owned());
     h.push("Power".to_owned());
@@ -186,7 +189,7 @@ pub fn regiment_header() -> Vec<String> {
 /// The Regiments Overview of FMG for one state: the name, the troops of
 /// each unit, the personnel without the crew, and the power.
 pub fn regiment_rows(world: &World, selected: u32) -> Vec<Row> {
-    use inkland_core::military::{UNITS, regiment_power, troops};
+    use inkland_core::military::{regiment_power, troops};
     let Some(s) = state(world, selected) else {
         return Vec::new();
     };
@@ -194,7 +197,12 @@ pub fn regiment_rows(world: &World, selected: u32) -> Vec<Row> {
         .iter()
         .map(|r| {
             let mut cells = vec![r.name.clone()];
-            cells.extend(UNITS.iter().map(|u| num(troops(r.of(u.name)), 0)));
+            cells.extend(
+                world
+                    .military_units
+                    .iter()
+                    .map(|u| num(troops(r.of(&u.name)), 0)),
+            );
             cells.push(num(r.troops(), 0));
             cells.push(si(troops(regiment_power(r, s, &world.economy))));
             row(format!("{}-{}", s.id, r.id), cells, false)
@@ -844,17 +852,17 @@ mod tests {
 
     #[test]
     fn the_military_rows_sum_the_regiments_of_each_state() {
-        use inkland_core::military::{UNITS, troops};
+        use inkland_core::military::troops;
         let (_, w) = world();
-        let header = military_header();
+        let header = military_header(&w);
         let rows = military_rows(&w);
         assert_eq!(rows.len(), w.society.states.len());
         for (r, s) in rows.iter().zip(&w.society.states) {
             assert_eq!(r.cells.len(), header.len());
             assert_eq!(r.cells[0], s.name);
             assert_eq!(r.color.as_deref(), Some(s.color.as_str()));
-            for (k, u) in UNITS.iter().enumerate() {
-                let sum = s.military.iter().fold(0.0, |t, g| t + g.of(u.name));
+            for (k, u) in w.military_units.iter().enumerate() {
+                let sum = s.military.iter().fold(0.0, |t, g| t + g.of(&u.name));
                 assert_eq!(r.cells[k + 1], num(troops(sum), 0));
             }
         }
@@ -866,7 +874,7 @@ mod tests {
             .expect("a state has regiments");
         let regiments = regiment_rows(&w, armed.id);
         assert_eq!(regiments.len(), armed.military.len());
-        assert_eq!(regiments[0].cells.len(), regiment_header().len());
+        assert_eq!(regiments[0].cells.len(), regiment_header(&w).len());
         assert_eq!(regiments[0].cells[0], armed.military[0].name);
         assert!(regiment_rows(&w, 0).is_empty());
     }

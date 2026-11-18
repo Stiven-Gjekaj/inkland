@@ -57,8 +57,8 @@ pub fn finance_value(f: &StateFinance) -> Value {
 /// A regiment (FMG `state.military[..]`).
 pub fn regiment_value(r: &inkland_core::military::Regiment) -> Value {
     let mut units = serde_json::Map::new();
-    for &(u, n) in &r.units {
-        units.insert(u.to_owned(), json!(r3(n)));
+    for (u, n) in &r.units {
+        units.insert(u.clone(), json!(r3(*n)));
     }
     json!({
         "id": r.id,

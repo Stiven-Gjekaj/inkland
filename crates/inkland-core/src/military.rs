@@ -45,11 +45,11 @@ pub const POPULATION_SCALE: f64 = 1000.0;
 pub const URBANIZATION_RATE: f64 = 1.0;
 
 /// A military unit (`MilitaryUnit`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
     /// The glyph of the icon.
-    pub icon: &'static str,
-    pub name: &'static str,
+    pub icon: String,
+    pub name: String,
     /// The percent of the rural people that serve.
     pub rural: f64,
     /// The percent of the urban people that serve.
@@ -58,16 +58,46 @@ pub struct Unit {
     pub power: f64,
     /// The unit type: `levies`, `melee`, `ranged`, `mounted`, `machinery`,
     /// or `naval`.
-    pub kind: &'static str,
+    pub kind: String,
     /// `true` if the unit forms regiments of its own (fleets).
     pub separate: bool,
     /// The names of the goods that equip the unit.
-    pub goods: &'static [&'static str],
+    pub goods: Vec<String>,
+}
+
+/// One unit of the default roster, as the table gives it.
+struct RawUnit {
+    icon: &'static str,
+    name: &'static str,
+    rural: f64,
+    urban: f64,
+    crew: f64,
+    power: f64,
+    kind: &'static str,
+    separate: bool,
+    goods: &'static [&'static str],
 }
 
 /// The default roster of FMG (`getDefaultMilitaryUnits`).
-pub const UNITS: [Unit; 6] = [
-    Unit {
+pub fn default_units() -> Vec<Unit> {
+    RAW_UNITS
+        .iter()
+        .map(|u| Unit {
+            icon: u.icon.to_owned(),
+            name: u.name.to_owned(),
+            rural: u.rural,
+            urban: u.urban,
+            crew: u.crew,
+            power: u.power,
+            kind: u.kind.to_owned(),
+            separate: u.separate,
+            goods: u.goods.iter().map(|g| (*g).to_owned()).collect(),
+        })
+        .collect()
+}
+
+const RAW_UNITS: [RawUnit; 6] = [
+    RawUnit {
         icon: "\u{1FA93}",
         name: "levies",
         rural: 0.0,
@@ -78,7 +108,7 @@ pub const UNITS: [Unit; 6] = [
         separate: false,
         goods: &[],
     },
-    Unit {
+    RawUnit {
         icon: "\u{2694}\u{FE0F}",
         name: "infantry",
         rural: 0.25,
@@ -89,7 +119,7 @@ pub const UNITS: [Unit; 6] = [
         separate: false,
         goods: &["Arms"],
     },
-    Unit {
+    RawUnit {
         icon: "\u{1F3F9}",
         name: "archers",
         rural: 0.12,
@@ -100,7 +130,7 @@ pub const UNITS: [Unit; 6] = [
         separate: false,
         goods: &["Arms"],
     },
-    Unit {
+    RawUnit {
         icon: "\u{1F434}",
         name: "cavalry",
         rural: 0.12,
@@ -111,7 +141,7 @@ pub const UNITS: [Unit; 6] = [
         separate: false,
         goods: &["Horses", "Camels", "Tack"],
     },
-    Unit {
+    RawUnit {
         icon: "\u{1F4A3}",
         name: "artillery",
         rural: 0.0,
@@ -122,7 +152,7 @@ pub const UNITS: [Unit; 6] = [
         separate: false,
         goods: &["Artillery", "Gunpowder"],
     },
-    Unit {
+    RawUnit {
         icon: "\u{1F30A}",
         name: "fleet",
         rural: 0.0,
@@ -142,9 +172,9 @@ pub const NEWBIE_ICON: &str = "\u{1F530}";
 /// The icon of a regiment whose main unit is not in the roster.
 pub const DEFAULT_ICON: &str = "\u{2694}\u{FE0F}";
 
-/// The unit of a name in the roster.
-pub fn unit(name: &str) -> Option<&'static Unit> {
-    UNITS.iter().find(|u| u.name == name)
+/// The unit of a name in a roster.
+pub fn unit<'a>(units: &'a [Unit], name: &str) -> Option<&'a Unit> {
+    units.iter().find(|u| u.name == name)
 }
 
 /// A regiment (`Regiment`).
@@ -166,11 +196,14 @@ pub struct Regiment {
     pub naval: bool,
     /// The troops of each unit in population points, in the order FMG
     /// adds them (FMG `u`).
-    pub units: Vec<(&'static str, f64)>,
+    pub units: Vec<(String, f64)>,
     /// All troops in population points (FMG `a`).
     pub total: f64,
+    /// The troops of each unit times the power of the unit
+    /// (`getTroopsPower`).
+    pub power: f64,
     /// The glyph of the icon.
-    pub icon: &'static str,
+    pub icon: String,
     /// The legend text (FMG `note`).
     pub note: String,
 }
@@ -191,7 +224,7 @@ impl Regiment {
 
     /// Troops times unit power (`getTroopsPower`).
     pub fn troops_power(&self) -> f64 {
-        UNITS.iter().fold(0.0, |s, u| s + self.of(u.name) * u.power)
+        self.power
     }
 }
 
@@ -290,11 +323,13 @@ pub struct Input<'a> {
     pub economy: &'a Economy,
     /// The era of the calendar (`lore.calendar.era`).
     pub era: &'a str,
+    /// The roster of units.
+    pub units: &'a [Unit],
 }
 
 /// The share of the conscripts of each unit that the goods the state
 /// consumed equip (`getEquipped`): 1 with no goods or no run.
-pub fn equipped(e: &Economy, state: u32, demand: &[f64; UNITS.len()]) -> [f64; UNITS.len()] {
+pub fn equipped(e: &Economy, units: &[Unit], state: u32, demand: &[f64]) -> Vec<f64> {
     let consumed = e
         .accounts
         .consumption
@@ -307,13 +342,13 @@ pub fn equipped(e: &Economy, state: u32, demand: &[f64; UNITS.len()]) -> [f64; U
             .collect()
     };
     let needing = |good: u32| {
-        UNITS.iter().enumerate().fold(0.0, |s, (k, u)| {
+        units.iter().enumerate().fold(0.0, |s, (k, u)| {
             let uses = goods_of(u).iter().any(|g| g.id == good);
             s + if uses { demand[k] } else { 0.0 }
         })
     };
-    let mut out = [1.0; UNITS.len()];
-    for (k, u) in UNITS.iter().enumerate() {
+    let mut out = vec![1.0; units.len()];
+    for (k, u) in units.iter().enumerate() {
         let troops = demand[k];
         let goods = goods_of(u);
         if troops == 0.0 || goods.is_empty() || e.deals.is_empty() {
@@ -403,13 +438,14 @@ impl Gen<'_> {
         let religion = &self.input.religions.cell_religion;
         let feature = &self.input.features.of_cell;
         let biomes = self.input.biomes;
-        let modifiers: Vec<[f64; UNITS.len()]> = soc
+        let units = self.input.units;
+        let modifiers: Vec<Vec<f64>> = soc
             .states
             .iter()
             .map(|s| {
-                let mut m = [0.0; UNITS.len()];
-                for (k, u) in UNITS.iter().enumerate() {
-                    let mut modifier = state_modifier(u.kind, s.kind.name())
+                let mut m = vec![0.0; units.len()];
+                for (k, u) in units.iter().enumerate() {
+                    let mut modifier = state_modifier(&u.kind, s.kind.name())
                         .filter(|&v| v != 0.0)
                         .unwrap_or(1.0);
                     if u.kind == "mounted" && s.form_name.contains("Horde") {
@@ -449,7 +485,7 @@ impl Gen<'_> {
         let raise =
             |list: &mut Vec<Platoon>, st: usize, c: usize, m: f64, urban: bool, port: bool| {
                 let t = terrain(biomes[c], cells.h[c]);
-                for (k, u) in UNITS.iter().enumerate() {
+                for (k, u) in units.iter().enumerate() {
                     let perc = if urban { u.urban } else { u.rural };
                     if perc <= 0.0 || modifiers[st][k] == 0.0 {
                         continue;
@@ -461,7 +497,7 @@ impl Gen<'_> {
                     let terrain_mod = if t == "generic" {
                         1.0
                     } else {
-                        terrain_modifier(urban, t, u.kind).unwrap_or(1.0)
+                        terrain_modifier(urban, t, &u.kind).unwrap_or(1.0)
                     };
                     let army = m * perc * terrain_mod;
                     let total = rn(army * modifiers[st][k], 3);
@@ -515,13 +551,13 @@ impl Gen<'_> {
         }
         // The conscripts that the state cannot equip serve as levies where
         // they were raised.
-        let levy = UNITS.iter().position(|u| u.kind == "levies");
+        let levy = units.iter().position(|u| u.kind == "levies");
         for (st, list) in platoons.iter_mut().enumerate() {
-            let mut demand = [0.0; UNITS.len()];
+            let mut demand = vec![0.0; units.len()];
             for p in list.iter() {
                 demand[p.u] += p.a;
             }
-            let share = equipped(self.input.economy, st as u32 + 1, &demand);
+            let share = equipped(self.input.economy, units, st as u32 + 1, &demand);
             let mut raised: Vec<Platoon> = Vec::new();
             let mut by_cell: BTreeMap<usize, usize> = BTreeMap::new();
             for p in list.iter_mut() {
@@ -553,7 +589,7 @@ impl Gen<'_> {
                             y,
                             u: levy,
                             n: false,
-                            s: UNITS[levy].separate,
+                            s: units[levy].separate,
                             children: Vec::new(),
                         });
                     }
@@ -612,15 +648,19 @@ impl Gen<'_> {
             .enumerate()
             .map(|(i, &k)| {
                 let r = &nodes[k];
-                let mut units: Vec<(&'static str, f64)> = vec![(UNITS[r.u].name, r.a)];
+                let roster = self.input.units;
+                let mut units: Vec<(String, f64)> = vec![(roster[r.u].name.clone(), r.a)];
                 for &c in &r.children {
                     let n = &nodes[c];
-                    let name = UNITS[n.u].name;
-                    match units.iter_mut().find(|(u, _)| *u == name) {
+                    let name = &roster[n.u].name;
+                    match units.iter_mut().find(|(u, _)| u == name) {
                         Some(e) => e.1 = rn(e.1 + n.a, 3),
-                        None => units.push((name, rn(n.a, 3))),
+                        None => units.push((name.clone(), rn(n.a, 3))),
                     }
                 }
+                let power = units.iter().fold(0.0, |s, (name, points)| {
+                    s + points * unit(roster, name).map_or(0.0, |u| u.power)
+                });
                 Regiment {
                     id: i as u32,
                     state: state.id,
@@ -631,7 +671,8 @@ impl Gen<'_> {
                     naval: r.n,
                     units,
                     total: r.t,
-                    icon: "",
+                    power,
+                    icon: String::new(),
                     note: String::new(),
                 }
             })
@@ -672,27 +713,29 @@ impl Gen<'_> {
     }
 
     /// The default icon of a regiment (`getEmblem`).
-    fn emblem(&self, soc: &Society, r: &Regiment) -> &'static str {
+    fn emblem(&self, soc: &Society, r: &Regiment) -> String {
         if !r.naval && r.units.is_empty() {
-            return NEWBIE_ICON;
+            return NEWBIE_ICON.to_owned();
         }
         let state = soc.states.get((r.state as usize).wrapping_sub(1));
         if !r.naval
             && state.is_some_and(|s| s.form == "Monarchy")
             && self.burg[r.cell].is_some_and(|k| soc.places[k].capital)
         {
-            return ROYAL_ICON;
+            return ROYAL_ICON.to_owned();
         }
         // The unit with the most troops; the first of equals.
         let main = r
             .units
             .iter()
-            .fold(None::<&(&str, f64)>, |best, u| match best {
+            .fold(None::<&(String, f64)>, |best, u| match best {
                 Some(b) if b.1 >= u.1 => Some(b),
                 _ => Some(u),
             })
-            .map(|u| u.0);
-        main.and_then(unit).map_or(DEFAULT_ICON, |u| u.icon)
+            .map(|u| u.0.as_str());
+        main.and_then(|name| unit(self.input.units, name))
+            .map_or(DEFAULT_ICON, |u| u.icon.as_str())
+            .to_owned()
     }
 
     /// The legend of a regiment (`generateNote`).
@@ -943,8 +986,8 @@ mod tests {
     #[test]
     fn the_roster_goods_are_in_the_catalogue() {
         let goods = crate::economy::goods::catalogue();
-        for u in &UNITS {
-            for name in u.goods {
+        for u in &default_units() {
+            for name in &u.goods {
                 assert!(goods.iter().any(|g| g.name == *name), "{name}");
             }
         }
@@ -979,7 +1022,7 @@ mod tests {
                 assert!(!r.icon.is_empty());
                 assert!(!r.note.contains('\u{2014}'));
                 for (u, _) in &r.units {
-                    assert!(unit(u).is_some());
+                    assert!(unit(&w.military_units, u).is_some());
                 }
                 if r.naval {
                     assert!(r.units.iter().all(|(u, _)| *u == "fleet"));

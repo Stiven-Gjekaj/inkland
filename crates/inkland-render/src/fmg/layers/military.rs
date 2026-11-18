@@ -96,7 +96,7 @@ pub fn military(s: &mut String, ctx: &Ctx) {
             let [cx, cy] = ctx.p(r.at);
             let x = rn(cx - w / 2.0, 2);
             let y = rn(cy - size, 2);
-            let icon = icon_id(r.icon);
+            let icon = icon_id(&r.icon);
             let inset = if icon.starts_with("glyph-") {
                 h * 0.1
             } else {
