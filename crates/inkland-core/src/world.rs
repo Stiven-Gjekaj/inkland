@@ -185,6 +185,14 @@ impl World {
         hm.run(&steps, &mut height_rng);
         let mut base_heights = hm.heights;
         crate::heightmap::apply_brushes(&base_grid, &mut base_heights, &config.world.brushes);
+        if config.world.fill_land {
+            // Water becomes low land: a deeper sea gives a little higher
+            // land, so the land keeps some form. The sea regions below
+            // make their water again.
+            for h in base_heights.iter_mut().filter(|h| **h < sea_level) {
+                *h = (sea_level + 1.0 + 2.0 * (sea_level - *h) / sea_level).trunc();
+            }
+        }
 
         let regions = FitRegion::all(&pins.regions, sea_level);
         apply_regions(&base_grid, &mut base_heights, &regions, sea_level);
@@ -915,6 +923,36 @@ mod pin_tests {
         let (x, y) = (at[0].as_f64().unwrap(), at[1].as_f64().unwrap());
         assert!((x - 200.0).powi(2) + (y - 150.0).powi(2) <= 40.0 * 40.0);
         assert!(World::build(&make(true)).is_ok());
+    }
+
+    #[test]
+    fn fill_land_keeps_only_the_pinned_sea_as_ocean() {
+        let make = |fill: bool| -> Config {
+            serde_json::from_value(json!({
+                "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 3000, "template": "archipelago", "fill_land": fill },
+                "pins": { "regions": [{ "id": "sea", "kind": "sea", "box": [0, 0, 60, 300] }] }
+            }))
+            .unwrap()
+        };
+        let in_sea = |p: [f64; 2]| p[0] <= 60.0;
+        let open_water = |w: &World| {
+            (0..w.grid.len())
+                .filter(|&c| !w.features.is_land(c) && !in_sea(w.grid.points[c]))
+                .filter(|&c| w.features.get(w.features.of_cell[c]).kind == FeatureKind::Ocean)
+                .count()
+        };
+        let plain = World::build(&make(false)).unwrap();
+        assert!(open_water(&plain) > 100, "the archipelago has open sea");
+        let filled = World::build(&make(true)).unwrap();
+        assert_eq!(open_water(&filled), 0);
+        let sea: Vec<usize> = (0..filled.grid.len())
+            .filter(|&c| in_sea(filled.grid.points[c]))
+            .collect();
+        assert!(
+            sea.iter().any(|&c| !filled.features.is_land(c)),
+            "the pinned sea stays"
+        );
     }
 
     #[test]

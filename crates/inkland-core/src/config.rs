@@ -149,6 +149,12 @@ pub struct World {
     #[serde(default = "default_sea_level")]
     #[schemars(range(min = 1, max = 99))]
     pub sea_level: u8,
+    /// `true`: all water of the template and the brushes becomes low land,
+    /// 1 to 3 above sea level. Only the pinned `sea` and `lake` regions,
+    /// and the lakes that rivers make, are water. Use it to keep the whole
+    /// frame as land except the pinned seas. Default `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fill_land: bool,
     /// The most rivers that generation keeps, besides the pinned rivers.
     /// It keeps the rivers with the most water. 0: only the pinned rivers.
     /// Default: all rivers.
@@ -749,6 +755,7 @@ impl Default for World {
             template: Template::default(),
             sea_level: default_sea_level(),
             river_limit: None,
+            fill_land: false,
             lake_elevation_limit: default_lake_elevation_limit(),
             climate: Climate::default(),
             cultures: default_cultures(),
