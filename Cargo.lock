@@ -2570,7 +2570,7 @@ dependencies = [
 
 [[package]]
 name = "inkland"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "inkland-constraints",
  "inkland-core",
@@ -2583,7 +2583,7 @@ dependencies = [
 
 [[package]]
 name = "inkland-app"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "inkland",
  "inkland-core",
@@ -2597,7 +2597,7 @@ dependencies = [
 
 [[package]]
 name = "inkland-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -2609,7 +2609,7 @@ dependencies = [
 
 [[package]]
 name = "inkland-constraints"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "inkland-core",
  "serde_json",
@@ -2617,7 +2617,7 @@ dependencies = [
 
 [[package]]
 name = "inkland-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "delaunator",
  "libm",
@@ -2632,7 +2632,7 @@ dependencies = [
 
 [[package]]
 name = "inkland-edit"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "inkland-core",
  "proptest",
@@ -2643,7 +2643,7 @@ dependencies = [
 
 [[package]]
 name = "inkland-io"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "flate2",
  "inkland-core",
@@ -2657,7 +2657,7 @@ dependencies = [
 
 [[package]]
 name = "inkland-render"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "inkland-core",
  "libm",
