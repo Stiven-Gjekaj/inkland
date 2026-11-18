@@ -1344,6 +1344,36 @@ impl Gen<'_> {
     }
 }
 
+/// The random numbers of the markers.
+fn marker_rng(seed: u64) -> Rand {
+    Rand::new(crate::seed::SeedTree::new(seed).part_rng(crate::seed::Layer::Markers, "generate"))
+}
+
+/// The era of the calendar (`getEra`).
+fn draw_era(rng: &mut Rand) -> String {
+    let base = if rng.p(0.7) {
+        1
+    } else {
+        rng.rand(0, crate::names::data::NAME_BASES.len() as i64) as usize
+    };
+    format!("{} Era", Chain::new(base).get_short(rng))
+}
+
+/// The era of the calendar of a seed (FMG `lore.calendar.era`). The
+/// markers draw it first; this gives the same name.
+pub fn era(seed: u64) -> String {
+    draw_era(&mut marker_rng(seed))
+}
+
+/// The short era: the first letter of each word (`getEraShort`).
+pub fn era_short(era: &str) -> String {
+    era.split(' ')
+        .filter(|w| !w.is_empty())
+        .filter_map(|w| w.chars().next())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
 /// Make the markers (`generate`).
 pub fn generate(input: &Input) -> Vec<Marker> {
     let soc = input.society;
@@ -1369,17 +1399,8 @@ pub fn generate(input: &Input) -> Vec<Marker> {
     let chains: Vec<Chain> = std::iter::once(Chain::new(crate::cultures::WILDLANDS_BASE))
         .chain(soc.cultures.iter().map(|c| Chain::new(c.base)))
         .collect();
-    let mut rng = Rand::new(
-        crate::seed::SeedTree::new(input.config.seed)
-            .part_rng(crate::seed::Layer::Markers, "generate"),
-    );
-    // The era of the calendar (`getEra`).
-    let base = if rng.p(0.7) {
-        1
-    } else {
-        rng.rand(0, crate::names::data::NAME_BASES.len() as i64) as usize
-    };
-    let era = format!("{} Era", Chain::new(base).get_short(&mut rng));
+    let mut rng = marker_rng(input.config.seed);
+    let era = draw_era(&mut rng);
     let fantasy = f64::from(u8::from(input.config.world.culture_set.contains("fantasy")));
     let kinds = [
         k("volcanoes", "volcano", 10.0, 500.0, 1.0),
