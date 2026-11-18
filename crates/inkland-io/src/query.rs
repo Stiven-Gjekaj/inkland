@@ -189,6 +189,50 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
             })
         });
 
+    // The economy, stability, zones, and armies at the cell.
+    let eco = &world.economy;
+    let good = soc.cells.good.get(c).copied().unwrap_or(0);
+    let deposit = (good != 0)
+        .then(|| eco.goods.get(good as usize - 1))
+        .flatten()
+        .map(|g| json!({ "id": g.id, "name": g.name, "unit": g.unit }));
+    let market = eco
+        .cell_market
+        .get(c)
+        .copied()
+        .filter(|&m| m != 0)
+        .and_then(|m| {
+            let mk = eco.markets.get(m as usize - 1)?;
+            let center = soc.places.get(mk.center as usize - 1);
+            Some(json!({ "id": mk.id, "center": center.map(|p| p.name.clone()) }))
+        });
+    let stability = |s: Option<f64>| s.map(|v| round(v, 3));
+    let zones: Vec<Value> = world
+        .zones
+        .iter()
+        .filter(|z| z.cells.contains(&c))
+        .map(|z| json!({ "id": z.id, "name": z.name, "type": z.kind }))
+        .collect();
+    let nearest_regiment = soc
+        .states
+        .iter()
+        .flat_map(|st| &st.military)
+        .map(|r| (dist(r.at, p), r))
+        .min_by(|a, b| {
+            a.0.total_cmp(&b.0)
+                .then(a.1.state.cmp(&b.1.state))
+                .then(a.1.id.cmp(&b.1.id))
+        })
+        .map(|(d, r)| {
+            json!({
+                "state": r.state,
+                "id": r.id,
+                "name": r.name,
+                "naval": r.naval,
+                "total": round(r.total, 3),
+                "distance": round(d, 3),
+            })
+        });
     let culture_name = |id: u32| {
         soc.cultures
             .iter()
@@ -255,6 +299,15 @@ pub fn query(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Error
         "nearest_river": nearest_river,
         "nearest_road": nearest_road,
         "nearest_marker": nearest_marker,
+        "deposit": deposit,
+        "market": market,
+        "prosperity": eco.prosperity.get(c).copied().filter(|_| land),
+        "stability": {
+            "state": stability(world.stability.state(soc.cell_state[c]).map(|x| x.stability)),
+            "province": stability(world.stability.province(soc, soc.cell_province[c]).map(|x| x.stability)),
+        },
+        "zones": zones,
+        "nearest_regiment": nearest_regiment,
     }))
 }
 
@@ -294,6 +347,14 @@ mod tests {
         assert!(q["nearest_marker"]["type"].is_string());
         assert!(q["feature"]["group"].is_string());
         assert!(q["religion"]["name"].is_string());
+        // A land cell has a market and a stability; a world has regiments.
+        assert!(q["market"]["id"].as_u64().unwrap() > 0);
+        assert!(q["market"]["center"].is_string());
+        assert!(q["prosperity"].is_u64());
+        let st = q["stability"]["state"].as_f64().unwrap();
+        assert!((0.0..=1.0).contains(&st));
+        assert!(q["zones"].is_array());
+        assert!(q["nearest_regiment"]["name"].is_string());
     }
 
     #[test]
