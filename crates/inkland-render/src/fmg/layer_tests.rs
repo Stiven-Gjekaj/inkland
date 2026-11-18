@@ -81,6 +81,7 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         Zones => Some("zones"),
         Goods => Some("goods"),
         Markets => Some("markets"),
+        Trade => Some("trade-animation"),
         Texture | Ice | Population | Markers | Features => None,
         Coast | Regions | Roads | Places => None,
     }
@@ -582,7 +583,7 @@ fn goods_draw_the_cells_the_places_and_the_deposits() {
         json!(true),
     );
     let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
-    assert!(svg.contains("data-cells="));
+    assert!(svg.contains("<path id=\"goods-link-"));
 
     let empty = world_with(|w| w.economy.goods.clear());
     assert!(!render_world(&empty, &[LayerName::Goods]).contains("<g id=\"goods\""));
@@ -607,4 +608,31 @@ fn markets_draw_their_areas_and_pins() {
     parse_and_draw(&svg);
     let empty = world_with(|w| w.economy.markets.clear());
     assert!(!render_world(&empty, &[LayerName::Markets]).contains("<g id=\"markets\""));
+}
+
+#[test]
+fn trade_draws_the_traffic_of_the_links() {
+    let svg = render_with(&[LayerName::Trade], StyleName::Default);
+    assert!(
+        svg.contains("<g id=\"trade-traffic\" fill=\"none\" opacity=\"0.7\" stroke=\"#808080\"")
+    );
+    let count = svg.matches("<path id=\"trade-link-").count();
+    assert!(count > 0 && count <= world().economy.traffic.len());
+    // The width is at most the size of the style, and at least 0.15.
+    for part in svg.split("stroke-width=\"").skip(1) {
+        let v: f64 = part[..part.find('"').unwrap()].parse().unwrap();
+        assert!((0.15..=3.0).contains(&v), "{v}");
+    }
+    parse_and_draw(&svg);
+    // The goods layer and the trade layer give each line its own id.
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Goods, LayerName::Trade];
+    c.render.style_overrides.insert(
+        "goods.groups.goodsTraffic.options.render".to_owned(),
+        json!(true),
+    );
+    let both = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert_eq!(both.matches("<path id=\"goods-link-").count(), count);
+    let empty = world_with(|w| w.economy.traffic.clear());
+    assert!(!render_world(&empty, &[LayerName::Trade]).contains("<g id=\"trade-animation\""));
 }

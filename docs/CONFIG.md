@@ -291,6 +291,7 @@ One of:
 - `"ice"`: Glaciers and icebergs. Only `colour` mode. Draws nothing when the world has no ice.
 - `"goods"`: Goods: the output of the cells, the pies of the places, and the deposit icons (FMG `goods`). Only `colour` mode. Draws nothing when the world has no economy.
 - `"markets"`: The markets: the area of each market and a pin at its center (FMG `markets`). Only `colour` mode. Draws nothing when the world has no markets.
+- `"trade"`: Trade: the goods that each route link carried in the run, as lines with a width by the units. FMG animates the trade; inkland draws its traffic lines (FMG `trade`). Only `colour` mode. Draws nothing when no goods travel.
 - `"precipitation"`: Precipitation. Only `colour` mode.
 - `"population"`: Population. Only `colour` mode. Draws nothing when the world has no population.
 - `"emblems"`: Coats of arms. Only `colour` mode. Draws nothing when the world has no emblems.

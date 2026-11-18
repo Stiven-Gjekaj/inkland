@@ -1,5 +1,5 @@
 //! Economy layers: goods (`draw-goods.ts`), markets (`draw-markets.ts`),
-//! and the trade traffic (`draw-trade-traffic.ts`).
+//! and trade (`draw-trade-traffic.ts`).
 //!
 //! FMG shows the goods that the user selects. inkland has no selection, so
 //! it draws the overview of FMG: each producing cell in the colour of its
@@ -406,14 +406,16 @@ pub fn traffic_lines(ctx: &Ctx) -> Vec<TrafficLine> {
     out
 }
 
-/// Write the traffic lines with the widths of a style node
-/// (`renderTraffic`).
-pub fn write_traffic(s: &mut String, lines: &[TrafficLine], max_width: f64) {
+/// Write the traffic lines, at most `max_width` wide (`renderTraffic`).
+/// The id of a line is `prefix` and the cells of its link.
+pub fn write_traffic(s: &mut String, lines: &[TrafficLine], max_width: f64, prefix: &str) {
     for line in lines {
         let width = (max_width * line.share).max(TRAFFIC_MIN_WIDTH);
         let _ = writeln!(
             s,
-            "<path d=\"{}\" stroke-width=\"{}\" data-cells=\"{},{}\"/>",
+            "<path id=\"{prefix}-{}-{}\" d=\"{}\" stroke-width=\"{}\" data-cells=\"{},{}\"/>",
+            line.cells[0],
+            line.cells[1],
             line.d,
             n(width),
             line.cells[0],
@@ -501,7 +503,7 @@ pub fn goods(s: &mut String, ctx: &Ctx) {
     let max_width = st
         .option_f64(&["goods", "goodsTraffic"], "size")
         .unwrap_or(3.0);
-    write_traffic(s, &traffic, max_width);
+    write_traffic(s, &traffic, max_width, "goods-link");
     s.push_str("</g>\n");
 
     let _ = writeln!(
@@ -570,6 +572,31 @@ pub fn goods(s: &mut String, ctx: &Ctx) {
     }
     s.push_str("</g>\n");
     s.push_str("</g>\n");
+}
+
+/// Trade. FMG animates wagons and ships along the deals of the run
+/// (`TradeAnimation`). A map on paper does not move, so inkland draws the
+/// trade traffic of FMG (`draw-trade-traffic.ts`) with the style of the
+/// goods traffic.
+pub fn trade(s: &mut String, ctx: &Ctx) {
+    let lines = traffic_lines(ctx);
+    if lines.is_empty() {
+        return;
+    }
+    let path = ["goods", "goodsTraffic"];
+    let max_width = ctx.style.option_f64(&path, "size").unwrap_or(3.0);
+    let _ = writeln!(
+        s,
+        "<g id=\"trade-animation\"{}>",
+        ctx.attrs(&["trade"], &[])
+    );
+    let _ = writeln!(
+        s,
+        "<g id=\"trade-traffic\" fill=\"none\"{}>",
+        ctx.attrs(&path, &[])
+    );
+    write_traffic(s, &lines, max_width, "trade-link");
+    s.push_str("</g>\n</g>\n");
 }
 
 /// Markets (`drawMarkets`): the area of each market with a border in a

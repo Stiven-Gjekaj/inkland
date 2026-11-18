@@ -29,7 +29,7 @@ use style::Style;
 /// The layers of the original program, in its drawing order
 /// (`renderers/layers.ts`). The overlay features of inkland go after the
 /// place icons.
-pub const ORDER: [LayerName; 34] = [
+pub const ORDER: [LayerName; 35] = [
     LayerName::Ocean,
     LayerName::Landmass,
     LayerName::Texture,
@@ -54,6 +54,7 @@ pub const ORDER: [LayerName; 34] = [
     LayerName::Ice,
     LayerName::Goods,
     LayerName::Markets,
+    LayerName::Trade,
     LayerName::Precipitation,
     LayerName::Population,
     LayerName::Emblems,

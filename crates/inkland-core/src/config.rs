@@ -1179,6 +1179,11 @@ pub enum LayerName {
     /// `markets`). Only `colour` mode. Draws nothing when the world has no
     /// markets.
     Markets,
+    /// Trade: the goods that each route link carried in the run, as lines
+    /// with a width by the units. FMG animates the trade; inkland draws its
+    /// traffic lines (FMG `trade`). Only `colour` mode. Draws nothing when
+    /// no goods travel.
+    Trade,
     /// Precipitation. Only `colour` mode.
     Precipitation,
     /// Population. Only `colour` mode. Draws nothing when the world has no
@@ -1202,7 +1207,7 @@ pub enum LayerName {
 
 impl LayerName {
     /// All layer names, in the order of their declaration.
-    pub const ALL: [LayerName; 38] = [
+    pub const ALL: [LayerName; 39] = [
         LayerName::Coast,
         LayerName::Relief,
         LayerName::Rivers,
@@ -1233,6 +1238,7 @@ impl LayerName {
         LayerName::Ice,
         LayerName::Goods,
         LayerName::Markets,
+        LayerName::Trade,
         LayerName::Precipitation,
         LayerName::Population,
         LayerName::Emblems,
