@@ -202,6 +202,35 @@ pub fn regiment_rows(world: &World, selected: u32) -> Vec<Row> {
         .collect()
 }
 
+/// The Markers Overview of FMG: the name, the type, and the legend.
+pub fn marker_rows(world: &World) -> Vec<Row> {
+    world
+        .markers
+        .iter()
+        .map(|m| {
+            row(
+                m.id.to_string(),
+                vec![
+                    m.name.clone().unwrap_or_default(),
+                    m.kind.to_owned(),
+                    m.legend.clone().unwrap_or_default(),
+                ],
+                false,
+            )
+        })
+        .collect()
+}
+
+/// The legend of the marker with the row id `id`.
+pub fn marker_text(world: &World, id: &str) -> String {
+    world
+        .markers
+        .iter()
+        .find(|m| m.id.to_string() == id)
+        .and_then(|m| m.legend.clone())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,5 +312,18 @@ mod tests {
         assert_eq!(regiments[0].cells.len(), regiment_header().len());
         assert_eq!(regiments[0].cells[0], armed.military[0].name);
         assert!(regiment_rows(&w, 0).is_empty());
+    }
+
+    #[test]
+    fn the_marker_rows_give_the_name_the_type_and_the_legend() {
+        let (_, w) = world();
+        let rows = marker_rows(&w);
+        assert_eq!(rows.len(), w.markers.len());
+        assert!(!rows.is_empty(), "the world has markers");
+        for (r, m) in rows.iter().zip(&w.markers) {
+            assert_eq!(r.cells[1], m.kind);
+            assert_eq!(marker_text(&w, &r.id), m.legend.clone().unwrap_or_default());
+        }
+        assert_eq!(marker_text(&w, "no-such-marker"), "");
     }
 }

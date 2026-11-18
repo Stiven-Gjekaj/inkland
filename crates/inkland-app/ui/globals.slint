@@ -124,6 +124,8 @@ export global AppState {
     // `Lists.state-names`) and the long texts.
     in-out property <int> overview-state;
     in property <string> chronicle;
+    in-out property <string> selected-marker;
+    in property <string> marker-text;
 }
 
 // The menu: open or closed, and the open tab.
@@ -265,6 +267,7 @@ export global Lists {
     // The overviews of the shown world. Read only.
     in property <[string]> state-names;
     in property <[TableRow]> relations;
+    in property <[TableRow]> markers;
     in property <[string]> military-header;
     in property <[TableRow]> military;
     in property <[string]> regiment-header;
@@ -337,6 +340,7 @@ export global Dialogs {
     in-out property <bool> print;
     in-out property <bool> emblems;
     in-out property <bool> diplomacy;
+    in-out property <bool> markers;
     in-out property <bool> military;
 
     public function open(id: string) {
@@ -356,6 +360,7 @@ export global Dialogs {
         if id == "provinces" { self.provinces = true; }
         if id == "cells" { self.cells = true; }
         if id == "diplomacy" { self.diplomacy = true; }
+        if id == "markers" { self.markers = true; }
         if id == "military" { self.military = true; }
         Actions.selection-changed();
         if id == "print" { self.print = true; }
@@ -378,6 +383,7 @@ export global Dialogs {
         if id == "provinces" { self.provinces = false; }
         if id == "cells" { self.cells = false; }
         if id == "diplomacy" { self.diplomacy = false; }
+        if id == "markers" { self.markers = false; }
         if id == "military" { self.military = false; }
         Actions.selection-changed();
         if id == "print" { self.print = false; }
@@ -400,6 +406,7 @@ export global Dialogs {
         self.provinces = false;
         self.cells = false;
         self.diplomacy = false;
+        self.markers = false;
         self.military = false;
         Actions.selection-changed();
         self.print = false;

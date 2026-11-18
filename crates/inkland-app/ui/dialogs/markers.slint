@@ -1,0 +1,32 @@
+// The Markers Overview of FMG: the markers (points of interest) of the
+// shown world, with the name, the type, and the legend. Click a marker to
+// read its full legend. It does not edit, because the config has no
+// markers.
+
+import { Theme, Label, Table, TextBox, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component MarkersDialog inherits Dialog {
+    id: "markers";
+    title: "Markers Overview";
+    content-width: 520px;
+    pos-x: 440px;
+    pos-y: 60px;
+    Table {
+        header: ["Marker", "Type", "Legend"];
+        widths: [150px, 90px, 240px];
+        rows: Lists.markers;
+        selected: AppState.selected-marker;
+        list-height: 220px;
+        select(id) => {
+            AppState.selected-marker = id;
+            Actions.selection-changed();
+        }
+    }
+    Label { dialog: true; text: "Markers: " + Lists.markers.length; }
+    TextBox {
+        text: AppState.selected-marker == "" ? "Click a marker to read its legend." : AppState.marker-text;
+        box-height: 110px;
+    }
+}

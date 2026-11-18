@@ -87,6 +87,7 @@ const IMPLEMENTED: &[&str] = &[
     "cells",
     "emblems",
     "diplomacy",
+    "markers",
     "military",
 ];
 /// The config of a new map, when no file is given.
@@ -1185,6 +1186,10 @@ impl Controller {
         let w = open(d.get_diplomacy());
         l.set_relations(rows(w, &|w| ov::relation_rows(w, selected)));
         g.set_chronicle(s(w.map(ov::chronicle_text).unwrap_or_default()));
+        let w = open(d.get_markers());
+        l.set_markers(rows(w, &ov::marker_rows));
+        let sel = g.get_selected_marker();
+        g.set_marker_text(s(w.map(|w| ov::marker_text(w, &sel)).unwrap_or_default()));
         l.set_military_header(model(ov::military_header().iter().map(s).collect()));
         l.set_regiment_header(model(ov::regiment_header().iter().map(s).collect()));
         let w = open(d.get_military());

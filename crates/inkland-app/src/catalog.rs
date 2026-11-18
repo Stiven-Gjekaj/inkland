@@ -385,7 +385,7 @@ pub const TOOLS: &[ToolDef] = &[
     tool("emblems", "Emblems", "Edit", "Shift+Y", true),
     tool("heightmap", "Heightmap", "Edit", "Shift+H", true),
     tool("labels", "Labels", "Edit", "Shift+L", true),
-    tool("markers", "Markers", "Edit", "Shift+K", false),
+    tool("markers", "Markers", "Edit", "Shift+K", true),
     tool("military", "Military", "Edit", "Shift+M", true),
     tool("namesbase", "Namesbase", "Edit", "Shift+N", false),
     tool("notes", "Notes", "Edit", "Shift+O", false),
