@@ -4,6 +4,12 @@
 //! labels without the font files, inkland keeps a table of advance widths
 //! for each permitted family. `examples/font_metrics.rs` makes the table
 //! from the font files.
+//!
+//! A family without a table, for example a font of a style preset of
+//! `colour` mode, uses a wide table: each character has the largest advance
+//! of all the tables, made 10 % larger, and at least the advance of a
+//! monospace font. A label in such a family is then never wider on the page
+//! than the placer measured it, in the font or in a fallback font.
 
 use crate::metrics_data as data;
 
@@ -24,12 +30,12 @@ pub struct FontMetrics {
 
 impl FontMetrics {
     /// The metrics of a family. The name match ignores case. An unknown
-    /// family uses the first table.
+    /// family uses the wide table.
     pub fn of(family: &str) -> &'static FontMetrics {
         data::FONTS
             .iter()
             .find(|f| f.family.eq_ignore_ascii_case(family.trim()))
-            .unwrap_or(&data::FONTS[0])
+            .unwrap_or(&WIDE)
     }
 
     /// The advance of a character, in font units. A character without a
@@ -66,6 +72,77 @@ impl FontMetrics {
     }
 }
 
+/// The number of characters in each table.
+const CHARS: usize = data::FONTS[0].advances.len();
+/// The units in one em of the wide table.
+const WIDE_EM: i64 = 1000;
+/// The least advance of the wide table: the advance of a monospace font,
+/// 0.6 em.
+const WIDE_LEAST: i64 = 600;
+
+/// A value of a table in the units of the wide table, rounded up.
+const fn to_wide(v: i64, em: u16) -> i64 {
+    let em = em as i64;
+    (v * WIDE_EM + em - 1).div_euclid(em)
+}
+
+/// The advances of the wide table.
+const fn wide_advances() -> [u16; CHARS] {
+    let mut out = [0u16; CHARS];
+    let mut i = 0;
+    while i < CHARS {
+        let mut most = 0i64;
+        let mut k = 0;
+        while k < data::FONTS.len() {
+            let f = &data::FONTS[k];
+            let a = to_wide(f.advances[i] as i64, f.units_per_em);
+            if a > most {
+                most = a;
+            }
+            k += 1;
+        }
+        if most > 0 {
+            // 10 % larger, rounded up, and at least a monospace advance.
+            let wide = (most * 11 + 9) / 10;
+            out[i] = if wide > WIDE_LEAST { wide } else { WIDE_LEAST } as u16;
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The largest cap height and the deepest descender of all the tables.
+const fn wide_heights() -> (i16, i16) {
+    let (mut cap, mut desc) = (0i64, 0i64);
+    let mut k = 0;
+    while k < data::FONTS.len() {
+        let f = &data::FONTS[k];
+        let c = to_wide(f.cap_height as i64, f.units_per_em);
+        let d = -to_wide(-(f.descender as i64), f.units_per_em);
+        if c > cap {
+            cap = c;
+        }
+        if d < desc {
+            desc = d;
+        }
+        k += 1;
+    }
+    (cap as i16, desc as i16)
+}
+
+const WIDE_ADVANCES: [u16; CHARS] = wide_advances();
+const WIDE_HEIGHTS: (i16, i16) = wide_heights();
+
+/// The table of a family that has no table of its own.
+static WIDE: FontMetrics = FontMetrics {
+    family: "",
+    units_per_em: WIDE_EM as u16,
+    cap_height: WIDE_HEIGHTS.0,
+    descender: WIDE_HEIGHTS.1,
+    first: data::FONTS[0].first,
+    advances: &WIDE_ADVANCES,
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,6 +164,32 @@ mod tests {
         assert!((f.width("abc", 3.0, 1.0) - f.width("abc", 3.0, 0.0) - 2.0).abs() < 1e-12);
         // W is wider than i.
         assert!(f.width("W", 3.0, 0.0) > f.width("i", 3.0, 0.0));
+    }
+
+    #[test]
+    fn an_unknown_family_is_at_least_as_wide_as_each_table() {
+        let wide = FontMetrics::of("Georgia");
+        assert_eq!(wide.family, "");
+        assert!(std::ptr::eq(wide, FontMetrics::of("Courier New")));
+        for text in ["Sanhaveiria", "SANHAVEIRIA", "Illi", "W\u{e9}st\u{f8}"] {
+            let w = wide.width(text, 10.0, 0.0);
+            for f in &data::FONTS {
+                assert!(
+                    w >= 1.1 * f.width(text, 10.0, 0.0) - 1e-9,
+                    "{text} {}",
+                    f.family
+                );
+            }
+            // A monospace font has 0.6 em for each character.
+            assert!(
+                w >= 0.6 * 10.0 * text.chars().count() as f64 - 1e-9,
+                "{text}"
+            );
+        }
+        for f in &data::FONTS {
+            assert!(wide.cap(10.0) >= f.cap(10.0) - 1e-9);
+            assert!(wide.descent(10.0) >= f.descent(10.0) - 1e-9);
+        }
     }
 
     #[test]
