@@ -126,6 +126,35 @@ fn flags_change_the_effective_config() {
 }
 
 #[test]
+fn cells_flag_wins_over_the_cell_hint() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = minimal();
+    // A hint of 2 units on a frame of 100 x 80 asks for 2000 cells.
+    c["units"] = json!({ "per_cell_hint": 2.0 });
+    let config = write_config(dir.path(), &c);
+    let out = dir.path().join("out");
+    let (code, summary) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--out-dir",
+        out.to_str().unwrap(),
+        "--cells",
+        "1500",
+    ]);
+    assert_eq!(code, 0, "{summary}");
+    let world: Value =
+        serde_json::from_str(&std::fs::read_to_string(out.join("world.json")).unwrap()).unwrap();
+    let base = &world["base"];
+    let cells = base["cells_x"].as_u64().unwrap() * base["cells_y"].as_u64().unwrap();
+    assert_eq!(base["points"].as_array().unwrap().len() as u64, cells);
+    // The grid is near the asked count, and far from the 2000 of the hint.
+    assert!((1400..=1600).contains(&cells), "{cells} cells");
+    assert!(world["config"]["units"].get("per_cell_hint").is_none());
+    assert_eq!(world["config"]["world"]["cells"], 1500);
+}
+
+#[test]
 fn invalid_json_is_exit_2_with_config_parse() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("map.json");

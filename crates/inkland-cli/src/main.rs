@@ -148,7 +148,8 @@ struct GenerateArgs {
     /// Replace `seed`.
     #[arg(long)]
     seed: Option<u64>,
-    /// Replace `world.cells`.
+    /// Replace `world.cells`. Also clear `units.per_cell_hint`, so that this
+    /// value sets the cell count.
     #[arg(long)]
     cells: Option<u32>,
     /// Replace one value: `POINTER=JSON`, for example `/world/cells=20000`.
@@ -255,6 +256,12 @@ fn generate(args: GenerateArgs, verbose: bool) -> Result<Value, Vec<Error>> {
         overrides.push(Override {
             pointer: "/world/cells".into(),
             value: cells.into(),
+        });
+        // A hint sets the cell count and replaces `world.cells`. Clear it,
+        // so that the flag wins.
+        overrides.push(Override {
+            pointer: "/units/per_cell_hint".into(),
+            value: Value::Null,
         });
     }
     for s in &args.set {
