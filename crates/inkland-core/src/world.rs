@@ -366,8 +366,11 @@ impl World {
             lake_elevation_limit: f64::from(config.world.lake_elevation_limit),
         });
         let drainage = flow.drainage;
-        let rivers = flow.rivers;
-        let lakes = flow.lakes;
+        let mut rivers = flow.rivers;
+        let mut lakes = flow.lakes;
+        if let Some(max) = config.world.river_limit {
+            crate::rivers::limit(&mut rivers, &mut lakes, max as usize);
+        }
         let mut heights = flow.heights;
         // Pins win: the new heights stay in the ranges of the regions.
         crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level);

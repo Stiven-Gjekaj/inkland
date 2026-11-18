@@ -149,6 +149,11 @@ pub struct World {
     #[serde(default = "default_sea_level")]
     #[schemars(range(min = 1, max = 99))]
     pub sea_level: u8,
+    /// The most rivers that generation keeps, besides the pinned rivers.
+    /// It keeps the rivers with the most water. 0: only the pinned rivers.
+    /// Default: all rivers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub river_limit: Option<u32>,
     /// A land low point becomes a lake when its water cannot reach other
     /// water through cells lower than its height plus this limit, on the
     /// height scale 0 to 100. 0 to 80. 80 makes no such lakes.
@@ -743,6 +748,7 @@ impl Default for World {
             jitter: default_jitter(),
             template: Template::default(),
             sea_level: default_sea_level(),
+            river_limit: None,
             lake_elevation_limit: default_lake_elevation_limit(),
             climate: Climate::default(),
             cultures: default_cultures(),

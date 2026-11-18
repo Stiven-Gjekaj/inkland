@@ -69,6 +69,32 @@ const FMG_SPACING: f64 = 10.119_288_512_538_814;
 
 /// The least flux of a river cell. The cell count does not change it; the
 /// argument stays for the callers.
+/// Keep the pinned rivers and the `max` generated rivers with the most
+/// water (`world.river_limit`). A kept river whose parent goes has no
+/// parent, and the lakes forget the rivers that go.
+pub fn limit(rivers: &mut Vec<River>, lakes: &mut [Lake], max: usize) {
+    let mut generated: Vec<&River> = rivers.iter().filter(|r| r.course.is_none()).collect();
+    generated.sort_by(|a, b| b.flux.total_cmp(&a.flux).then(a.id.cmp(&b.id)));
+    let kept: std::collections::BTreeSet<u32> = generated
+        .iter()
+        .take(max)
+        .map(|r| r.id)
+        .chain(rivers.iter().filter(|r| r.course.is_some()).map(|r| r.id))
+        .collect();
+    rivers.retain(|r| kept.contains(&r.id));
+    for r in rivers.iter_mut() {
+        if r.parent.is_some_and(|p| !kept.contains(&p)) {
+            r.parent = None;
+        }
+    }
+    for l in lakes.iter_mut() {
+        l.inlets.retain(|i| kept.contains(i));
+        if l.outlet.is_some_and(|o| !kept.contains(&o)) {
+            l.outlet = None;
+        }
+    }
+}
+
 pub fn river_threshold(_cells: usize) -> f64 {
     MIN_FLUX_TO_FORM_RIVER
 }
@@ -1213,6 +1239,52 @@ mod tests {
     use super::*;
     use crate::rand::Rand;
     use crate::seed::{Layer, SeedTree};
+
+    #[test]
+    fn the_river_limit_keeps_the_pins_and_the_largest_rivers() {
+        let c = |limit: Option<u32>| -> crate::config::Config {
+            let mut v = serde_json::json!({
+                "version": 1, "seed": 9, "frame": { "width": 300, "height": 200 },
+                "world": { "cells": 4000, "template": "continents" },
+                "pins": {
+                    "regions": [{ "id": "sea", "kind": "sea", "box": [0, 0, 20, 200] }],
+                    "rivers": [{ "id": "brann", "name": "The Brann",
+                                 "source": [120, 90], "mouth": { "region": "sea" } }]
+                }
+            });
+            if let Some(n) = limit {
+                v["world"]["river_limit"] = n.into();
+            }
+            serde_json::from_value(v).unwrap()
+        };
+        let all = crate::world::World::build(&c(None)).unwrap();
+        let generated: Vec<&River> = all.rivers.iter().filter(|r| r.course.is_none()).collect();
+        assert!(generated.len() > 5);
+        let mut by_flux: Vec<f64> = generated.iter().map(|r| r.flux).collect();
+        by_flux.sort_by(|a, b| b.total_cmp(a));
+        for n in [0u32, 5] {
+            let w = crate::world::World::build(&c(Some(n))).unwrap();
+            let kept: Vec<&River> = w.rivers.iter().filter(|r| r.course.is_none()).collect();
+            assert_eq!(kept.len(), n as usize);
+            assert_eq!(
+                w.rivers.iter().filter(|r| r.course.is_some()).count(),
+                1,
+                "the pin stays"
+            );
+            // The kept rivers are the largest.
+            for r in &kept {
+                assert!(r.flux >= by_flux[n as usize - 1]);
+            }
+            let ids: Vec<u32> = w.rivers.iter().map(|r| r.id).collect();
+            for r in &w.rivers {
+                assert!(r.parent.is_none_or(|p| ids.contains(&p)));
+            }
+            for l in &w.lakes {
+                assert!(l.inlets.iter().all(|i| ids.contains(i)));
+                assert!(l.outlet.is_none_or(|o| ids.contains(&o)));
+            }
+        }
+    }
 
     fn grid() -> Grid {
         Grid::new(

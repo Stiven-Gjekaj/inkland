@@ -807,6 +807,7 @@ Generation options.
 | `regiments` | array of [`RegimentEntry`](#regimententry) |  |  | Changes to the regiments: add, change, move, split, or remove. |
 | `religions` | integer |  | `4` | Number of religions. |
 | `renames` | array of [`RenameEntry`](#renameentry) |  |  | Names and arms for generated states, cultures, religions, and provinces. Generation applies them after the coats of arms, so the later stages use the new names. |
+| `river_limit` | integer |  |  | The most rivers that generation keeps, besides the pinned rivers. It keeps the rivers with the most water. 0: only the pinned rivers. Default: all rivers. |
 | `sea_level` | integer |  | `20` | Sea level on the height scale 0 to 100. Cells below it are water. |
 | `size_variety` | number |  | `4.0` | How much the sizes of cultures and states differ. 0 to 10. A bigger value gives a bigger random part of the expansionism. |
 | `states` | integer |  | `5` | Number of states. A point pin with `capital_of` is the capital of its state; generation adds the other capitals as cities. 0 and no `capital_of`: the world has no states and no capitals. With `towns: 0` too, the only places are the pins. |
