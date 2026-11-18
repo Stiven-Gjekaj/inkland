@@ -1,7 +1,8 @@
 //! Cultures, places, states, and provinces: the society stages of FMG in
 //! its order.
 //!
-//! - `build`: rankCells (`population.rs`), cultures and their expansion
+//! - `build`: the deposits of the goods (`economy::goods`), rankCells
+//!   (`population.rs`), cultures and their expansion
 //!   (`cultures.rs`), burgs and ports (`burgs.rs`), states (`states.rs`),
 //!   and development (`development.rs`).
 //! - `specify`, after the routes and the religions: burgsSpecify, state
@@ -239,18 +240,38 @@ pub fn build(input: &Input) -> Society {
     let n = grid.len();
     let tree = SeedTree::new(config.seed);
 
-    // Suitability and population (rankCells).
-    let cells = crate::population::Cells::new(&crate::population::Input {
+    // Deposits (FMG Goods.generate), then suitability and population
+    // (rankCells), which read the deposits.
+    let mut cells = crate::population::Cells::markup(&crate::population::Input {
         grid,
         heights,
         sea_level,
         features,
-        biomes,
         drainage,
         rivers,
         river_threshold,
         groups,
     });
+    let goods = crate::economy::goods::catalogue();
+    let mut grng = Rand::new(tree.part_rng(Layer::Economy, "goods"));
+    cells.good = crate::economy::goods::deposits(
+        &crate::economy::goods::DepositInput {
+            grid,
+            cells: &cells,
+            features,
+            biomes,
+            temperature,
+        },
+        &goods,
+        &mut grng,
+    );
+    cells.rank(
+        grid,
+        features,
+        biomes,
+        &crate::economy::goods::values(&goods),
+    );
+    let cells = cells;
     // Cultures (FMG generate and expand).
     let culture_input = crate::cultures::Input {
         config,

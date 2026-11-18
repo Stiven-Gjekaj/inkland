@@ -15,6 +15,7 @@ pub mod culture_sets;
 pub mod cultures;
 pub mod development;
 pub mod diplomacy;
+pub mod economy;
 pub mod emblems;
 pub mod error;
 pub mod features;

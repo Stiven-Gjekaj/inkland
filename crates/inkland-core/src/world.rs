@@ -84,6 +84,8 @@ pub struct World {
     pub religions: crate::religions::Religions,
     /// Markers: points of interest, as data.
     pub markers: Vec<crate::markers::Marker>,
+    /// Goods, markets, and the production run of one day.
+    pub economy: crate::economy::Economy,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -481,6 +483,9 @@ impl World {
             names,
             religions,
             markers,
+            economy: crate::economy::Economy {
+                goods: crate::economy::goods::catalogue(),
+            },
         })
     }
 

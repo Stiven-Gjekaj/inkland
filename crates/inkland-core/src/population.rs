@@ -11,7 +11,10 @@
 //!   example `isle` or the lake subtype `salt`.
 //! - `fl` and `conf`: the water flux, where a river forms at 30, and the
 //!   flux of the smaller rivers at a confluence.
-//! - `s` and `pop`: suitability and rural population of `rankCells`.
+//! - `good`: the deposit of each cell (`Goods.generate`), placed before
+//!   `rankCells`.
+//! - `s` and `pop`: suitability and rural population of `rankCells`, with
+//!   the bonus of the goods around a cell.
 
 use crate::biomes::HABITABILITY;
 use crate::features::{FeatureKind, Features};
@@ -39,13 +42,12 @@ fn lake_score(group: &str) -> f64 {
     }
 }
 
-/// What `Cells::new` reads.
+/// What `Cells::markup` reads.
 pub struct Input<'a> {
     pub grid: &'a Grid,
     pub heights: &'a [f64],
     pub sea_level: f64,
     pub features: &'a Features,
-    pub biomes: &'a [u8],
     pub drainage: &'a Drainage,
     pub rivers: &'a [River],
     pub river_threshold: f64,
@@ -73,6 +75,8 @@ pub struct Cells {
     pub s: Vec<f64>,
     /// Rural population, in population points.
     pub pop: Vec<f64>,
+    /// The deposit of each cell: a good id, or 0 (FMG `cells.good`).
+    pub good: Vec<u16>,
     /// The group of the feature of each cell.
     pub group: Vec<&'static str>,
     /// `true` for a cell of a frozen lake.
@@ -108,13 +112,14 @@ fn median(mut v: Vec<f64>) -> f64 {
 }
 
 impl Cells {
-    pub fn new(input: &Input) -> Cells {
+    /// The cell data before `rankCells`: no deposits, suitability, or
+    /// population yet.
+    pub fn markup(input: &Input) -> Cells {
         let Input {
             grid,
             heights,
             sea_level,
             features,
-            biomes,
             drainage,
             rivers,
             river_threshold,
@@ -157,7 +162,7 @@ impl Cells {
         let frozen: Vec<bool> = group.iter().map(|&g| g == "frozen").collect();
         let isle: Vec<bool> = group.iter().map(|&g| g == "isle").collect();
 
-        let mut cells = Cells {
+        Cells {
             h,
             t,
             haven,
@@ -169,12 +174,11 @@ impl Cells {
             r,
             s: vec![0.0; n],
             pop: vec![0.0; n],
+            good: vec![0; n],
             group,
             frozen,
             isle,
-        };
-        cells.rank(features, biomes);
-        cells
+        }
     }
 
     /// `true` for a land cell.
@@ -192,8 +196,9 @@ impl Cells {
         self.r[c] != 0 && self.fl[c] >= NAVIGABLE_FLUX
     }
 
-    /// Suitability and rural population (`rankCells`).
-    fn rank(&mut self, features: &Features, biomes: &[u8]) {
+    /// Suitability and rural population (`rankCells`). `good_value` is the
+    /// value of each good by id; the deposits in `good` add a bonus.
+    pub fn rank(&mut self, grid: &Grid, features: &Features, biomes: &[u8], good_value: &[f64]) {
         let n = self.h.len();
         let mean_flux = median(self.fl.iter().copied().filter(|&f| f != 0.0).collect());
         let max_flux = self.fl.iter().copied().fold(0.0, f64::max)
@@ -230,6 +235,25 @@ impl Cells {
             }
             // FMG stores the value in an Int16Array: it drops the fraction.
             self.s[i] = (score / 5.0).trunc();
+            // The bonus for goods around: the value of the deposit of the
+            // cell plus 10, and the mean value of the deposits next to it.
+            let value = |c: usize| {
+                let g = self.good[c] as usize;
+                if g == 0 {
+                    0.0
+                } else {
+                    good_value.get(g).copied().unwrap_or(0.0)
+                }
+            };
+            if self.good[i] != 0 || grid.neighbors(i).any(|c| self.good[c] != 0) {
+                let own = value(i);
+                let (sum, count) = grid
+                    .neighbors(i)
+                    .fold((0.0, 0usize), |(s, k), c| (s + value(c), k + 1));
+                let around = if count == 0 { 0.0 } else { sum / count as f64 };
+                let bonus = if own != 0.0 { own + 10.0 } else { 0.0 } + around;
+                self.s[i] = (self.s[i] + bonus).trunc();
+            }
             self.pop[i] = if self.s[i] > 0.0 {
                 self.s[i] * self.area[i] / mean_area
             } else {
