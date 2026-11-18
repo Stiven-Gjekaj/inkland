@@ -735,6 +735,14 @@ mod tests {
             if d.tariff > 0.0 {
                 assert!(super::taxes::is_foreign(burg, market));
             }
+            // A state order pays no tariff to the state, and no sales tax at
+            // a market of the state.
+            if d.kind == DealKind::Order {
+                assert_eq!(d.tariff, 0.0);
+                if market == burg {
+                    assert_eq!(d.tax, 0.0);
+                }
+            }
         }
         // Prices stay within 0.02 to 5 times the value of each good.
         for m in &e.markets {
