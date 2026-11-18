@@ -14,6 +14,7 @@ pub mod geom;
 pub mod hatches;
 pub mod icons;
 mod icons_data;
+mod images;
 pub mod layers;
 pub mod style;
 
