@@ -42,6 +42,8 @@ jobs:
           if [[ "${{ matrix.target }}" == *windows* ]]; then bin=inkland.exe; fi
           cp "target/${{ matrix.target }}/release/$bin" "dist/$name/"
           cp LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md README.md "dist/$name/"
+          # The binary holds charge files under the GNU FDL, which needs its text.
+          cp crates/inkland-render/assets/emblems/GFDL-1.3.txt "dist/$name/"
           mkdir -p "dist/$name/docs"
           cp docs/CLI.md docs/CONFIG.md docs/ERRORS.md "dist/$name/docs/"
           cd dist
