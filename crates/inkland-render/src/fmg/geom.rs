@@ -757,6 +757,15 @@ pub fn coast_path(shape: &Fractal, map: &dyn Fn([f64; 2]) -> [f64; 2], decimals:
     d
 }
 
+/// A ring of world points, clipped to the frame (FMG `clipPoly`), in
+/// world pixels.
+fn to_frame(ring: &[[f64; 2]], width: f64, height: f64, unit_px: f64) -> Vec<[f64; 2]> {
+    inkland_core::geom::clip_polygon(ring, [0.0, 0.0, width, height])
+        .into_iter()
+        .map(|p| [p[0] * unit_px, p[1] * unit_px])
+        .collect()
+}
+
 /// The outline of a land or lake feature.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outline {
@@ -831,15 +840,15 @@ pub fn outlines(world: &World, unit_px: f64, settings: &CoastSettings) -> Vec<Ou
             && ring.iter().all(|e| {
                 e.other != OUTSIDE && kind(feats.of_cell[e.other as usize]) == FeatureKind::Lake
             });
-        let pts: Vec<[f64; 2]> = ring_points(world, ring)
-            .into_iter()
-            .map(|p| {
-                [
-                    p[0].clamp(0.0, world.width) * unit_px,
-                    p[1].clamp(0.0, world.height) * unit_px,
-                ]
-            })
-            .collect();
+        let pts = to_frame(
+            &ring_points(world, ring),
+            world.width,
+            world.height,
+            unit_px,
+        );
+        if pts.len() < 3 {
+            continue;
+        }
         let mut pts = simplify(&pts, SIMPLIFICATION_TOLERANCE);
         if pts.len() > 3 && pts.first() == pts.last() {
             pts.pop();
@@ -863,6 +872,21 @@ pub fn outlines(world: &World, unit_px: f64, settings: &CoastSettings) -> Vec<Ou
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_outline_clips_to_the_frame() {
+        // A ring over the top left corner. The clip cuts it on the two
+        // edges; it does not move the outside point onto the corner.
+        let ring = [[-2.0, 4.0], [4.0, -2.0], [6.0, 6.0]];
+        let pts = to_frame(&ring, 10.0, 10.0, 2.0);
+        assert!(!pts.contains(&[0.0, 0.0]));
+        assert!(
+            pts.iter()
+                .all(|p| (0.0..=20.0).contains(&p[0]) && (0.0..=20.0).contains(&p[1]))
+        );
+        assert!(pts.contains(&[12.0, 12.0]));
+        assert_eq!(pts.len(), 5);
+    }
 
     #[test]
     fn basis_closed_starts_and_ends_at_the_same_point() {
