@@ -1,16 +1,19 @@
 // The Measurers Editor of FMG: the rulers and the other measurers of the
 // shown world, with the type, the number of points, and the length. Remove
 // takes a measurer out of the config (`world.measurers`, or
-// `world.default_ruler` for the default ruler).
+// `world.default_ruler` for the default ruler). Under it, the legend boxes
+// of the config (`world.legends`). Draw adds a measurer or a legend box on
+// the map.
 
 import { Theme, Label, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
+import { DrawRow } from "../draw-row.slint";
 import { Actions, Lists } from "../globals.slint";
 
 export component MeasurersDialog inherits Dialog {
     id: "measurers";
     title: "Measurers Editor";
-    content-width: 380px;
+    content-width: 420px;
     pos-x: 460px;
     pos-y: 80px;
     Table {
@@ -21,8 +24,28 @@ export component MeasurersDialog inherits Dialog {
         act(id) => { Actions.edit-item("measurers", id, "remove", ""); }
         list-height: 120px;
     }
+    DrawRow {
+        label: "New measurer";
+        tool: "add-measurer";
+        line: true;
+        placeholder: "Kind (empty: ruler)";
+    }
+    Label { dialog: true; text: "Legend boxes"; font-weight: 700; }
+    Table {
+        header: ["Title", "Items"];
+        widths: [200px, 60px];
+        rows: Lists.legends;
+        action: "Remove";
+        act(id) => { Actions.edit-item("legends", id, "remove", ""); }
+        list-height: 80px;
+    }
+    DrawRow {
+        label: "New legend box";
+        tool: "add-legend";
+        placeholder: "Title; #rrggbb text; #rrggbb text";
+    }
     Tip {
         dialog: true;
-        text: "Generation adds the default ruler of FMG. The config can add more measurers (world.measurers).";
+        text: "Generation adds the default ruler of FMG. Draw a measurer: click its points, then double-click or press Enter. The kinds are ruler, opisometer, route-opisometer, and planimeter. Draw a legend box: click its top left corner.";
     }
 }

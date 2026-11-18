@@ -7,7 +7,7 @@ export { TableRow }
 
 // The tool of the map: select and move, add a point pin, the heightmap
 // brush, draw a region, a river, a road, or a crop.
-export enum Tool { select, add-pin, brush, region, river, route, crop }
+export enum Tool { select, add-pin, brush, region, river, route, crop, draw }
 
 // A point pin. `x` and `y` are its position in the map view.
 export struct PinRow {
@@ -97,6 +97,8 @@ export global AppState {
     // `true`: a crop makes a new variant. `false`: it crops the shown
     // variant.
     in-out property <bool> crop-new;
+    // The id of the draw tool that is on, for example `add-market`.
+    in property <string> draw-tool;
     // The marks over the map, as path commands in map view pixels: the
     // pins of the open editors, the selected pin, and the drawing.
     in property <string> overlay-path;
@@ -188,6 +190,9 @@ export global Actions {
     // The drawing tools.
     callback start-tool(Tool);
     callback finish-draft();
+    // Start or stop a draw tool: its id, the item to move, and the text of
+    // its form.
+    callback start-draw(string, string, string);
     callback cancel-draft();
     // The selection of an editor table changed.
     callback selection-changed();
@@ -290,6 +295,7 @@ export global Lists {
     in property <[string]> state-names;
     in property <[TableRow]> relations;
     in property <[TableRow]> measurers;
+    in property <[TableRow]> legends;
     in property <[TableRow]> journeys;
     in property <[TableRow]> journey-segments;
     in property <[TableRow]> economy-lines;

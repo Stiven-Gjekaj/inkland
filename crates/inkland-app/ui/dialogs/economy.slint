@@ -35,6 +35,7 @@ export component EconomyDialog inherits Dialog {
         { key: "poll_tax", label: "Poll tax a day" },
         { key: "market_fee", label: "Market fee a day" },
         { key: "military", label: "Military budget %" },
+        { key: "tariffs", label: "Tariff (share or embargo)" },
     ]: FormRow {
         label: f.label;
         label-width: 150px;
@@ -43,8 +44,10 @@ export component EconomyDialog inherits Dialog {
             horizontal-stretch: 1;
             placeholder: "New value, then Enter";
             accepted(t) => {
-                Actions.edit-item("finance", AppState.overview-state, f.key, t);
-                self.text = "";
+                if t != "" {
+                    Actions.edit-item("finance", AppState.overview-state, f.key, t);
+                    self.text = "";
+                }
             }
         }
     }

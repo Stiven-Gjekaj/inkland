@@ -119,7 +119,7 @@ export component MapView inherits Rectangle {
     TouchArea {
         mouse-cursor: AppState.tool == Tool.select ? MouseCursor.default : MouseCursor.crosshair;
         double-clicked => {
-            if AppState.tool == Tool.region || AppState.tool == Tool.river || AppState.tool == Tool.route {
+            if AppState.tool == Tool.region || AppState.tool == Tool.river || AppState.tool == Tool.route || AppState.tool == Tool.draw {
                 Actions.finish-draft();
             }
         }

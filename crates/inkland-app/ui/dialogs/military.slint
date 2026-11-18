@@ -1,10 +1,11 @@
 // The Military Overview of FMG: the forces of each state by unit, the war
 // alert, the upkeep, and the power. Under it, the Regiments Overview of
-// FMG for the selected state. Split puts a regiment change into
-// `world.regiments`.
+// FMG for the selected state. Split, Add, Move, and Troops put a regiment
+// change into `world.regiments`.
 
-import { Theme, Label, Select, FormRow, Table, Tip } from "../theme.slint";
+import { Theme, Label, Field, Select, FormRow, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
+import { DrawRow } from "../draw-row.slint";
 import { AppState, Actions, Lists } from "../globals.slint";
 
 export component MilitaryDialog inherits Dialog {
@@ -13,6 +14,7 @@ export component MilitaryDialog inherits Dialog {
     content-width: 730px;
     pos-x: 380px;
     pos-y: 50px;
+    property <string> picked;
     Table {
         header: Lists.military-header;
         widths: [96px, 44px, 44px, 44px, 44px, 44px, 44px, 48px, 66px, 46px, 36px, 46px, 44px];
@@ -39,12 +41,42 @@ export component MilitaryDialog inherits Dialog {
         header: Lists.regiment-header;
         widths: [130px, 46px, 46px, 46px, 46px, 46px, 46px, 52px, 52px];
         rows: Lists.regiments;
+        selected: root.picked;
+        select(id) => { root.picked = id; }
         action: "Split";
         act(id) => { Actions.edit-item("regiments", id, "split", ""); }
         list-height: 160px;
     }
+    DrawRow {
+        label: "New regiment";
+        tool: "add-regiment";
+        placeholder: "Unit=people, Unit=people (empty: 500 of the first unit)";
+    }
+    DrawRow {
+        label: "Selected regiment";
+        tool: "move-regiment";
+        item: root.picked;
+        button: "Move";
+        enabled: root.picked != "";
+    }
+    FormRow {
+        label: "Troops";
+        label-width: 130px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            enabled: root.picked != "";
+            placeholder: "Unit=people, then Enter";
+            accepted(t) => {
+                if t != "" {
+                    Actions.edit-item("regiments", root.picked, "units", t);
+                    self.text = "";
+                }
+            }
+        }
+    }
     Tip {
         dialog: true;
-        text: "Click a state to see its regiments. Split makes two halves of a regiment. Total counts the crew of each unit. Power is the troops times the unit power and the upkeep.";
+        text: "Click a state to see its regiments. Split makes two halves of a regiment. Total counts the crew of each unit. Power is the troops times the unit power and the upkeep. Select a regiment to move it or to set its troops.";
     }
 }

@@ -409,6 +409,12 @@ pub const TOOLS: &[ToolDef] = &[
     tool("add-region", "Region", "Add", "", true),
     tool("add-river", "River", "Add", "Shift+4", true),
     tool("add-route", "Route", "Add", "Shift+5", true),
+    tool("add-market", "Market", "Add", "", true),
+    tool("add-regiment", "Regiment", "Add", "", true),
+    tool("add-zone", "Zone", "Add", "", true),
+    tool("add-journey", "Journey", "Add", "", true),
+    tool("add-measurer", "Measurer", "Add", "", true),
+    tool("add-legend", "Legend", "Add", "", true),
     tool("cells", "Cells", "Show", "Shift+E", true),
     tool("print", "Print", "Show", "", true),
 ];

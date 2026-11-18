@@ -4,6 +4,7 @@
 
 import { Theme, Label, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
+import { DrawRow } from "../draw-row.slint";
 import { AppState, Actions, Lists } from "../globals.slint";
 
 export component JourneysDialog inherits Dialog {
@@ -25,6 +26,12 @@ export component JourneysDialog inherits Dialog {
             Actions.selection-changed();
         }
     }
+    DrawRow {
+        label: "New journey";
+        tool: "add-journey";
+        line: true;
+        placeholder: "Name (empty: the first and the last stop)";
+    }
     Label { dialog: true; text: "Segments"; font-weight: 700; }
     Table {
         header: ["Segment", "Transport", "Distance", "Time"];
@@ -34,6 +41,6 @@ export component JourneysDialog inherits Dialog {
     }
     Tip {
         dialog: true;
-        text: "Speed is the mean speed of the moving segments. Total time counts each travel day of a transport as a full day.";
+        text: "Speed is the mean speed of the moving segments. Total time counts each travel day of a transport as a full day. Draw a journey: click its stops, then double-click or press Enter.";
     }
 }

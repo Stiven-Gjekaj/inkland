@@ -1,10 +1,11 @@
 // The Markets Overview of FMG: the markets of the shown world, with the
 // color, the center, the owner state, the cells, the burgs, the stock, the
-// sales, the buys, and the value. It does not edit, because the config has
-// no markets.
+// sales, the buys, and the value. Remove, Add, and Move put a market change
+// into `world.markets`.
 
 import { Theme, Label, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
+import { DrawRow } from "../draw-row.slint";
 import { Lists, Actions } from "../globals.slint";
 
 export component MarketsDialog inherits Dialog {
@@ -13,16 +14,31 @@ export component MarketsDialog inherits Dialog {
     content-width: 640px;
     pos-x: 420px;
     pos-y: 60px;
+    property <string> picked;
     Table {
         header: ["Market", "Owner", "Cells", "Burgs", "Stock", "Sales", "Buys", "Value"];
         widths: [90px, 80px, 44px, 44px, 60px, 60px, 60px, 60px];
         rows: Lists.markets;
+        selected: root.picked;
+        select(id) => { root.picked = id; }
         action: "Remove";
         act(id) => { Actions.edit-item("markets", id, "remove", ""); }
         list-height: 260px;
     }
+    DrawRow {
+        label: "New market";
+        tool: "add-market";
+        button: "Add on the map";
+    }
+    DrawRow {
+        label: "Selected market";
+        tool: "move-market";
+        item: root.picked;
+        button: "Move";
+        enabled: root.picked != "";
+    }
     Tip {
         dialog: true;
-        text: "Markets: " + Lists.markets.length + ". Sales is the market income less taxes and tariffs. Buys is what the market paid to burgs. Value is sales less buys, plus the stock at its price.";
+        text: "Markets: " + Lists.markets.length + ". Sales is the market income less taxes and tariffs. Buys is what the market paid to burgs. Value is sales less buys, plus the stock at its price. Add or Move, then click the burg of the center.";
     }
 }

@@ -1,9 +1,11 @@
 // The Zones Editor of FMG: the zones of the shown world, with the
 // description, the type, the cells, the area, the people, and the hatch
-// pattern of the fill. It does not edit, because the config has no zones.
+// pattern of the fill. Remove and Draw put a zone change into
+// `world.zones`.
 
 import { Theme, Label, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
+import { DrawRow } from "../draw-row.slint";
 import { Lists, Actions } from "../globals.slint";
 
 export component ZonesDialog inherits Dialog {
@@ -20,8 +22,14 @@ export component ZonesDialog inherits Dialog {
         act(id) => { Actions.edit-item("zones", id, "remove", ""); }
         list-height: 240px;
     }
+    DrawRow {
+        label: "New zone";
+        tool: "add-zone";
+        line: true;
+        placeholder: "Name; type, for example Disease";
+    }
     Tip {
         dialog: true;
-        text: "Zones: " + Lists.zones.length + ". The world makes the zones after the markers.";
+        text: "Zones: " + Lists.zones.length + ". The world makes the zones after the markers. Draw a zone: click its outline, then double-click or press Enter.";
     }
 }

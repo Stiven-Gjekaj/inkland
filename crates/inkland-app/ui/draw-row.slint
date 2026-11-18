@@ -1,0 +1,43 @@
+// A form row that starts a draw tool of a data dialog: a field for the
+// text of the tool, a Draw button, and a Finish button for a tool that
+// takes a line of points.
+
+import { DialogButton, Field, FormRow } from "theme.slint";
+import { AppState, Actions, Tool } from "globals.slint";
+
+export component DrawRow inherits FormRow {
+    // The id of the tool, for example `add-zone`.
+    in property <string> tool;
+    // The item that the tool moves. Empty for a tool that adds.
+    in property <string> item;
+    // The hint in the empty field. Empty: the row has no field.
+    in property <string> placeholder;
+    // `true`: the tool takes a line of points and has a Finish button.
+    in property <bool> line;
+    in property <string> button: "Draw";
+    in property <bool> enabled: true;
+    property <bool> on: AppState.tool == Tool.draw && AppState.draw-tool == root.tool;
+    label-width: 130px;
+    field := Field {
+        dialog: true;
+        visible: root.placeholder != "";
+        horizontal-stretch: root.placeholder != "" ? 1 : 0;
+        min-width: root.placeholder != "" ? 40px : 0px;
+        max-width: root.placeholder != "" ? 2000px : 0px;
+        placeholder: root.placeholder;
+    }
+    DialogButton {
+        horizontal-stretch: 0;
+        text: root.on ? "Stop" : root.button;
+        pressed: root.on;
+        enabled: root.enabled;
+        clicked => { Actions.start-draw(root.tool, root.item, field.text); }
+    }
+    if root.line && root.on: DialogButton {
+        horizontal-stretch: 0;
+        text: "Finish";
+        enabled: AppState.draft-points.length >= (root.tool == "add-zone" ? 3 : 2);
+        clicked => { Actions.finish-draft(); }
+    }
+    if root.placeholder == "": Rectangle { horizontal-stretch: 1; }
+}

@@ -19,6 +19,7 @@ mod ui {
 
 use inkland::{Config, World};
 use inkland_app::catalog;
+use inkland_app::data_edits::{self, DrawTool};
 use inkland_app::model::{Editor, error_text};
 use inkland_app::options::option_text;
 use inkland_app::pins::{Shape, ShapeKind, anchor_at, waypoint_at};
@@ -64,6 +65,32 @@ fn region_kind(i: i32) -> &'static str {
         .unwrap_or("hills")
 }
 
+/// The status text after a draw tool made its edit.
+fn draw_done(tool: DrawTool) -> String {
+    match tool {
+        DrawTool::Market => "add a market",
+        DrawTool::MoveMarket => "move a market",
+        DrawTool::Regiment => "add a regiment",
+        DrawTool::MoveRegiment => "move a regiment",
+        DrawTool::Legend => "add a legend box",
+        DrawTool::Journey => "add a journey",
+        DrawTool::Measurer => "add a measurer",
+        DrawTool::Zone => "add a zone",
+    }
+    .to_owned()
+}
+
+/// The dialog that holds the form of a draw tool.
+fn draw_dialog(tool: DrawTool) -> &'static str {
+    match tool {
+        DrawTool::Market | DrawTool::MoveMarket => "markets",
+        DrawTool::Regiment | DrawTool::MoveRegiment => "military",
+        DrawTool::Legend | DrawTool::Measurer => "measurers",
+        DrawTool::Journey => "journeys",
+        DrawTool::Zone => "zones",
+    }
+}
+
 /// The tools of the Tools tab that the app has now.
 const IMPLEMENTED: &[&str] = &[
     "burgs",
@@ -97,6 +124,12 @@ const IMPLEMENTED: &[&str] = &[
     "notes",
     "markers",
     "military",
+    "add-market",
+    "add-regiment",
+    "add-zone",
+    "add-journey",
+    "add-measurer",
+    "add-legend",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -188,6 +221,8 @@ struct State {
     drag: Drag,
     /// The points (world) of the shape, river, or road that the user draws.
     draft: Vec<[f64; 2]>,
+    /// The draw tool that is on, the item that it moves, and its text.
+    draw: Option<(DrawTool, String, String)>,
     /// The pointer in the map view, if it is there.
     pointer: Option<[f64; 2]>,
 }
@@ -838,6 +873,19 @@ impl Controller {
                     st.drag = Drag::Shape { start: at };
                 }
             }
+            Tool::Draw => {
+                let Some(at) = Self::world_at(&st, p) else {
+                    return;
+                };
+                Self::push_draft(&mut st, at);
+                let one = st.draw.as_ref().is_some_and(|d| d.0.min_points() == 1);
+                drop(st);
+                if one {
+                    self.finish_draft();
+                } else {
+                    self.update_view();
+                }
+            }
         }
     }
 
@@ -869,7 +917,8 @@ impl Controller {
         if draft.is_empty() {
             return;
         }
-        let r = match g.get_tool() {
+        let tool = g.get_tool();
+        let r = match tool {
             Tool::Region => {
                 let kind = region_kind(g.get_region_kind());
                 st.editor
@@ -896,6 +945,17 @@ impl Controller {
                 st.editor
                     .add_road_along(&points, kind)
                     .map(|id| format!("add the {kind} {id}"))
+            }
+            Tool::Draw => {
+                let world = st.shown.as_ref().map(|m| std::sync::Arc::clone(&m.world));
+                match (st.draw.clone(), world) {
+                    (Some((tool, id, text)), Some(w)) => {
+                        data_edits::draw(st.editor.config(), &w, tool, &id, &draft, &text)
+                            .and_then(|cmd| st.editor.run(cmd))
+                            .map(|()| draw_done(tool))
+                    }
+                    _ => Err("there is no world to edit".to_owned()),
+                }
             }
             _ => Ok(String::new()),
         };
@@ -1221,6 +1281,7 @@ impl Controller {
         l.set_measurers(rows(open(d.get_measurers()), &|w| {
             ov::measurer_rows(w, &unit)
         }));
+        l.set_legends(rows(open(d.get_measurers()), &ov::legend_rows));
         let w = open(d.get_journeys());
         let unit = st.editor.config().units.name.clone();
         let journeys = w.map(|w| ov::journey_rows(w, &unit)).unwrap_or_default();
@@ -1554,6 +1615,11 @@ impl Controller {
                 ui.global::<Dialogs>().invoke_open(s("routes"));
                 self.start_tool(Tool::Route);
             }
+            id if DrawTool::from_id(id).is_some() => {
+                let tool = DrawTool::from_id(id).expect("checked");
+                ui.global::<Dialogs>().invoke_open(s(draw_dialog(tool)));
+                self.start_draw(id, "", "");
+            }
             _ => ui.global::<Dialogs>().invoke_open(s(id)),
         }
         self.update_tools();
@@ -1595,10 +1661,11 @@ impl Controller {
                 .and_then(|()| e.set_label(v, id, setting))
             }
             (
-                "zones" | "markets" | "regiments" | "journeys" | "notes" | "measurers",
+                "zones" | "markets" | "regiments" | "journeys" | "notes" | "measurers" | "legends",
                 "remove" | "name" | "split" | "add",
             )
-            | ("finance", "sales_tax" | "poll_tax" | "market_fee" | "military") => {
+            | ("regiments", "units")
+            | ("finance", "sales_tax" | "poll_tax" | "market_fee" | "military" | "tariffs") => {
                 match st_shown_world.as_deref() {
                     Some(w) => {
                         inkland_app::data_edits::command(e.config(), w, list, id, field, text)
@@ -1736,6 +1803,35 @@ impl Controller {
         true
     }
 
+    /// Start a draw tool of the data dialogs, or stop it if it is on. `item`
+    /// is the item to move, and `text` the field of the form.
+    fn start_draw(self: &Rc<Self>, id: &str, item: &str, text: &str) {
+        let Some(tool) = DrawTool::from_id(id) else {
+            return;
+        };
+        let ui = self.ui();
+        let g = ui.global::<AppState>();
+        let on = g.get_tool() == Tool::Draw
+            && self
+                .state
+                .borrow()
+                .draw
+                .as_ref()
+                .is_some_and(|d| d.0 == tool && d.1 == item);
+        self.cancel_draft();
+        if on {
+            g.set_tool(Tool::Select);
+            self.state.borrow_mut().draw = None;
+            g.set_draw_tool(s(""));
+        } else {
+            g.set_tool(Tool::Draw);
+            self.state.borrow_mut().draw = Some((tool, item.to_owned(), text.to_owned()));
+            g.set_draw_tool(s(id));
+            self.message(tool.hint(), false);
+        }
+        self.update_tools();
+    }
+
     /// Start a drawing tool, or stop it if it is on.
     fn start_tool(self: &Rc<Self>, tool: Tool) {
         let ui = self.ui();
@@ -1750,6 +1846,10 @@ impl Controller {
     fn update_tools(&self) {
         let ui = self.ui();
         let tool = ui.global::<AppState>().get_tool();
+        let draw = match tool {
+            Tool::Draw => self.state.borrow().draw.as_ref().map(|d| d.0.id()),
+            _ => None,
+        };
         let mut rows = Vec::new();
         let mut counts = Vec::new();
         for group in ["Edit", "Add", "Show"] {
@@ -1764,7 +1864,8 @@ impl Controller {
                 active: (t.id == "add-burg" && tool == Tool::AddPin)
                     || (t.id == "add-region" && tool == Tool::Region)
                     || (t.id == "add-river" && tool == Tool::River)
-                    || (t.id == "add-route" && tool == Tool::Route),
+                    || (t.id == "add-route" && tool == Tool::Route)
+                    || draw == Some(t.id),
             }));
         }
         let l = ui.global::<Lists>();
@@ -1835,6 +1936,7 @@ fn main() -> Result<(), slint::PlatformError> {
             done_rev: 0,
             drag: Drag::None,
             draft: Vec::new(),
+            draw: None,
             pointer: None,
         }),
         generator,
@@ -1976,6 +2078,8 @@ fn main() -> Result<(), slint::PlatformError> {
     a.on_key(move |text, ctrl, shift, alt| c.key(&text, ctrl, shift, alt));
     let c = Rc::clone(&app);
     a.on_finish_draft(move || c.finish_draft());
+    let c = Rc::clone(&app);
+    a.on_start_draw(move |id, item, text| c.start_draw(&id, &item, &text));
     let c = Rc::clone(&app);
     a.on_cancel_draft(move || c.cancel_draft());
     let c = Rc::clone(&app);
