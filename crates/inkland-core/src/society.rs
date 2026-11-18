@@ -226,6 +226,8 @@ pub struct Input<'a> {
     pub groups: &'a [&'static str],
     /// The number of cells of the first grid.
     pub base_cells: usize,
+    /// The goods catalogue.
+    pub goods: &'a [crate::economy::goods::Good],
 }
 
 /// Build the society.
@@ -245,6 +247,7 @@ pub fn build(input: &Input) -> Society {
         lakes,
         groups,
         base_cells,
+        goods,
     } = *input;
     let n = grid.len();
     let tree = SeedTree::new(config.seed);
@@ -261,7 +264,6 @@ pub fn build(input: &Input) -> Society {
         river_threshold,
         groups,
     });
-    let goods = crate::economy::goods::catalogue();
     let mut grng = Rand::new(tree.part_rng(Layer::Economy, "goods"));
     cells.good = crate::economy::goods::deposits(
         &crate::economy::goods::DepositInput {
@@ -271,14 +273,14 @@ pub fn build(input: &Input) -> Society {
             biomes,
             temperature,
         },
-        &goods,
+        goods,
         &mut grng,
     );
     cells.rank(
         grid,
         features,
         biomes,
-        &crate::economy::goods::values(&goods),
+        &crate::economy::goods::values(goods),
     );
     let cells = cells;
     // Cultures (FMG generate and expand).

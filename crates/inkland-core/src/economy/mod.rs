@@ -164,6 +164,8 @@ pub struct Input<'a> {
     pub roads: &'a [Road],
     pub sea_routes: &'a [Road],
     pub religions: &'a crate::religions::Religions,
+    /// The goods catalogue.
+    pub goods: &'a [goods::Good],
 }
 
 /// The route links of each cell, by neighbor cell: `true` for a sea route
@@ -264,7 +266,7 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
     }
 
     let mut economy = Economy {
-        goods: goods::catalogue(),
+        goods: input.goods.to_vec(),
         markets,
         cell_market,
         places: vec![PlaceEconomy::default(); soc.places.len()],

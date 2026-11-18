@@ -130,6 +130,10 @@ impl World {
     pub fn build(config: &Config) -> Result<World, Error> {
         let tree = SeedTree::new(config.seed);
         let (w, h) = (config.frame.width, config.frame.height);
+        // The tables of the config: the goods, the units, and the transports.
+        let goods = crate::economy::goods::catalogue_from(&config.world.goods)?;
+        let military_units = crate::military::units_from(&config.world.military_units)?;
+        let transports = crate::journeys::transports::transports_from(&config.world.transports)?;
         let sea_level = f64::from(config.world.sea_level);
         let pins = &config.pins;
 
@@ -399,6 +403,7 @@ impl World {
             lakes: &lakes,
             groups: &groups,
             base_cells: base_grid_len,
+            goods: &goods,
         });
         let routes = crate::roads::build(&crate::roads::Input {
             config,
@@ -461,12 +466,12 @@ impl World {
                 roads: &roads,
                 sea_routes: &sea_routes,
                 religions: &religions,
+                goods: &goods,
             },
             &mut society,
         );
         // The military (FMG `Military.generate`), after the taxes.
         let era = crate::markers::era(config.seed);
-        let military_units = crate::military::default_units();
         crate::military::generate(
             &crate::military::Input {
                 config,
@@ -517,7 +522,6 @@ impl World {
         // The journeys run last, as in FMG (`Journeys.generate`). Later
         // stages go before them.
         let measurers = crate::annotations::default_ruler(&grid, &features, society.cells.px);
-        let transports = crate::journeys::transports::default_transports();
         let journeys = crate::journeys::generate(&crate::journeys::Input {
             config,
             grid: &grid,
@@ -654,6 +658,32 @@ mod tests {
     fn same_config_gives_the_same_world() {
         let c = config(42, "continents", 3000);
         assert_eq!(World::build(&c).unwrap(), World::build(&c).unwrap());
+    }
+
+    #[test]
+    fn the_tables_of_the_config_reach_the_world() {
+        let mut c = config(42, "continents", 3000);
+        c.world.goods = vec![crate::config::GoodEntry {
+            name: "Wood".to_owned(),
+            value: Some(9.0),
+            ..Default::default()
+        }];
+        c.world.transports = vec![crate::config::TransportEntry {
+            name: "Rowboat".to_owned(),
+            remove: true,
+            ..Default::default()
+        }];
+        let w = World::build(&c).unwrap();
+        assert_eq!(
+            w.economy.good(1).map(|g| (g.name.as_str(), g.value)),
+            Some(("Wood", 9.0))
+        );
+        assert_eq!(w.transports.len(), 19);
+        assert!(w.transports.iter().all(|t| t.name != "Rowboat"));
+        // A table that cannot be used stops the build.
+        c.world.transports[0].name = "Nothing".to_owned();
+        let e = World::build(&c).unwrap_err();
+        assert_eq!(e.code, crate::error::ErrorCode::RefUnknown);
     }
 
     #[test]

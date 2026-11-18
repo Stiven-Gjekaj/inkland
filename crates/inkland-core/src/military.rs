@@ -1113,6 +1113,50 @@ mod tests {
         assert_eq!(err.path, "/world/military_units/0/crew");
     }
 
+    #[test]
+    fn a_world_raises_the_units_of_its_config() {
+        use crate::config::UnitEntry;
+        let mut c: Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 7, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 4000, "template": "continents", "states": 6 }
+        }))
+        .unwrap();
+        // Only levies and a new ranged unit.
+        let mut entries: Vec<UnitEntry> = default_units()
+            .iter()
+            .filter(|u| u.kind != "levies")
+            .map(|u| UnitEntry {
+                name: u.name.clone(),
+                remove: true,
+                ..UnitEntry::default()
+            })
+            .collect();
+        entries.push(UnitEntry {
+            name: "slingers".to_owned(),
+            kind: Some(crate::config::UnitKind::Ranged),
+            rural: Some(0.3),
+            urban: Some(0.3),
+            ..UnitEntry::default()
+        });
+        c.world.military_units = entries;
+        let w = World::build(&c).unwrap();
+        let names: Vec<&str> = w.military_units.iter().map(|u| u.name.as_str()).collect();
+        assert_eq!(names, ["levies", "slingers"]);
+        let mut raised = std::collections::BTreeSet::new();
+        for s in &w.society.states {
+            for r in &s.military {
+                for (u, _) in &r.units {
+                    raised.insert(u.clone());
+                }
+            }
+        }
+        assert!(raised.contains("slingers"), "{raised:?}");
+        assert!(
+            raised.iter().all(|u| u == "levies" || u == "slingers"),
+            "{raised:?}"
+        );
+    }
+
     fn world(seed: u64) -> World {
         let c: Config = serde_json::from_value(serde_json::json!({
             "version": 1, "seed": seed, "frame": { "width": 400, "height": 300 },
