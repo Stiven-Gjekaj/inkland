@@ -597,10 +597,12 @@ and the test that closes each milestone. We stop for a review after each one.
 - Label placement uses a table of font metrics, not the font files. The
   table has the advance widths, the cap height, and the descender of IM
   Fell English, IM Fell English SC, Caladea, and Inter.
-  `examples/font_metrics.rs` makes it from local font files. A family that
-  is not in the table, for example a font of a style preset, uses a wide
-  table: each character has the largest advance of the four tables, 10 %
-  larger, and at least 0.6 em, the advance of a monospace font.
+  `examples/font_metrics.rs` makes it from local font files. A second
+  table, `metrics_styles.rs`, has the free fonts of the style presets, from
+  `assets/fonts`. Cinzel has the widths of the weight 900, as cinderwood
+  draws it. A family that is in no table, for example Georgia, uses a wide
+  table: each character has the largest advance of the four print tables,
+  10 % larger, and at least 0.6 em, the advance of a monospace font.
 - Labels: each place in the view, each state, each pinned region with a
   `name`, and each pinned river with a `name`. Generated rivers have no
   names in this version.
