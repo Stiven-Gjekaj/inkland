@@ -136,6 +136,14 @@ The division of the field.
 | `line` | string |  |  | The line of partition, for example `straight`, `wavy`, or `embattled`. Default: `straight`. |
 | `t` | string | yes |  | The tincture of the second part. |
 
+### EmblemOptions
+
+Options of the layer `emblems`: the coats of arms of the states, the provinces, and the places.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `show_all` | boolean |  | `false` | `true`: draw each group of emblems. `false`: as Azgaar's Fantasy Map Generator, hide a group when its emblems are smaller than 25 or larger than 300 map pixels at the zoom of the variant. Then a full map shows only the arms of the states. |
+
 ### Extras
 
 Extras. A missing value means "not set".
@@ -433,6 +441,7 @@ Render options for all variants.
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `coastline` | [`CoastlineDetail`](#coastlinedetail) |  |  | Coastline detail. `smooth` cuts the corners of the cell edges. `fractal` adds the fractal detail of Azgaar's Fantasy Map Generator. Default: `smooth` in `print-safe` mode, `fractal` in `colour` mode. |
+| `emblems` | [`EmblemOptions`](#emblemoptions) |  |  | Options of the layer `emblems`. |
 | `extras` | [`Extras`](#extras) |  |  | Extras such as the scale bar and the compass. |
 | `font_sizes_pt` | [`FontSizes`](#fontsizes) |  |  | Font sizes, in points. |
 | `fonts` | [`Fonts`](#fonts) |  |  | Font families. The SVG names each family exactly as given here. The SVG never embeds a font. |

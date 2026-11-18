@@ -151,6 +151,167 @@ pub fn ring_points(world: &World, ring: &[Edge]) -> Vec<[f64; 2]> {
         .collect()
 }
 
+/// The pole of inaccessibility of a polygon: the inside point that is
+/// farthest from the edges (`polylabel` of Mapbox, which FMG uses). The
+/// first ring is the outline and the others are holes. `precision` is in
+/// the units of the points.
+pub fn polylabel(polygon: &[Vec<[f64; 2]>], precision: f64) -> [f64; 2] {
+    use std::cmp::Ordering;
+    use std::collections::BinaryHeap;
+    let Some(outer) = polygon.first().filter(|r| !r.is_empty()) else {
+        return [0.0, 0.0];
+    };
+    let (mut x0, mut y0, mut x1, mut y1) = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for p in outer {
+        x0 = x0.min(p[0]);
+        y0 = y0.min(p[1]);
+        x1 = x1.max(p[0]);
+        y1 = y1.max(p[1]);
+    }
+    let (w, h) = (x1 - x0, y1 - y0);
+    let size = precision.max(w.min(h));
+    if size == precision {
+        return [x0, y0];
+    }
+    #[derive(Clone, Copy)]
+    struct Cell {
+        x: f64,
+        y: f64,
+        h: f64,
+        d: f64,
+        max: f64,
+        seq: u64,
+    }
+    impl PartialEq for Cell {
+        fn eq(&self, o: &Self) -> bool {
+            self.cmp(o) == Ordering::Equal
+        }
+    }
+    impl Eq for Cell {}
+    impl PartialOrd for Cell {
+        fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+            Some(self.cmp(o))
+        }
+    }
+    impl Ord for Cell {
+        fn cmp(&self, o: &Self) -> Ordering {
+            // The largest `max` first; on a tie, the first pushed.
+            self.max.total_cmp(&o.max).then(o.seq.cmp(&self.seq))
+        }
+    }
+    let dist = |x: f64, y: f64| -> f64 {
+        let mut inside = false;
+        let mut min = f64::INFINITY;
+        for ring in polygon {
+            let n = ring.len();
+            let mut j = n.wrapping_sub(1);
+            for i in 0..n {
+                let (a, b) = (ring[i], ring[j]);
+                if (a[1] > y) != (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]
+                {
+                    inside = !inside;
+                }
+                min = min.min(seg_dist2(x, y, a, b));
+                j = i;
+            }
+        }
+        if min == 0.0 {
+            0.0
+        } else {
+            (if inside { 1.0 } else { -1.0 }) * libm::sqrt(min)
+        }
+    };
+    let mut seq = 0u64;
+    let mut cell = |x: f64, y: f64, h: f64| {
+        let d = dist(x, y);
+        seq += 1;
+        Cell {
+            x,
+            y,
+            h,
+            d,
+            max: d + h * std::f64::consts::SQRT_2,
+            seq,
+        }
+    };
+    // The first guesses: the centroid, then the center of the box.
+    let (mut area, mut cx, mut cy) = (0.0, 0.0, 0.0);
+    let n = outer.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let (a, b) = (outer[i], outer[j]);
+        let f = a[0] * b[1] - b[0] * a[1];
+        cx += (a[0] + b[0]) * f;
+        cy += (a[1] + b[1]) * f;
+        area += f * 3.0;
+        j = i;
+    }
+    let mut best = if area == 0.0 {
+        cell(outer[0][0], outer[0][1], 0.0)
+    } else {
+        cell(cx / area, cy / area, 0.0)
+    };
+    let bbox = cell(x0 + w / 2.0, y0 + h / 2.0, 0.0);
+    if bbox.d > best.d {
+        best = bbox;
+    }
+    let mut queue = BinaryHeap::new();
+    let mut probe = |x: f64, y: f64, h: f64, best: &mut Cell, queue: &mut BinaryHeap<Cell>| {
+        let c = cell(x, y, h);
+        if c.max > best.d + precision {
+            queue.push(c);
+        }
+        if c.d > best.d {
+            *best = c;
+        }
+    };
+    let half = size / 2.0;
+    let mut x = x0;
+    while x < x1 {
+        let mut y = y0;
+        while y < y1 {
+            probe(x + half, y + half, half, &mut best, &mut queue);
+            y += size;
+        }
+        x += size;
+    }
+    while let Some(c) = queue.pop() {
+        if c.max - best.d <= precision {
+            break;
+        }
+        let h = c.h / 2.0;
+        probe(c.x - h, c.y - h, h, &mut best, &mut queue);
+        probe(c.x + h, c.y - h, h, &mut best, &mut queue);
+        probe(c.x - h, c.y + h, h, &mut best, &mut queue);
+        probe(c.x + h, c.y + h, h, &mut best, &mut queue);
+    }
+    [best.x, best.y]
+}
+
+/// The squared distance from a point to a segment.
+fn seg_dist2(px: f64, py: f64, a: [f64; 2], b: [f64; 2]) -> f64 {
+    let (mut x, mut y) = (a[0], a[1]);
+    let (mut dx, mut dy) = (b[0] - x, b[1] - y);
+    if dx != 0.0 || dy != 0.0 {
+        let t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy);
+        if t > 1.0 {
+            x = b[0];
+            y = b[1];
+        } else if t > 0.0 {
+            x += dx * t;
+            y += dy * t;
+        }
+    }
+    dx = px - x;
+    dy = py - y;
+    dx * dx + dy * dy
+}
+
 /// Twice the signed area of a polygon.
 pub fn area2(points: &[[f64; 2]]) -> f64 {
     let n = points.len();

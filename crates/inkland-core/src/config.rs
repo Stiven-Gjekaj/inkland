@@ -874,6 +874,27 @@ pub struct Render {
     /// only for `colour` mode draws nothing in `print-safe` mode.
     #[serde(default = "default_layers")]
     pub layers: Vec<LayerName>,
+    /// Options of the layer `emblems`.
+    #[serde(default, skip_serializing_if = "EmblemOptions::is_default")]
+    pub emblems: EmblemOptions,
+}
+
+/// Options of the layer `emblems`: the coats of arms of the states, the
+/// provinces, and the places.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct EmblemOptions {
+    /// `true`: draw each group of emblems. `false`: as Azgaar's Fantasy Map
+    /// Generator, hide a group when its emblems are smaller than 25 or
+    /// larger than 300 map pixels at the zoom of the variant. Then a full
+    /// map shows only the arms of the states.
+    pub show_all: bool,
+}
+
+impl EmblemOptions {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl Default for Render {
@@ -889,6 +910,7 @@ impl Default for Render {
             min_line_width_pt: default_min_line_width_pt(),
             extras: Extras::default(),
             layers: default_layers(),
+            emblems: EmblemOptions::default(),
         }
     }
 }

@@ -77,7 +77,8 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         ScaleBar => Some("scale-bar"),
         Vignette => Some("vignette"),
         Legend => Some("legend"),
-        Texture | Zones | Ice | Population | Emblems | Markers | Features => None,
+        Emblems => Some("emblems"),
+        Texture | Zones | Ice | Population | Markers | Features => None,
         Coast | Regions | Roads | Places => None,
     }
 }
@@ -232,13 +233,15 @@ fn layers_without_world_data_draw_from_given_data() {
         &mut s,
         &ctx,
         &[data::Emblem {
-            id: "state-1".into(),
             group: "state",
-            at: [200.0, 150.0],
-            svg: "<rect width=\"200\" height=\"200\" fill=\"#aa0000\"/>".into(),
+            id: 1,
+            at: Some([200.0, 150.0]),
+            center: 0,
+            coa: serde_json::from_value(json!({ "t1": "gules", "shield": "round" })).unwrap(),
         }],
     );
     assert!(s.contains("id=\"emblem-state-1\""));
+    assert!(s.contains("fill=\"#d7374a\""));
     let mut s = String::new();
     layers::marks::write_markers(
         &mut s,
@@ -324,4 +327,49 @@ fn named_seas_get_labels_in_colour_mode_only() {
     c.render.mode = RenderMode::PrintSafe;
     let print = crate::svg::render(w, &c, &c.variants[0]).svg;
     assert!(!print.contains("label-water-"));
+}
+
+#[test]
+fn emblems_follow_the_sizes_and_groups_of_fmg() {
+    // 15 states: (1920 + 1080) / 40 = 75 pixels, divided by 1 + 15 / 100.
+    assert_eq!(layers::marks::emblem_size("state", 15, 1.0), 65.0);
+    assert_eq!(layers::marks::emblem_size("province", 115, 1.0), 27.0);
+    assert_eq!(layers::marks::emblem_size("burg", 450, 1.0), 11.0);
+    assert_eq!(layers::marks::emblem_size("state", 15, 2.0), 130.0);
+    let soc = &world().society;
+    let svg = render_with(&[LayerName::Emblems], StyleName::Default);
+    // A full map shows the arms of the states; the smaller arms are hidden.
+    for st in &soc.states {
+        assert!(svg.contains(&format!("id=\"emblem-state-{}\"", st.id)));
+    }
+    assert!(!svg.contains("id=\"emblem-burg-"));
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Emblems];
+    c.render.emblems.show_all = true;
+    let all = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    for p in &soc.places {
+        assert!(all.contains(&format!("id=\"emblem-burg-{}\"", p.id)));
+    }
+    for p in &soc.provinces {
+        assert!(all.contains(&format!("id=\"emblem-province-{}\"", p.id)));
+    }
+    parse_and_draw(&all);
+}
+
+#[test]
+fn the_pole_of_a_square_is_its_center() {
+    let square = vec![vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]]];
+    let [x, y] = geom::polylabel(&square, 1.0);
+    assert!((x - 50.0).abs() < 1.0 && (y - 50.0).abs() < 1.0, "{x} {y}");
+    // An L shape: the pole is in the wide part.
+    let l = vec![vec![
+        [0.0, 0.0],
+        [100.0, 0.0],
+        [100.0, 20.0],
+        [20.0, 20.0],
+        [20.0, 100.0],
+        [0.0, 100.0],
+    ]];
+    let [x, y] = geom::polylabel(&l, 0.5);
+    assert!(x < 20.0 || y < 20.0, "{x} {y}");
 }

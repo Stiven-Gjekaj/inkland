@@ -1,6 +1,5 @@
 //! The data of the layers that the world may not have: zones, ice,
-//! population, emblems, and markers. Zones and emblems are not in the
-//! world yet.
+//! population, emblems, and markers. Zones are not in the world yet.
 //!
 //! The drawing of each of these layers reads its data from here. Each
 //! function gives `None` while the world has no such data, and the layer
@@ -34,14 +33,19 @@ pub struct Population {
     pub urban: Vec<([f64; 2], f64)>,
 }
 
-/// A coat of arms: SVG markup in a box of 200 x 200, at a point.
+/// A coat of arms of a state, a province, or a place.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Emblem {
-    pub id: String,
     /// `state`, `province`, or `burg`.
     pub group: &'static str,
-    pub at: [f64; 2],
-    pub svg: String,
+    /// The id of the state, province, or place.
+    pub id: u32,
+    /// The point of a place, in world units. `None` for a state or a
+    /// province: the layer puts its arms at the pole of its area.
+    pub at: Option<[f64; 2]>,
+    /// The cell of the center, for an area without a pole.
+    pub center: usize,
+    pub coa: inkland_core::emblems::Coa,
 }
 
 /// A marker: a pin with an icon (a short text, for example an emoji).
@@ -93,9 +97,45 @@ pub fn population(world: &World) -> Option<Population> {
     })
 }
 
-/// The coats of arms of a world.
-pub fn emblems(_world: &World) -> Option<Vec<Emblem>> {
-    None
+/// The coats of arms of a world: places, provinces, then states, as FMG
+/// lists them (`drawEmblems`).
+pub fn emblems(world: &World) -> Option<Vec<Emblem>> {
+    let soc = &world.society;
+    let mut out = Vec::new();
+    for p in &soc.places {
+        if let Some(coa) = &p.coa {
+            out.push(Emblem {
+                group: "burg",
+                id: p.id,
+                at: Some(p.at),
+                center: p.cell,
+                coa: coa.clone(),
+            });
+        }
+    }
+    for p in &soc.provinces {
+        if let Some(coa) = &p.coa {
+            out.push(Emblem {
+                group: "province",
+                id: p.id,
+                at: None,
+                center: p.center,
+                coa: coa.clone(),
+            });
+        }
+    }
+    for st in &soc.states {
+        if let Some(coa) = &st.coa {
+            out.push(Emblem {
+                group: "state",
+                id: st.id,
+                at: None,
+                center: st.center,
+                coa: coa.clone(),
+            });
+        }
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 /// The markers of a world, with the icons of FMG.

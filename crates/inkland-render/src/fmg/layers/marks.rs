@@ -491,42 +491,197 @@ pub fn write_ice(s: &mut String, ctx: &Ctx, list: &[super::super::data::Ice]) {
     s.push_str("</g>\n");
 }
 
-/// Coats of arms (`drawEmblems`). The world has no emblems yet; see
-/// `data::emblems`.
+/// Coats of arms (`drawEmblems`).
 pub fn emblems(s: &mut String, ctx: &Ctx) {
     if let Some(list) = super::super::data::emblems(ctx.world) {
         write_emblems(s, ctx, &list);
     }
 }
 
-/// Write coats of arms, in their groups.
+/// The sizing of each emblem group (`SIZING` of `draw-emblems.ts`):
+/// extent, min, max, expected count, count divisor, deficit divisor.
+const SIZING: [(&str, [f64; 6]); 3] = [
+    ("state", [40.0, 10.0, 100.0, 15.0, 100.0, 200.0]),
+    ("province", [100.0, 5.0, 70.0, 115.0, 1000.0, 1000.0]),
+    ("burg", [185.0, 2.0, 50.0, 450.0, 1000.0, 1000.0]),
+];
+
+/// The size of the emblems of a group in map pixels (`getEmblemSize`):
+/// smaller when there are more of them.
+pub fn emblem_size(group: &str, count: usize, size_option: f64) -> f64 {
+    let [extent, min, max, expected, count_div, deficit_div] = SIZING
+        .iter()
+        .find(|(g, _)| *g == group)
+        .map_or([40.0, 10.0, 100.0, 15.0, 100.0, 200.0], |(_, v)| *v);
+    let map = super::super::geom::MAP_PX;
+    let start = ((map[0] + map[1]) / extent).clamp(min, max);
+    let count = count as f64;
+    let count_mod = 1.0 + count / count_div - (expected - count) / deficit_div;
+    inkland_core::rand::js_round(start / count_mod * size_option)
+}
+
+/// The poles of inaccessibility of the areas of an owner of each cell, in
+/// world units (`getPolesOfInaccessibility`, with a precision of 20 map
+/// pixels and positions rounded to whole pixels).
+fn poles(ctx: &Ctx, owner: &[u32]) -> BTreeMap<u32, [f64; 2]> {
+    use super::super::geom;
+    let w = ctx.world;
+    let u = ctx.px.unit_px;
+    geom::rings(w, &|c| owner[c])
+        .into_iter()
+        .map(|(id, rings)| {
+            let mut polys: Vec<Vec<[f64; 2]>> = rings
+                .iter()
+                .map(|r| {
+                    geom::ring_points(w, r)
+                        .into_iter()
+                        .map(|p| [p[0] * u, p[1] * u])
+                        .collect()
+                })
+                .collect();
+            polys.sort_by_key(|p| std::cmp::Reverse(p.len()));
+            let [x, y] = geom::polylabel(&polys, 20.0);
+            let r = inkland_core::rand::js_round;
+            (id, [r(x) / u, r(y) / u])
+        })
+        .collect()
+}
+
+/// One emblem in the collision simulation.
+struct Node {
+    x: f64,
+    y: f64,
+    vx: f64,
+    vy: f64,
+    r: f64,
+}
+
+/// Move the emblems apart as the force simulation of d3 does: a collision
+/// force with the radius of each emblem, `alphaMin` 0.6, `alphaDecay` 0.2,
+/// and `velocityDecay` 0.6, for 3 ticks.
+fn collide(nodes: &mut [Node]) {
+    // The random source of d3 for points at the same place.
+    let mut seed: u64 = 1;
+    let mut jiggle = || {
+        seed = (1_664_525 * seed + 1_013_904_223) % 4_294_967_296;
+        (seed as f64 / 4_294_967_296.0 - 0.5) * 1e-6
+    };
+    let ticks = (libm::log(0.6) / libm::log(1.0 - 0.2)).ceil() as usize;
+    for _ in 0..ticks {
+        for i in 0..nodes.len() {
+            let (ri, xi, yi) = (
+                nodes[i].r,
+                nodes[i].x + nodes[i].vx,
+                nodes[i].y + nodes[i].vy,
+            );
+            let ri2 = ri * ri;
+            for j in i + 1..nodes.len() {
+                let rj = nodes[j].r;
+                let r = ri + rj;
+                let mut x = xi - nodes[j].x - nodes[j].vx;
+                let mut y = yi - nodes[j].y - nodes[j].vy;
+                let mut l = x * x + y * y;
+                if l < r * r {
+                    if x == 0.0 {
+                        x = jiggle();
+                        l += x * x;
+                    }
+                    if y == 0.0 {
+                        y = jiggle();
+                        l += y * y;
+                    }
+                    let ls = libm::sqrt(l);
+                    let k = (r - ls) / ls;
+                    x *= k;
+                    y *= k;
+                    let rj2 = rj * rj;
+                    let share = rj2 / (ri2 + rj2);
+                    nodes[i].vx += x * share;
+                    nodes[i].vy += y * share;
+                    nodes[j].vx -= x * (1.0 - share);
+                    nodes[j].vy -= y * (1.0 - share);
+                }
+            }
+        }
+        for n in nodes.iter_mut() {
+            n.vx *= 0.4;
+            n.vy *= 0.4;
+            n.x += n.vx;
+            n.y += n.vy;
+        }
+    }
+}
+
+/// Write coats of arms, in their groups. Each group has the size of FMG
+/// for its count, and a group is hidden, as in FMG, when its emblems are
+/// smaller than 25 or larger than 300 pixels at the zoom of the variant,
+/// unless `render.emblems.show_all` is set.
 pub fn write_emblems(s: &mut String, ctx: &Ctx, list: &[super::super::data::Emblem]) {
-    let em = burg_em(ctx);
-    let _ = writeln!(s, "<g id=\"emblems\"{}>", ctx.attrs(&["emblems"], &[]));
-    for (group, base) in [("burg", 2.0), ("province", 3.5), ("state", 5.0)] {
+    let soc = &ctx.world.society;
+    let mut size = BTreeMap::new();
+    for (group, _) in SIZING {
         let key = format!("{group}Emblems");
-        let size = ctx
+        let option = ctx
             .style
             .option_f64(&["emblems", &key], "size")
-            .unwrap_or(1.0)
-            * base
-            * em;
+            .unwrap_or(1.0);
+        let count = list.iter().filter(|e| e.group == group).count();
+        size.insert(group, emblem_size(group, count, option));
+    }
+    let state_poles = poles(ctx, &soc.cell_state);
+    let province_poles = poles(ctx, &soc.cell_province);
+    let mut nodes: Vec<Node> = list
+        .iter()
+        .map(|e| {
+            let at = e.at.unwrap_or_else(|| {
+                let pole = match e.group {
+                    "state" => state_poles.get(&e.id),
+                    _ => province_poles.get(&e.id),
+                };
+                pole.copied().unwrap_or(ctx.world.grid.points[e.center])
+            });
+            let [x, y] = ctx.p(at);
+            Node {
+                x,
+                y,
+                vx: 0.0,
+                vy: 0.0,
+                r: size[e.group] / 2.0,
+            }
+        })
+        .collect();
+    collide(&mut nodes);
+
+    let frame = ctx.config.frame.width;
+    let [vx0, _, vx1, _] = ctx.px.page.view;
+    let zoom = if vx1 > vx0 { frame / (vx1 - vx0) } else { 1.0 };
+    let show_all = ctx.config.render.emblems.show_all;
+    let _ = writeln!(s, "<g id=\"emblems\"{}>", ctx.attrs(&["emblems"], &[]));
+    for group in ["burg", "province", "state"] {
+        let key = format!("{group}Emblems");
+        let px = size[group];
         let _ = writeln!(
             s,
             "<g id=\"{group}-emblems\"{}>",
             ctx.attrs(&["emblems", &key], &[])
         );
-        for e in list.iter().filter(|e| e.group == group) {
-            let [x, y] = ctx.p(e.at);
+        let screen = px * zoom;
+        if !show_all && !(25.0..=300.0).contains(&screen) {
+            s.push_str("</g>\n");
+            continue;
+        }
+        for (e, node) in list.iter().zip(&nodes).filter(|(e, _)| e.group == group) {
+            let prefix = format!("emblem-{group}-{}", e.id);
+            let d = crate::emblem::draw(&e.coa, &prefix, &crate::emblem::Look::COLOUR);
             let _ = writeln!(
                 s,
-                "<svg id=\"emblem-{}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"0 0 200 200\">{}</svg>",
-                e.id,
-                n(x - size / 2.0),
-                n(y - size / 2.0),
-                n(size),
-                n(size),
-                e.svg
+                "<svg id=\"{prefix}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"{}\">{}</svg>",
+                n(node.x - px / 2.0),
+                n(node.y - px / 2.0),
+                n(px),
+                n(px),
+                d.view_box(),
+                d.body
             );
         }
         s.push_str("</g>\n");
