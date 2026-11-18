@@ -523,6 +523,8 @@ impl World {
             },
             &mut markers,
         );
+        let mut zones = zones;
+        crate::zones::apply_config(&mut zones, config, &grid)?;
         // The journeys run last, as in FMG (`Journeys.generate`). Later
         // stages go before them.
         let measurers = crate::annotations::measurers(

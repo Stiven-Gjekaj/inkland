@@ -114,6 +114,10 @@ codes! {
         /// an empty name, a full name or arms for a culture or a religion,
         /// or a point where no area of its kind is.
         RenameInvalid = "RENAME_INVALID" => InvalidConfig,
+        /// A zone in `world.zones` has more than one shape, a shape and
+        /// `at`, neither, a new zone without a name or a type, a shape with
+        /// no cell, or a point where no generated zone is.
+        ZoneInvalid = "ZONE_INVALID" => InvalidConfig,
         /// An edit of a world file sets or unsets a value that a
         /// `world.json` does not keep: an overlay, a variant, a render
         /// option, or a font directory.

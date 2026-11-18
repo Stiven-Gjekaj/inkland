@@ -246,6 +246,9 @@ impl<'a> Validator<'a> {
                 );
             }
         }
+        for (i, z) in w.zones.iter().enumerate() {
+            self.errors.extend(inkland_core::zones::check(i, z));
+        }
         for (i, e) in w.renames.iter().enumerate() {
             self.errors.extend(inkland_core::renames::check(c, i, e));
             for f in e.coa.iter().flat_map(inkland_core::emblems::validate) {

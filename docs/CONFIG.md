@@ -717,6 +717,7 @@ Generation options.
 | `template` | [`Template`](#template) |  | `"continents"` | Heightmap template: a template name, or a list of steps. |
 | `towns` | [`Towns`](#towns) |  | `"auto"` | Number of towns that generation adds, or `auto`. |
 | `transports` | array of [`TransportEntry`](#transportentry) |  |  | Changes to the journey transports of Azgaar's Fantasy Map Generator, in order. Empty: the default list of 20 transports. |
+| `zones` | array of [`ZoneEntry`](#zoneentry) |  |  | Changes to the zones: new zones, and changes to or removal of the generated zones. |
 
 ### XAxis
 
@@ -729,4 +730,20 @@ Type: `"east"`
 The direction of the y axis.
 
 Type: `"south"`, `"north"`
+
+### ZoneEntry
+
+A change to the zones. With a shape (`polygon`, `box`, or `circle`), the entry adds a zone of the cells in the shape; it must give `name` and `kind`. With `at`, it changes the generated zone that holds the point, or removes it with `remove`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `at` | array of 2 number |  |  | A point `[x, y]` in the generated zone to change or to remove. |
+| `box` | array of 4 number |  |  | The rectangle of a new zone `[x0, y0, x1, y1]`, in units. |
+| `circle` | [`Circle`](#circle) |  |  | The circle of a new zone, in units. |
+| `color` | string |  |  | The fill: a hatch pattern of FMG, for example `url(#hatch1)`, or a color as `#rrggbb`. |
+| `kind` | string |  |  | The zone type, for example `Invasion`, `Disease`, or `Flood`. |
+| `name` | string |  |  | The name of the zone. |
+| `note` | string |  |  | The legend text of the zone. |
+| `polygon` | array of array of 2 number |  |  | The outline of a new zone `[[x, y], ...]`, in units. |
+| `remove` | boolean |  |  | Remove the zone at `at`. |
 

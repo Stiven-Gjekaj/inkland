@@ -241,6 +241,47 @@ pub struct World {
     /// Legend boxes: a title and colored items.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub legends: Vec<LegendEntry>,
+    /// Changes to the zones: new zones, and changes to or removal of the
+    /// generated zones.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zones: Vec<ZoneEntry>,
+}
+
+/// A change to the zones. With a shape (`polygon`, `box`, or `circle`),
+/// the entry adds a zone of the cells in the shape; it must give `name`
+/// and `kind`. With `at`, it changes the generated zone that holds the
+/// point, or removes it with `remove`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ZoneEntry {
+    /// A point `[x, y]` in the generated zone to change or to remove.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Point>,
+    /// Remove the zone at `at`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub remove: bool,
+    /// The outline of a new zone `[[x, y], ...]`, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polygon: Option<Vec<Point>>,
+    /// The rectangle of a new zone `[x0, y0, x1, y1]`, in units.
+    #[serde(default, rename = "box", skip_serializing_if = "Option::is_none")]
+    pub rect: Option<[f64; 4]>,
+    /// The circle of a new zone, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub circle: Option<Circle>,
+    /// The name of the zone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The zone type, for example `Invasion`, `Disease`, or `Flood`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// The fill: a hatch pattern of FMG, for example `url(#hatch1)`, or a
+    /// color as `#rrggbb`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// The legend text of the zone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -556,6 +597,7 @@ impl Default for World {
             default_ruler: true,
             measurers: Vec::new(),
             legends: Vec::new(),
+            zones: Vec::new(),
         }
     }
 }

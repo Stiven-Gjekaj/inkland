@@ -34,11 +34,11 @@ pub struct Zone {
     pub id: u32,
     pub name: String,
     /// The zone type, for example `Invasion` or `Disease`.
-    pub kind: &'static str,
+    pub kind: String,
     /// The cells, each one time.
     pub cells: Vec<usize>,
     /// The FMG fill: a hatch pattern, for example `url(#hatch1)`.
-    pub color: &'static str,
+    pub color: String,
     /// The legend text.
     pub note: String,
 }
@@ -363,9 +363,9 @@ impl Gen<'_> {
         self.zones.push(Zone {
             id: self.zones.len() as u32,
             name,
-            kind,
+            kind: kind.to_owned(),
             cells,
-            color,
+            color: color.to_owned(),
             note,
         });
     }
@@ -1106,6 +1106,113 @@ pub fn generate(input: &Input, markers: &mut [Marker]) -> Vec<Zone> {
     g.zones
 }
 
+/// The shape of a zone entry, if it gives exactly one.
+fn entry_shape(e: &crate::config::ZoneEntry) -> Option<crate::geom::Shape> {
+    use crate::geom::Shape;
+    match (&e.polygon, &e.rect, &e.circle) {
+        (Some(p), None, None) if p.len() >= 3 => Some(Shape::Polygon(p.clone())),
+        (None, Some([x0, y0, x1, y1]), None) if x0 < x1 && y0 < y1 => Some(Shape::Polygon(vec![
+            [*x0, *y0],
+            [*x1, *y0],
+            [*x1, *y1],
+            [*x0, *y1],
+        ])),
+        (None, None, Some(c)) if c.r > 0.0 => Some(Shape::Circle { at: c.at, r: c.r }),
+        _ => None,
+    }
+}
+
+/// The errors of the form of a zone entry.
+pub fn check(i: usize, e: &crate::config::ZoneEntry) -> Vec<crate::error::Error> {
+    use crate::error::{Error, ErrorCode};
+    let path = format!("/world/zones/{i}");
+    let shapes = [e.polygon.is_some(), e.rect.is_some(), e.circle.is_some()]
+        .iter()
+        .filter(|&&b| b)
+        .count();
+    let bad = |m: &str| {
+        vec![Error::new(
+            ErrorCode::ZoneInvalid,
+            path.clone(),
+            m.to_owned(),
+        )]
+    };
+    match (shapes, e.at.is_some()) {
+        (0, false) => bad("a zone needs a shape or at"),
+        (1, true) | (2.., _) => bad("a zone needs one shape, or at without a shape"),
+        (1, false) if e.remove => bad("remove needs at"),
+        (1, false) if e.name.is_none() || e.kind.is_none() => {
+            bad("a new zone needs a name and a type")
+        }
+        (1, false) if entry_shape(e).is_none() => bad("the shape of the zone is not valid"),
+        _ => Vec::new(),
+    }
+}
+
+/// Apply the zone entries of the config, in order (`world.zones`).
+pub fn apply_config(
+    zones: &mut Vec<Zone>,
+    config: &crate::config::Config,
+    grid: &Grid,
+) -> Result<(), crate::error::Error> {
+    use crate::error::{Error, ErrorCode};
+    for (i, e) in config.world.zones.iter().enumerate() {
+        if let Some(err) = check(i, e).into_iter().next() {
+            return Err(err);
+        }
+        let path = format!("/world/zones/{i}");
+        if let Some(at) = e.at {
+            let cell = grid.find_cell(at[0], at[1]);
+            let Some(k) = zones.iter().position(|z| z.cells.contains(&cell)) else {
+                return Err(Error::new(
+                    ErrorCode::ZoneInvalid,
+                    path,
+                    format!("no zone holds the point ({}, {})", at[0], at[1]),
+                ));
+            };
+            if e.remove {
+                zones.remove(k);
+                continue;
+            }
+            let z = &mut zones[k];
+            if let Some(v) = &e.name {
+                z.name = v.clone();
+            }
+            if let Some(v) = &e.kind {
+                z.kind = v.clone();
+            }
+            if let Some(v) = &e.color {
+                z.color = v.clone();
+            }
+            if let Some(v) = &e.note {
+                z.note = v.clone();
+            }
+            continue;
+        }
+        let shape = entry_shape(e).expect("check gives one shape");
+        let cells: Vec<usize> = (0..grid.len())
+            .filter(|&c| shape.contains(grid.points[c]))
+            .collect();
+        if cells.is_empty() {
+            return Err(Error::new(
+                ErrorCode::ZoneInvalid,
+                path,
+                "the shape of the zone holds no cell",
+            ));
+        }
+        let id = zones.iter().map(|z| z.id + 1).max().unwrap_or(0);
+        zones.push(Zone {
+            id,
+            name: e.name.clone().unwrap_or_default(),
+            kind: e.kind.clone().unwrap_or_default(),
+            cells,
+            color: e.color.clone().unwrap_or_else(|| "url(#hatch1)".to_owned()),
+            note: e.note.clone().unwrap_or_default(),
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1168,7 +1275,7 @@ mod tests {
             let unique: BTreeSet<usize> = z.cells.iter().copied().collect();
             assert_eq!(unique.len(), z.cells.len());
             assert!(z.cells.iter().all(|&c| c < w.grid.len()));
-            kinds.insert(z.kind);
+            kinds.insert(z.kind.as_str());
             if z.kind == "Famine" {
                 assert!(z.cells.len() >= 3);
                 assert!(
@@ -1184,5 +1291,68 @@ mod tests {
         }
         assert!(kinds.len() >= 4, "{kinds:?}");
         assert_eq!(crate::world::World::build(&c).unwrap().zones, w.zones);
+    }
+
+    #[test]
+    fn config_entries_add_change_and_remove_zones() {
+        use crate::config::Config;
+        let build = |zones: serde_json::Value| {
+            let c: Config = serde_json::from_value(serde_json::json!({
+                "version": 1, "seed": 7, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "continents", "states": 6, "zones": zones }
+            }))
+            .unwrap();
+            crate::world::World::build(&c)
+        };
+        let base = build(serde_json::json!([])).unwrap();
+        let first = base.zones.first().expect("the test world has a zone");
+        let at = base.grid.points[first.cells[0]];
+        let w = build(serde_json::json!([
+            { "at": at, "name": "The Long Plague", "note": "It came by ship." },
+            { "box": [10, 10, 60, 60], "name": "The Marches", "kind": "Occupation" }
+        ]))
+        .unwrap();
+        assert_eq!(w.zones[0].name, "The Long Plague");
+        assert_eq!(w.zones[0].note, "It came by ship.");
+        assert_eq!(w.zones[0].kind, first.kind);
+        let added = w.zones.last().unwrap();
+        assert_eq!(
+            (added.name.as_str(), added.kind.as_str()),
+            ("The Marches", "Occupation")
+        );
+        assert_eq!(added.color, "url(#hatch1)");
+        assert!(added.cells.iter().all(|&c| {
+            let p = w.grid.points[c];
+            (10.0..=60.0).contains(&p[0]) && (10.0..=60.0).contains(&p[1])
+        }));
+        assert!(w.zones.iter().map(|z| z.id).collect::<BTreeSet<_>>().len() == w.zones.len());
+        let removed = build(serde_json::json!([{ "at": at, "remove": true }])).unwrap();
+        assert_eq!(removed.zones.len(), base.zones.len() - 1);
+        for (zones, path) in [
+            (
+                serde_json::json!([{ "name": "X", "kind": "Y" }]),
+                "/world/zones/0",
+            ),
+            (
+                serde_json::json!([{ "box": [10, 10, 60, 60] }]),
+                "/world/zones/0",
+            ),
+            (
+                serde_json::json!([{ "at": [1, 1], "box": [10, 10, 60, 60] }]),
+                "/world/zones/0",
+            ),
+            (
+                serde_json::json!([{ "box": [10, 10, 10.1, 10.1], "name": "X", "kind": "Y" }]),
+                "/world/zones/0",
+            ),
+        ] {
+            let e = build(zones).unwrap_err();
+            assert_eq!(
+                (e.code, e.path.as_str()),
+                (crate::error::ErrorCode::ZoneInvalid, path),
+                "{}",
+                e.message
+            );
+        }
     }
 }
