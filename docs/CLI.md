@@ -205,7 +205,11 @@ Give `--world` or `--config`. An edit script:
 ```
 
 The commands are `set`, `unset`, `add_pin`, `remove_pin`, `move_pin`,
-`rename`, `brush`, `remove_brush`, `name_area`, and `remove_rename`.
+`rename`, `brush`, `remove_brush`, `name_area`, `remove_rename`, `insert`,
+and `remove`. `insert` puts a value into a list at a pointer that ends
+with an index, for example
+`{ "op": "insert", "path": "/world/notes/0", "value": { ... } }`, and
+`remove` takes the value at such a pointer away.
 `name_area` gives a generated state, culture, religion, or province a name
 or arms, for example
 `{ "op": "name_area", "rename": { "kind": "state", "pin": "ostrey", "name": "Ostreya" } }`.
