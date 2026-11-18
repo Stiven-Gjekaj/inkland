@@ -110,6 +110,10 @@ codes! {
         /// or culture type, a new entry without a value that it must give,
         /// or a list of transports without a stay.
         TableInvalid = "TABLE_INVALID" => InvalidConfig,
+        /// A rename in `world.renames` has both or none of `at` and `pin`,
+        /// an empty name, a full name or arms for a culture or a religion,
+        /// or a point where no area of its kind is.
+        RenameInvalid = "RENAME_INVALID" => InvalidConfig,
         /// An edit of a world file sets or unsets a value that a
         /// `world.json` does not keep: an overlay, a variant, a render
         /// option, or a font directory.

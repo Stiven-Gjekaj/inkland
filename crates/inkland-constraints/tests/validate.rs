@@ -524,3 +524,27 @@ fn tables_of_goods_units_and_transports_are_checked() {
     }}));
     assert_eq!(codes(&good), vec![]);
 }
+
+#[test]
+fn renames_need_one_reference_and_valid_arms() {
+    let c = with(json!({
+        "world": { "renames": [
+            { "kind": "state", "name": "X" },
+            { "kind": "religion", "at": [10, 10], "coa": { "t1": "or" } },
+            { "kind": "province", "at": [10, 10], "coa": { "t1": "plaid" } }
+        ] }
+    }));
+    assert_eq!(
+        codes(&c),
+        vec![
+            (ErrorCode::RenameInvalid, "/world/renames/0".to_owned()),
+            (ErrorCode::RenameInvalid, "/world/renames/1/coa".to_owned()),
+            (ErrorCode::CoaInvalid, "/world/renames/2/coa/t1".to_owned()),
+        ]
+    );
+    let good = with(json!({
+        "pins": { "points": [{ "id": "home", "kind": "city", "at": [200, 150], "capital_of": "Realm" }] },
+        "world": { "renames": [{ "kind": "state", "pin": "home", "name": "Ostrey" }] }
+    }));
+    assert_eq!(codes(&good), vec![]);
+}

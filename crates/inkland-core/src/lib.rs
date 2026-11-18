@@ -40,6 +40,7 @@ pub mod provinces;
 pub mod quadtree;
 pub mod rand;
 pub mod religions;
+pub mod renames;
 pub mod rivers;
 pub mod roads;
 pub mod routes;

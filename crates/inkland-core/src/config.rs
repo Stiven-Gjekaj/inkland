@@ -222,6 +222,64 @@ pub struct World {
     /// in order. Empty: the default list of 20 transports.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transports: Vec<TransportEntry>,
+    /// Names and arms for generated states, cultures, religions, and
+    /// provinces. Generation applies them after the coats of arms, so the
+    /// later stages use the new names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renames: Vec<RenameEntry>,
+}
+
+/// The kind of a generated area that a rename names.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum AreaKind {
+    #[default]
+    State,
+    Culture,
+    Religion,
+    Province,
+}
+
+impl AreaKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            AreaKind::State => "state",
+            AreaKind::Culture => "culture",
+            AreaKind::Religion => "religion",
+            AreaKind::Province => "province",
+        }
+    }
+}
+
+/// A name or arms for a generated area. The entry finds its area by a
+/// point: the area of its kind that holds the cell at `at`, or at the point
+/// pin `pin`. Give exactly one of `at` and `pin`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RenameEntry {
+    /// The kind of the area.
+    pub kind: AreaKind,
+    /// A point `[x, y]` in the area, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Point>,
+    /// The id of a point pin in the area, for example its capital.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin: Option<String>,
+    /// The new name. Not empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The new full name of a state or a province, for example
+    /// `Kingdom of Ostrey`. Default: the full name with the old name
+    /// changed to the new name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub full_name: Option<String>,
+    /// The coat of arms of a state or a province, in the JSON shape of
+    /// Azgaar's Fantasy Map Generator. Without `shield`, the arms keep the
+    /// generated shield shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coa: Option<crate::emblems::Coa>,
 }
 
 fn is_false(v: &bool) -> bool {
@@ -424,6 +482,7 @@ impl Default for World {
             goods: Vec::new(),
             military_units: Vec::new(),
             transports: Vec::new(),
+            renames: Vec::new(),
         }
     }
 }

@@ -418,7 +418,7 @@ impl World {
             society: &society,
         })?;
         let (roads, sea_routes) = (routes.roads, routes.sea);
-        let religions = crate::religions::build(&crate::religions::Input {
+        let mut religions = crate::religions::build(&crate::religions::Input {
             config,
             grid: &grid,
             biomes: &biomes,
@@ -447,6 +447,8 @@ impl World {
                 biomes: &biomes,
             },
         );
+        // The names and arms of the config (`world.renames`).
+        crate::renames::apply(config, &grid, &mut society, &mut religions)?;
         let names = crate::geonames::build(&crate::geonames::Input {
             config,
             grid: &grid,

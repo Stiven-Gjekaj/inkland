@@ -40,6 +40,12 @@ One of:
 - [`PlaceRef`](#placeref): A pinned place.
 - [`RegionRef`](#regionref): A pinned region.
 
+### AreaKind
+
+The kind of a generated area that a rename names.
+
+Type: `"state"`, `"culture"`, `"religion"`, `"province"`
+
 ### AutoKeyword
 
 The keyword `auto`.
@@ -465,6 +471,19 @@ A reference to a pinned region.
 |---|---|---|---|---|
 | `region` | string | yes |  | The id of a region pin. |
 
+### RenameEntry
+
+A name or arms for a generated area. The entry finds its area by a point: the area of its kind that holds the cell at `at`, or at the point pin `pin`. Give exactly one of `at` and `pin`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `at` | array of 2 number |  |  | A point `[x, y]` in the area, in units. |
+| `coa` | [`Coa`](#coa) |  |  | The coat of arms of a state or a province, in the JSON shape of Azgaar's Fantasy Map Generator. Without `shield`, the arms keep the generated shield shape. |
+| `full_name` | string |  |  | The new full name of a state or a province, for example `Kingdom of Ostrey`. Default: the full name with the old name changed to the new name. |
+| `kind` | [`AreaKind`](#areakind) | yes |  | The kind of the area. |
+| `name` | string |  |  | The new name. Not empty. |
+| `pin` | string |  |  | The id of a point pin in the area, for example its capital. |
+
 ### Render
 
 Render options for all variants.
@@ -644,6 +663,7 @@ Generation options.
 | `places` | [`PlaceOptions`](#placeoptions) |  |  | Options for places that generation adds. |
 | `provinces_ratio` | integer |  | `20` | Provinces for each 100 places of a state. 0 to 100. A state gets at least 2 provinces when it has 2 places or more. 100: each place is the seat of a province. |
 | `religions` | integer |  | `4` | Number of religions. |
+| `renames` | array of [`RenameEntry`](#renameentry) |  |  | Names and arms for generated states, cultures, religions, and provinces. Generation applies them after the coats of arms, so the later stages use the new names. |
 | `sea_level` | integer |  | `20` | Sea level on the height scale 0 to 100. Cells below it are water. |
 | `size_variety` | number |  | `4.0` | How much the sizes of cultures and states differ. 0 to 10. A bigger value gives a bigger random part of the expansionism. |
 | `states` | integer |  | `5` | Number of states. |

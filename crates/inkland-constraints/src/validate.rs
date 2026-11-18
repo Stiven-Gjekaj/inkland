@@ -228,6 +228,16 @@ impl<'a> Validator<'a> {
             inkland_core::journeys::transports::transports_from(&w.transports).err(),
         ];
         self.errors.extend(tables.into_iter().flatten());
+        for (i, e) in w.renames.iter().enumerate() {
+            self.errors.extend(inkland_core::renames::check(c, i, e));
+            for f in e.coa.iter().flat_map(inkland_core::emblems::validate) {
+                self.err(
+                    ErrorCode::CoaInvalid,
+                    format!("/world/renames/{i}/coa{}", f.path),
+                    f.message,
+                );
+            }
+        }
         for (i, b) in w.brushes.iter().enumerate() {
             if !(b.radius > 0.0 && b.radius.is_finite()) {
                 self.err(
