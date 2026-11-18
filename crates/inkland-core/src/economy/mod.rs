@@ -10,12 +10,15 @@
 //! - `output`, `routes`, `trade`, `production`, `orders`, `taxes`,
 //!   `corruption`, `deals`: the run of one day (`Production.produce`), then
 //!   the collection of the taxes (`Taxes.collect`).
-//! - `prosperity`: how well people live. FMG works it out on demand;
-//!   inkland works it out once in `build` and keeps it in `Economy`.
+//! - `prosperity`, `accounts`: what the run gives. FMG works them
+//!   out on demand; inkland works them out once in `build` and keeps them
+//!   in `Economy`. The functions of `accounts` (`trade`, `budget`,
+//!   `outputs`, `known_for`, `economy_type`) give the rest on demand.
 //!
 //! `build` runs after the feature names, as `Markets.generate` does in the
 //! FMG pipeline.
 
+pub mod accounts;
 pub mod corruption;
 pub mod deals;
 pub mod demand;
@@ -126,6 +129,8 @@ pub struct Economy {
     /// How the people of each place live, by place index
     /// (`Prosperity.getBurg`).
     pub burg_living: Vec<Option<prosperity::Living>>,
+    /// The accounts of the states, the provinces, and the world.
+    pub accounts: accounts::Accounts,
 }
 
 impl Economy {
@@ -269,6 +274,7 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
         prosperity: Vec::new(),
         rural: Vec::new(),
         burg_living: Vec::new(),
+        accounts: accounts::Accounts::default(),
     };
     produce(input, soc, &links, &mut economy);
     // The rural prosperity of the cells, as `produce` of FMG ends: before
@@ -312,6 +318,14 @@ pub fn build(input: &Input, soc: &mut Society) -> Economy {
         &economy.cell_market,
         &infrastructure,
     );
+    economy.accounts = accounts::build(&accounts::Input {
+        soc,
+        economy: &economy,
+        burg_living: &economy.burg_living,
+        rural: &economy.rural,
+        output: &economy.rural_output,
+        working: &economy.working_cell,
+    });
     economy
 }
 
@@ -736,6 +750,63 @@ mod tests {
             e.places.len()
         );
         assert!(e.places.iter().any(|p| !p.production.is_empty()));
+    }
+
+    /// The provinces of a state sum to its accounts: people, product, and
+    /// taxes. inkland gives each land cell a province.
+    #[test]
+    fn the_provinces_of_a_state_sum_to_its_accounts() {
+        let w = world(7, "continents");
+        let soc = &w.society;
+        let a = &w.economy.accounts;
+        assert_eq!(a.states.len(), soc.states.len() + 1);
+        let close = |x: f64, y: f64| (x - y).abs() <= 1e-6 * x.abs().max(1.0);
+        for s in &soc.states {
+            let st = &a.states[s.id as usize];
+            let p = &st.people;
+            assert!(close(p.product, p.rural + p.manufacturing + p.trade));
+            let mine: Vec<&super::accounts::ProvinceAccounts> = soc
+                .provinces
+                .iter()
+                .filter(|x| x.state == s.id)
+                .map(|x| &a.provinces[x.id as usize - 1])
+                .collect();
+            let sum = |f: &dyn Fn(&super::accounts::ProvinceAccounts) -> f64| {
+                mine.iter().map(|x| f(x)).sum::<f64>()
+            };
+            assert!(
+                close(sum(&|x| x.people.people), p.people),
+                "people of {}",
+                s.name
+            );
+            assert!(
+                close(sum(&|x| x.people.product), p.product),
+                "product of {}",
+                s.name
+            );
+            let taxes = sum(&|x| {
+                x.taxes.sales_tax + x.taxes.tariffs + x.taxes.poll_tax + x.taxes.market_fees
+            });
+            assert!(
+                (taxes - st.taxes).abs() < 1e-6 * st.taxes.max(1.0),
+                "taxes of {}: {taxes} {}",
+                s.name,
+                st.taxes
+            );
+            if let Some(pr) = p.prosperity {
+                assert!((0.0..=1.0).contains(&pr));
+            }
+        }
+        let people: f64 = a.states.iter().map(|x| x.people.people).sum();
+        assert!(close(people, a.world.people.people));
+        // A state consumes what its people and orders bought.
+        assert!(a.consumption.iter().flatten().all(|&u| u >= 0.0));
+        assert!(a.consumption.iter().flatten().any(|&u| u > 0.0));
+        // Each state has an economy type.
+        assert!(soc.states.iter().any(|s| {
+            super::accounts::economy_type(&a.states[s.id as usize].people, &a.world.people)
+                .is_some()
+        }));
     }
 
     #[test]
