@@ -462,9 +462,8 @@ pub fn specify(
         let pop = p.population;
         p.citadel =
             p.capital || (pop > 50.0 && rng.p(0.75)) || (pop > 15.0 && rng.p(0.5)) || rng.p(0.1);
-        // The plaza rule of FMG before its market stage.
-        p.plaza =
-            pop > 20.0 || (pop > 10.0 && rng.p(0.8)) || (pop > 4.0 && rng.p(0.7)) || rng.p(0.6);
+        // The markets give the plaza later: each market center has one.
+        p.plaza = false;
         p.walls = p.capital
             || pop > 30.0
             || (pop > 20.0 && rng.p(0.75))

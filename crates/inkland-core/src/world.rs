@@ -436,6 +436,18 @@ impl World {
             sea_level,
             society: &society,
         });
+        let economy = crate::economy::build(
+            &crate::economy::Input {
+                config,
+                grid: &grid,
+                features: &features,
+                biomes: &biomes,
+                roads: &roads,
+                sea_routes: &sea_routes,
+                religions: &religions,
+            },
+            &mut society,
+        );
         let markers = crate::markers::generate(&crate::markers::Input {
             config,
             grid: &grid,
@@ -483,9 +495,7 @@ impl World {
             names,
             religions,
             markers,
-            economy: crate::economy::Economy {
-                goods: crate::economy::goods::catalogue(),
-            },
+            economy,
         })
     }
 

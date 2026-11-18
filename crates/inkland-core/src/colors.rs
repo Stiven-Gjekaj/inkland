@@ -74,6 +74,34 @@ pub fn mixed_color(base: &str, rng: &mut Rand, mix: f64, bright: f64) -> String 
     Rgb(m.0 * k, m.1 * k, m.2 * k).hex()
 }
 
+/// The 12 colors of FMG `C_12`.
+pub const C_12: [&str; 12] = [
+    "#dababf", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5", "#c6b9c1", "#bc80bd",
+    "#ccebc5", "#ffed6f", "#8dd3c7", "#eb8de7",
+];
+
+/// `count` distinct colors in a random order (`getColors`): the 12 colors
+/// of `C_12` first, then colors of the rainbow, shuffled with d3
+/// `shuffler`.
+pub fn distinct_colors(count: usize, rng: &mut Rand) -> Vec<String> {
+    let mut colors: Vec<String> = (0..count)
+        .map(|i| {
+            if i < 12 {
+                C_12[i].to_owned()
+            } else {
+                rainbow((i - 12) as f64 / (count - 12) as f64).hex()
+            }
+        })
+        .collect();
+    let mut m = colors.len();
+    while m > 0 {
+        let i = (rng.unit() * m as f64) as usize;
+        m -= 1;
+        colors.swap(m, i);
+    }
+    colors
+}
+
 /// The colors of `d3.schemeSet2`.
 pub const SET2: [&str; 6] = [
     "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854", "#ffd92f",
