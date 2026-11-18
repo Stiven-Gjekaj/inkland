@@ -41,7 +41,7 @@ inkland generate --config map.json --out-dir out --preview out/map.png
 | `--variant NAME` | Render only this variant. |
 | `--dry-run` | Check the config and the pins. Generate nothing and write nothing. The output is the dry-run report. |
 | `--seed N` | Replace `seed`. |
-| `--cells N` | Replace `world.cells`. |
+| `--cells N` | Replace `world.cells`. It also removes `units.per_cell_hint`, so `N` sets the cell count. A `--set` of the hint applies after it and sets the hint again. |
 | `--set POINTER=JSON` | Replace one value, for example `--set /world/cells=20000`. You can give it more than one time. It applies after `--seed` and `--cells`. |
 
 Files in the output directory:

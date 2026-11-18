@@ -529,7 +529,7 @@ The distance unit.
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `name` | string |  | `"mile"` | Name of the unit, for example `mile`. The report and the scale bar use this name. |
-| `per_cell_hint` | number |  |  | Wanted mean width of a cell, in units. Optional. When it is given, it sets the number of cells and replaces `world.cells`. |
+| `per_cell_hint` | number |  |  | Wanted mean width of a cell, in units. Optional. When it is given, it sets the number of cells and replaces `world.cells`. The `--cells` flag removes it. |
 
 ### Variant
 

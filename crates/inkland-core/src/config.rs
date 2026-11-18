@@ -60,7 +60,8 @@ pub struct Units {
     #[serde(default = "default_unit_name")]
     pub name: String,
     /// Wanted mean width of a cell, in units. Optional. When it is given, it
-    /// sets the number of cells and replaces `world.cells`.
+    /// sets the number of cells and replaces `world.cells`. The `--cells`
+    /// flag removes it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0.0))]
     pub per_cell_hint: Option<f64>,
