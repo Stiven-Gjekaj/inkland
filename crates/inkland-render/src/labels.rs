@@ -781,6 +781,9 @@ pub struct Look {
     /// size. The placer keeps this space free around the text, in addition
     /// to the space for the halo of `print-safe` mode.
     pub halo: f64,
+    /// The font size of the group, in mm. `None` gives the size of the
+    /// config. The label options of an overlay can set another size.
+    pub size: Option<f64>,
 }
 
 impl Look {
@@ -819,6 +822,7 @@ pub fn place(world: &World, config: &Config, variant: &Variant, page: &Page) -> 
         },
         upper: false,
         halo: 0.0,
+        size: None,
     };
     place_with(world, config, variant, page, &style)
 }
@@ -851,8 +855,14 @@ pub fn place_with(
         !overlay.is_some_and(|o| inkland_core::overlay::removes(o, kind, id))
             && !opts(kind, id).is_some_and(|o| o.hide)
     };
-    let size_of = |kind: &str, id: &str, default_pt: f64| {
-        pt(opts(kind, id).and_then(|o| o.size_pt).unwrap_or(default_pt))
+    // The size of a label: the size of its overlay options, else the size
+    // of its look, else the size of the config.
+    let size_of = |kind: &str, id: &str, look: &Look, default_pt: f64| {
+        opts(kind, id)
+            .and_then(|o| o.size_pt)
+            .map(pt)
+            .or(look.size)
+            .unwrap_or_else(|| pt(default_pt))
     };
     let name_of = |kind: &str, id: &str, name: Option<&str>| -> Option<String> {
         overlay
@@ -872,9 +882,12 @@ pub fn place_with(
         if !shown("place", &key) {
             continue;
         }
+        let group = place_group(p.kind, p.capital);
+        let look = style(group);
         let size = size_of(
             "place",
             &key,
+            &look,
             if p.capital || p.kind == PlaceKind::City {
                 sizes.place_city
             } else if p.kind == PlaceKind::Village {
@@ -883,8 +896,6 @@ pub fn place_with(
                 sizes.place_town
             },
         );
-        let group = place_group(p.kind, p.capital);
-        let look = style(group);
         let text = look.text(&p.name);
         let f = FontMetrics::of(&look.family);
         let id = match &p.pin {
@@ -954,8 +965,8 @@ pub fn place_with(
                 _ => continue,
             },
         };
-        let size = size_of("river", &key, sizes.river);
         let look = style("river");
+        let size = size_of("river", &key, &look, sizes.river);
         let name = look.text(&name);
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
@@ -993,8 +1004,8 @@ pub fn place_with(
         if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
             continue;
         }
-        let size = pt(sizes.river);
         let look = style("lake");
+        let size = look.size.unwrap_or_else(|| pt(sizes.river));
         let name = look.text(name);
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
@@ -1035,8 +1046,8 @@ pub fn place_with(
             if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
                 continue;
             }
-            let size = pt(sizes.region);
             let look = style("ocean");
+            let size = look.size.unwrap_or_else(|| pt(sizes.region));
             let name = look.text(name);
             let f = FontMetrics::of(&look.family);
             requests.push(Request {
@@ -1075,8 +1086,8 @@ pub fn place_with(
         if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
             continue;
         }
-        let size = pt(sizes.state);
         let look = style("state");
+        let size = look.size.unwrap_or_else(|| pt(sizes.state));
         let name = look.text(&st.name);
         let f = FontMetrics::of(&look.family);
         // A state whose capital is outside the view can show only a small
@@ -1126,8 +1137,8 @@ pub fn place_with(
         if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
             continue;
         }
-        let size = size_of("region", &pin.id, sizes.region);
         let look = style("region");
+        let size = size_of("region", &pin.id, &look, sizes.region);
         let name = look.text(name);
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
@@ -1162,8 +1173,8 @@ pub fn place_with(
             let Some(name) = name_of("feature", &feat.id, feat.name.as_deref()) else {
                 continue;
             };
-            let size = size_of("feature", &feat.id, sizes.place_town);
             let look = style("feature");
+            let size = size_of("feature", &feat.id, &look, sizes.place_town);
             let name = look.text(&name);
             let f = FontMetrics::of(&look.family);
             let candidates = if let Some(at) = feat.at {
@@ -1416,6 +1427,7 @@ mod tests {
             family: format!("Family {group}"),
             upper: group == "city",
             halo: 0.0,
+            size: None,
         };
         let labels = place_with(&w, &c, &c.variants[0], &page, &look);
         let ostrey = labels

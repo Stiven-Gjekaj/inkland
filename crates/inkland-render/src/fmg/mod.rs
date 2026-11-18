@@ -203,14 +203,34 @@ pub fn style_group(group: &str) -> &str {
     }
 }
 
-/// Place the labels of a variant with the fonts and the letter case of the
-/// label groups of the style.
+/// The font size of a label group of a style, in mm. The sizes of the
+/// original program are parts of the map (a percentage of 100 pixels). A
+/// page shows the map smaller than a screen, so inkland keeps the ratios of
+/// the style and gives the capitals the size of the cities of the config,
+/// as the place icons do (see `layers::marks::burg_em`). A label group of a
+/// style can be much smaller than the capitals, and a smaller text is hard
+/// to read on paper, so no size is less than `labels::MIN_LABEL_PT`.
+pub fn label_size(style: &Style, config: &Config, group: &str) -> f64 {
+    let pct = |g: &str| {
+        style
+            .attr_f64(&["labels", g], "font-size")
+            .filter(|v| *v > 0.0)
+    };
+    let capital = pct("capital").unwrap_or(6.0);
+    let own = pct(group).unwrap_or(capital);
+    let city = config.render.font_sizes_pt.place_city;
+    crate::page::pt((city * own / capital).max(crate::labels::MIN_LABEL_PT))
+}
+
+/// Place the labels of a variant with the fonts, the letter case, the halo,
+/// and the font size of the label groups of the style.
 pub fn place_labels(world: &World, config: &Config, variant: &Variant, page: &Page) -> Labels {
     let style = Style::with_overrides(config.render.style, &config.render.style_overrides);
     let look = |group: &'static str| {
         let path = ["labels", style_group(group)];
         let css = style.attr(&path, "style").unwrap_or_default();
         crate::labels::Look {
+            size: Some(label_size(&style, config, style_group(group))),
             family: style
                 .attr(&path, "font-family")
                 .unwrap_or_else(|| config.render.fonts.labels.clone()),

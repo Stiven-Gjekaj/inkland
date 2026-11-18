@@ -452,3 +452,57 @@ fn a_label_outline_is_a_part_of_the_font_size() {
         assert!((width - 0.18 * size).abs() < 0.01, "{size} {width}");
     }
 }
+
+#[test]
+fn label_sizes_follow_the_ratios_of_the_style() {
+    let c = base_config();
+    let city = crate::page::pt(c.render.font_sizes_pt.place_city);
+    let least = crate::page::pt(crate::labels::MIN_LABEL_PT);
+    for &name in &StyleName::ALL {
+        let s = Style::preset(name);
+        let pct = |g: &str| s.attr_f64(&["labels", g], "font-size").unwrap();
+        // The capitals get the size of the cities of the config.
+        assert!(
+            (label_size(&s, &c, "capital") - city).abs() < 1e-9,
+            "{name:?}"
+        );
+        for g in [
+            "state", "city", "town", "village", "river", "added", "province",
+        ] {
+            let want = (city * pct(g) / pct("capital")).max(least);
+            assert!((label_size(&s, &c, g) - want).abs() < 1e-9, "{name:?} {g}");
+        }
+    }
+    // Atlas: the states are 20/7 of the capitals, the rivers get the least size.
+    let s = Style::preset(StyleName::Atlas);
+    assert!((label_size(&s, &c, "state") - city * 20.0 / 7.0).abs() < 1e-9);
+    assert!((label_size(&s, &c, "river") - least).abs() < 1e-9);
+}
+
+#[test]
+fn placed_colour_labels_have_the_size_of_their_style_group() {
+    let mut c = base_config();
+    c.render.style = StyleName::Atlas;
+    let page = Page::new(&c, &c.variants[0]);
+    let labels = place_labels(world(), &c, &c.variants[0], &page);
+    let s = Style::preset(StyleName::Atlas);
+    let mut seen = 0;
+    for l in &labels.placed {
+        let full = label_size(&s, &c, style_group(l.group));
+        if matches!(
+            l.kind,
+            crate::labels::Kind::State | crate::labels::Kind::Region
+        ) {
+            // An area label can be smaller to fit its area.
+            assert!(
+                l.size <= full + 1e-9 && l.size >= 0.4 * full - 1e-9,
+                "{}",
+                l.id
+            );
+        } else {
+            assert!((l.size - full).abs() < 1e-9, "{} {} {}", l.id, l.size, full);
+            seen += 1;
+        }
+    }
+    assert!(seen > 0);
+}
