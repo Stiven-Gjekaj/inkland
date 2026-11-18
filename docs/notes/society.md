@@ -13,14 +13,18 @@ Azgaar's Fantasy Map Generator (FMG). The FMG files are in
 2. `cultures.rs`: `Cultures.generate` and `Cultures.expand`.
 3. `burgs.rs`: `Burgs.generate` and `assignPorts`.
 4. `states.rs`: `createStates`, `expandStates`, `normalize`,
-   `findNeighbors`, `assignColors`.
+   `findNeighbors`, `assignColors`; `diplomacy.rs`: `generateCampaigns`,
+   `generateDiplomacy`.
 5. `development.rs`: `Development.generate`.
 6. `roads.rs` and `routes.rs`: pinned roads, then `Routes.generate`.
 7. `religions.rs`: `Religions.generate`.
 8. `society::specify`: `burgsSpecify`, `collectStatistics`,
    `defineStateForms`, and `provinces.rs` (`Provinces.generate`).
 9. `geonames.rs`: feature and river names.
-10. `markers.rs`: `Markers.generate`.
+10. The economy, the military, and stability (see
+    `docs/notes/economy.md`).
+11. `markers.rs`: `Markers.generate`.
+12. Zones and journeys (see `docs/notes/economy.md`).
 
 Each stage takes its random numbers from its own part of the seed tree.
 FMG uses one global random source. Thus inkland does not give the same map
@@ -62,12 +66,9 @@ as FMG for the same seed. This is not a goal.
   not add towns to the spacing tree; older FMG versions do. Without this,
   towns form dense clusters.
 - Names are unique on a map. FMG does not check this.
-- The plaza of a place uses the rule of FMG before its market stage,
-  because inkland has no economy.
-- No diplomacy: the vassal forms (Marches, Dominion, Protectorate) do not
-  come.
-- Markers that need the economy (mines, guild halls, merchant houses,
-  customs houses) are not made.
+- The diplomacy, the vassal forms, the economy (with the plaza of the
+  market centers), and the markers that need the economy follow FMG now.
+  See `docs/notes/economy.md`.
 - Equal costs in a priority queue come out in insertion order.
 
 ## Additions for print

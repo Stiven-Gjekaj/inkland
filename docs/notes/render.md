@@ -30,13 +30,19 @@ These notes describe `render.mode: "colour"`. The code is in
 | lakes | `draw-lakes.ts` | Groups by lake type, through the water mask. No ripples. |
 | coastline | `draw-coastline.ts`, `coastline-generator.ts` | Fractal detail as FMG, with the FMG noise and path builder. |
 | biomes, states, provinces, cultures, religions | `draw-*.ts`, `isoline-fills.ts` | Cell areas with a water gap stroke, through the land mask. States have a blurred halo. |
-| zones | `draw-zones.ts` | Reads `fmg::data::zones`; the world has no zones yet. |
+| zones | `draw-zones.ts`, `hatches.ts` | The zones of `World::zones`, filled with the FMG hatch patterns. |
 | borders | `draw-borders.ts` | Straight lines along the cell edges. |
 | routes | `draw-routes.ts` | Catmull-Rom curves (alpha 0.1). Shared stretches of the network are drawn once. |
 | rivers | `draw-rivers.ts`, `river-generator.ts` | Meandering and the width outline of FMG, with the width factor and source width of each river. |
 | relief | `draw-relief-icons.ts`, `relief-generator.ts` | Poisson-disc placement with the FMG rules and biome pools; the 5 icon sets. Icons under a label are left out. |
 | burg icons | `draw-burg-icons.ts` | Icon and anchor groups by kind. |
 | ice | `draw-ice.ts` | Glaciers and icebergs of `World::ice`. |
+| goods | `draw-goods.ts` | The overview of all goods: producing cells, pies on places, deposit icons. |
+| markets | `draw-markets.ts` | The market areas, their borders, and a pin with the market glyph at each center. |
+| trade | `draw-trade-traffic.ts` | The goods of the day on each route link. Static lines: no wagons and ships. |
+| military | `draw-military.ts` | The regiment boxes in the state colours, with the FMG glyphs and the totals. |
+| journeys | `draw-journeys.ts` | Catmull-Rom curves (alpha 0.5) of the segments, with start dots and arrows. |
+| rulers | `draw-measurers.ts` | The default ruler with its length in config units. |
 | cells, grid, coordinates | `draw-cells.ts`, `draw-grid.ts`, `draw-coordinates.ts` | Also in print-safe mode. |
 | temperature, precipitation | `draw-temperature.ts`, `draw-precipitation.ts` | First grid. No wind arrows. |
 | population, markers | `draw-population.ts`, `draw-markers.ts` | Read `fmg::data`. |
@@ -59,12 +65,15 @@ These notes describe `render.mode: "colour"`. The code is in
   `black_and_white`, `min_line_width`, `font_families_allowed`) report
   `"applicable": false` in colour mode.
 - Not done: bitmap textures and ocean patterns, heightmap hachures, lake
-  ripples, wind arrows, journeys, goods, markets, military, and the
-  fogging layer.
+  ripples, wind arrows, the trade animation, the lake fill inside a zone,
+  the legend boxes of editors (generation makes none), and the fogging
+  layer.
 
 ## Print-safe mode
 
 - `render.coastline: "fractal"` draws the FMG coastline in black.
+- The layers `zones`, `goods`, `markets`, `trade`, `military`,
+  `journeys`, and `rulers` draw only in colour mode.
 - `cells`, `grid`, `coordinates`, `coastline`, `ocean`, `borders`,
   `routes`, `burg-icons`, `scale-bar`, and `compass` have black and white
   drawings. `emblems` has a drawing with hatching when
