@@ -94,6 +94,10 @@ pub struct World {
     /// Journeys: the routes of parties between places, as data. The last
     /// stage.
     pub journeys: Vec<crate::journeys::Journey>,
+    /// The default ruler (FMG `createDefaultRuler`).
+    pub measurers: Vec<crate::annotations::Measurer>,
+    /// Legend boxes. Generation adds none (FMG `Legends.initiate`).
+    pub legends: Vec<crate::annotations::Legend>,
 }
 
 /// The number of grid cells for a config: from `units.per_cell_hint` if it
@@ -506,6 +510,7 @@ impl World {
         );
         // The journeys run last, as in FMG (`Journeys.generate`). Later
         // stages go before them.
+        let measurers = crate::annotations::default_ruler(&grid, &features, society.cells.px);
         let journeys = crate::journeys::generate(&crate::journeys::Input {
             config,
             grid: &grid,
@@ -555,6 +560,8 @@ impl World {
             stability,
             zones,
             journeys,
+            measurers,
+            legends: Vec::new(),
         })
     }
 
