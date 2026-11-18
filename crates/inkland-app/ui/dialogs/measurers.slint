@@ -1,10 +1,11 @@
 // The Measurers Editor of FMG: the rulers and the other measurers of the
-// shown world, with the type, the number of points, and the length. It
-// does not edit, because the config has no measurers.
+// shown world, with the type, the number of points, and the length. Remove
+// takes a measurer out of the config (`world.measurers`, or
+// `world.default_ruler` for the default ruler).
 
 import { Theme, Label, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
-import { Lists } from "../globals.slint";
+import { Actions, Lists } from "../globals.slint";
 
 export component MeasurersDialog inherits Dialog {
     id: "measurers";
@@ -16,10 +17,12 @@ export component MeasurersDialog inherits Dialog {
         header: ["Type", "Points", "Length"];
         widths: [140px, 60px, 120px];
         rows: Lists.measurers;
+        action: "Remove";
+        act(id) => { Actions.edit-item("measurers", id, "remove", ""); }
         list-height: 120px;
     }
     Tip {
         dialog: true;
-        text: "Generation adds the default ruler of FMG.";
+        text: "Generation adds the default ruler of FMG. The config can add more measurers (world.measurers).";
     }
 }

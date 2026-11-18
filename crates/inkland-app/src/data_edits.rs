@@ -105,6 +105,63 @@ pub fn command(
                 path: format!("/world/notes/{}", k - 1),
             })
         }
+        ("measurers", "remove") => {
+            let k: usize = id.parse().map_err(|_| missing())?;
+            if k >= world.measurers.len() {
+                return Err(missing());
+            }
+            // The default ruler is the first measurer when the config keeps
+            // it; the others are the measurers of the config.
+            let default = config.world.default_ruler && k == 0;
+            if default {
+                Ok(Command::Set {
+                    path: "/world/default_ruler".to_owned(),
+                    value: json!(false),
+                })
+            } else {
+                let i = k - usize::from(config.world.default_ruler);
+                Ok(Command::Remove {
+                    path: format!("/world/measurers/{i}"),
+                })
+            }
+        }
+        ("finance", field @ ("sales_tax" | "poll_tax" | "market_fee" | "military")) => {
+            let index: usize = id.parse().map_err(|_| missing())?;
+            let state = soc.states.get(index).ok_or_else(missing)?;
+            let v: f64 = text
+                .trim()
+                .parse()
+                .map_err(|_| format!("{text:?} is not a number"))?;
+            let at = world.grid.points[state.center];
+            let at = [crate::model::round2(at[0]), crate::model::round2(at[1])];
+            let k = config
+                .world
+                .finance
+                .iter()
+                .position(|f| f.at == Some(at) && f.pin.is_none());
+            match (k, field) {
+                (Some(k), "military") if config.world.finance[k].budget.is_some() => {
+                    Ok(Command::Set {
+                        path: format!("/world/finance/{k}/budget/military"),
+                        value: json!(v),
+                    })
+                }
+                (Some(k), "military") => Ok(Command::Set {
+                    path: format!("/world/finance/{k}/budget"),
+                    value: json!({ "military": v }),
+                }),
+                (Some(k), f) => Ok(Command::Set {
+                    path: format!("/world/finance/{k}/{f}"),
+                    value: json!(v),
+                }),
+                (None, "military") => Ok(append(
+                    config,
+                    "finance",
+                    json!({ "at": at, "budget": { "military": v } }),
+                )),
+                (None, f) => Ok(append(config, "finance", json!({ "at": at, f: v }))),
+            }
+        }
         _ => Err(format!("{list} has no action {op:?}")),
     }
 }
@@ -162,5 +219,35 @@ mod tests {
         assert_eq!(e.config(), &c);
         assert!(command(&c, &w, "notes", "zone:1", "remove", "").is_err());
         assert!(command(&c, &w, "rivers", "1", "remove", "").is_err());
+    }
+
+    #[test]
+    fn the_finance_fields_and_the_measurers_are_undoable_edits() {
+        let c = config();
+        let w = World::build(&c).unwrap();
+        let mut e = Editor::new(c.clone());
+        for (field, text) in [("sales_tax", "0.25"), ("military", "60"), ("poll_tax", "0")] {
+            let cmd = command(e.config(), &w, "finance", "0", field, text).unwrap();
+            e.run(cmd).unwrap();
+        }
+        assert_eq!(e.config().world.finance.len(), 1, "one entry for the state");
+        let w2 = World::build(e.config()).unwrap();
+        let s = &w2.society.states[0];
+        assert_eq!(s.economy.sales_tax, 0.25);
+        assert_eq!(s.economy.poll_tax, 0.0);
+        assert_eq!(
+            s.economy
+                .budget
+                .of(inkland_core::economy::finance::Expense::Military),
+            60.0
+        );
+        assert!(command(e.config(), &w2, "finance", "0", "sales_tax", "much").is_err());
+        let cmd = command(e.config(), &w2, "measurers", "0", "remove", "").unwrap();
+        e.run(cmd).unwrap();
+        assert!(World::build(e.config()).unwrap().measurers.is_empty());
+        for _ in 0..4 {
+            e.undo().unwrap();
+        }
+        assert_eq!(e.config(), &c);
     }
 }

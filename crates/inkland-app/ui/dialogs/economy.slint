@@ -1,9 +1,9 @@
 // The Economy Overview of FMG for the selected state: the economy type,
 // the people, the product, the wealth, the prosperity, the revenue, the
-// expenses, and the trade. It does not edit, because the config has no
-// budget.
+// expenses, and the trade. The fields set the taxes, the market fee, and
+// the military budget of the state (`world.finance`).
 
-import { Theme, Label, Select, FormRow, Table, Tip } from "../theme.slint";
+import { Theme, Field, Label, Select, FormRow, Table, Tip } from "../theme.slint";
 import { Dialog } from "../dialog.slint";
 import { AppState, Actions, Lists } from "../globals.slint";
 
@@ -28,7 +28,25 @@ export component EconomyDialog inherits Dialog {
         header: ["Figure", "Value"];
         widths: [190px, 330px];
         rows: Lists.economy-lines;
-        list-height: 400px;
+        list-height: 300px;
+    }
+    for f in [
+        { key: "sales_tax", label: "Sales tax (share)" },
+        { key: "poll_tax", label: "Poll tax a day" },
+        { key: "market_fee", label: "Market fee a day" },
+        { key: "military", label: "Military budget %" },
+    ]: FormRow {
+        label: f.label;
+        label-width: 150px;
+        Field {
+            dialog: true;
+            horizontal-stretch: 1;
+            placeholder: "New value, then Enter";
+            accepted(t) => {
+                Actions.edit-item("finance", AppState.overview-state, f.key, t);
+                self.text = "";
+            }
+        }
     }
     Tip {
         dialog: true;
