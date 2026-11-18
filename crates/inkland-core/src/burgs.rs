@@ -37,6 +37,8 @@ pub struct Input<'a> {
     /// Chain 0 is the wildlands; chain `k` is culture `k`.
     pub chains: &'a [Chain],
     pub lakes: &'a [crate::rivers::Lake],
+    /// The number of cells of the first grid (FMG `grid.points.length`).
+    pub base_cells: usize,
 }
 
 fn dist2(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -64,6 +66,13 @@ pub fn pin_gap(config: &Config, grid: &Grid) -> f64 {
         .places
         .min_distance_from_pins
         .unwrap_or(3.0 * mean_width)
+}
+
+/// The automatic town count of FMG (`getTownsNumber`). FMG divides by the
+/// cells of the first grid, not by the cells of the second grid.
+pub fn auto_towns(populated: usize, base_cells: usize) -> usize {
+    let v = populated as f64 / 5.0 / libm::pow(base_cells.max(1) as f64 / 10_000.0, 0.8);
+    crate::rand::js_round(v) as usize
 }
 
 /// Place the pinned places, the capitals, and the towns (`generate`). The
@@ -181,10 +190,7 @@ pub fn generate(
     // Towns.
     let number = match config.world.towns {
         crate::config::Towns::Count(k) => (k as usize).min(populated.len()),
-        crate::config::Towns::Auto(_) => {
-            let v = populated.len() as f64 / 5.0 / libm::pow(n as f64 / 10_000.0, 0.8);
-            crate::rand::js_round(v) as usize
-        }
+        crate::config::Towns::Auto(_) => auto_towns(populated.len(), input.base_cells),
     };
     let score: Vec<f64> = cells
         .s

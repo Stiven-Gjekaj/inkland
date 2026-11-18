@@ -362,6 +362,7 @@ impl World {
             pin_cells: &pin_cells,
             lakes: &lakes,
             groups: &groups,
+            base_cells: base_grid_len,
         });
         let routes = crate::roads::build(&crate::roads::Input {
             config,

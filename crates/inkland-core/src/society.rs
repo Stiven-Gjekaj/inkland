@@ -205,6 +205,8 @@ pub struct Input<'a> {
     pub lakes: &'a [crate::rivers::Lake],
     /// The group of each feature (`geonames::groups`).
     pub groups: &'a [&'static str],
+    /// The number of cells of the first grid.
+    pub base_cells: usize,
 }
 
 /// Build the society.
@@ -223,6 +225,7 @@ pub fn build(input: &Input) -> Society {
         pin_cells,
         lakes,
         groups,
+        base_cells,
     } = *input;
     let n = grid.len();
     let tree = SeedTree::new(config.seed);
@@ -276,6 +279,7 @@ pub fn build(input: &Input) -> Society {
         pin_cells,
         chains: &chains,
         lakes,
+        base_cells,
     };
     let mut prng = Rand::new(tree.part_rng(Layer::Places, "generate"));
     let mut places = crate::burgs::generate(&burg_input, &mut used_names, &mut prng, &mut nrng);
@@ -528,6 +532,25 @@ mod tests {
                 prop_assert_eq!(&s.places[0].name, "Pinholm");
             }
         }
+    }
+
+    #[test]
+    fn auto_towns_count_on_the_first_grid() {
+        // FMG: rn(populated / 5 / (grid.points.length / 10000) ** 0.8).
+        assert_eq!(crate::burgs::auto_towns(8000, 30_000), 664);
+        assert_eq!(crate::burgs::auto_towns(1000, 10_000), 200);
+        let c = config(7, 0, 0, &[]);
+        let w = World::build(&c).unwrap();
+        let s = &w.society;
+        let populated = (0..w.grid.len())
+            .filter(|&i| s.cells.s[i] > 0.0 && s.cell_culture[i] != 0)
+            .count();
+        let towns = s.places.iter().filter(|p| !p.capital).count();
+        assert!(w.base.grid.len() > w.grid.len());
+        assert_eq!(
+            towns,
+            crate::burgs::auto_towns(populated, w.base.grid.len())
+        );
     }
 
     #[test]
