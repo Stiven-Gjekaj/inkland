@@ -130,6 +130,24 @@ pub fn routes(s: &mut String, ctx: &Ctx) {
         }
         s.push_str("</g>\n");
     }
+    // Sea routes between ports, with the curve of FMG for this group.
+    let _ = writeln!(
+        s,
+        "<g id=\"routes-searoutes\"{}>",
+        ctx.attrs(&["routes", "searoutes"], &[])
+    );
+    for r in &w.sea_routes {
+        let pts: Vec<[f64; 2]> = r.points.iter().map(|&p| ctx.p(p)).collect();
+        if pts.len() >= 2 {
+            let _ = writeln!(
+                s,
+                "<path id=\"searoute-{}\" d=\"{}\"/>",
+                r.id,
+                catmull_rom(&pts, 0.5)
+            );
+        }
+    }
+    s.push_str("</g>\n");
     s.push_str("</g>\n");
 }
 

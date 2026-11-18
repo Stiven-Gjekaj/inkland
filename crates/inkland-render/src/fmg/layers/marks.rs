@@ -361,12 +361,18 @@ pub fn relief(s: &mut String, ctx: &Ctx) {
     s.push_str("</g>\n");
 }
 
-/// The style group of a place.
-pub fn burg_group(kind: PlaceKind, capital: bool) -> &'static str {
-    if capital {
+/// The style group of a place: its FMG burg group when the styles have
+/// that group, else a group from its kind.
+pub fn burg_group(place: &inkland_core::society::Place) -> &'static str {
+    if place.capital {
         return "capital";
     }
-    match kind {
+    for g in ["city", "town", "village", "fort", "hamlet"] {
+        if place.group == g {
+            return g;
+        }
+    }
+    match place.kind {
         PlaceKind::City => "city",
         PlaceKind::Town | PlaceKind::Custom => "town",
         PlaceKind::Village => "village",
@@ -401,7 +407,7 @@ pub fn burg_icons(s: &mut String, ctx: &Ctx) {
             .society
             .places
             .iter()
-            .filter(|p| burg_group(p.kind, p.capital) == group)
+            .filter(|p| burg_group(p) == group)
             .filter(|p| p.at[0] >= vx0 && p.at[0] <= vx1 && p.at[1] >= vy0 && p.at[1] <= vy1)
             .collect();
         let gid = icons::kebab(group);

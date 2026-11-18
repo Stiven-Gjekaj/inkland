@@ -94,7 +94,7 @@ impl Palette {
 
         // Provinces: a mix of the state colour.
         let mut r = rng("province-colors");
-        let provinces = soc
+        let mut provinces: BTreeMap<u32, String> = soc
             .provinces
             .iter()
             .map(|p| {
@@ -108,13 +108,13 @@ impl Palette {
 
         // Religions: a mix of the culture colour.
         let mut r = rng("religion-colors");
-        let religions = world
+        let mut religions: BTreeMap<u32, String> = world
             .religions
             .list
             .iter()
             .map(|rel| {
                 let color = match cultures.get(&rel.culture) {
-                    Some(base) if rel.kind == "folk" => mixed_color(base, 0.1, 0.0, &mut r),
+                    Some(base) if rel.kind == "Folk" => mixed_color(base, 0.1, 0.0, &mut r),
                     Some(base) => mixed_color(base, 0.25, 0.4, &mut r),
                     None => random_color(&mut r),
                 };
@@ -122,6 +122,17 @@ impl Palette {
             })
             .collect();
 
+        // The world keeps the FMG colours of states, provinces, and
+        // religions; they replace the colours above.
+        for st in soc.states.iter().filter(|s| !s.color.is_empty()) {
+            states.insert(st.id, st.color.clone());
+        }
+        for p in soc.provinces.iter().filter(|p| !p.color.is_empty()) {
+            provinces.insert(p.id, p.color.clone());
+        }
+        for rel in world.religions.list.iter().filter(|r| !r.color.is_empty()) {
+            religions.insert(rel.id, rel.color.clone());
+        }
         Palette {
             states,
             provinces,
