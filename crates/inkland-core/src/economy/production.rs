@@ -1320,7 +1320,7 @@ mod tests {
     fn good(id: u32, name: &'static str, value: f64, recipes: Vec<Vec<(u32, f64)>>) -> Good {
         let mut g = crate::economy::goods::catalogue()[0].clone();
         g.id = id;
-        g.name = name;
+        g.name = name.to_owned();
         g.value = value;
         g.carriage = value / 10.0;
         g.recipes = recipes;

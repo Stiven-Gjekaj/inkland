@@ -414,7 +414,7 @@ pub fn export(world: &World, config: &Config, layers: &[&str]) -> Value {
             features.push(feature(
                 json!({ "type": "Point", "coordinates": pt(world.grid.points[c]) }),
                 json!({ "layer": "deposits", "cell": c, "good": g,
-                        "name": good.map(|x| x.name) }),
+                        "name": good.map(|x| x.name.clone()) }),
             ));
         }
     }

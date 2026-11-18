@@ -1393,7 +1393,7 @@ pub mod kit {
     pub fn wheat() -> Good {
         let mut g = crate::economy::goods::catalogue()[8].clone();
         g.id = 1;
-        g.name = "Wheat";
+        g.name = "Wheat".to_owned();
         g.value = 10.0;
         g.carriage = 1.0;
         g.coverage = [1.0, 0.0, 0.0, 0.0, 0.0];

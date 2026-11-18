@@ -28,15 +28,15 @@ pub const DEFAULT_CLUSTERING: f64 = 0.5;
 pub struct Good {
     /// 1, 2, 3, ... in catalogue order.
     pub id: u32,
-    pub name: &'static str,
-    pub tags: &'static [&'static str],
-    pub icon: &'static str,
-    pub color: &'static str,
+    pub name: String,
+    pub tags: Vec<String>,
+    pub icon: String,
+    pub color: String,
     /// The base price.
     pub value: f64,
     /// The price to carry one unit over a decima.
     pub carriage: f64,
-    pub unit: &'static str,
+    pub unit: String,
     /// The deposits on the map: minimum and maximum.
     pub deposits: Option<[f64; 2]>,
     /// The multiplier on the output of each deposit (`depositYield`).
@@ -44,7 +44,7 @@ pub struct Good {
     /// The chance that a deposit lands next to the one before it.
     pub clustering: f64,
     /// The spread expression of the deposits.
-    pub distribution: Option<&'static str>,
+    pub distribution: Option<String>,
     /// The least development that a cell needs to make the good; 0 for none.
     pub development: u8,
     /// Units for each rural population point, by biome.
@@ -104,17 +104,17 @@ fn resolve(raw: &RawGood, id: u32) -> Good {
         .collect();
     Good {
         id,
-        name: raw.name,
-        tags: raw.tags,
-        icon: raw.icon,
-        color: raw.color,
+        name: raw.name.to_owned(),
+        tags: raw.tags.iter().map(|t| (*t).to_owned()).collect(),
+        icon: raw.icon.to_owned(),
+        color: raw.color.to_owned(),
         value: raw.value,
         carriage: raw.carriage,
-        unit: raw.unit,
+        unit: raw.unit.to_owned(),
         deposits: raw.deposits,
         deposit_yield: 1.0,
         clustering: DEFAULT_CLUSTERING,
-        distribution: raw.distribution,
+        distribution: raw.distribution.map(str::to_owned),
         development: raw.development,
         biome_output: raw.biome_output.to_vec(),
         recipes,
@@ -409,7 +409,7 @@ pub struct DepositInput<'a> {
 /// rounded up (`getDepositCount`). It draws a number only for a good with a
 /// distribution and a range.
 fn deposit_count(good: &Good, rng: &mut Rand) -> usize {
-    match (good.distribution, good.deposits) {
+    match (&good.distribution, good.deposits) {
         (Some(_), Some([lo, hi])) => {
             let (lo, hi) = (lo.ceil(), hi.ceil());
             (lo + (rng.unit() * (hi - lo + 1.0)).floor()) as usize
@@ -449,7 +449,7 @@ pub fn deposits(input: &DepositInput, goods: &[Good], rng: &mut Rand) -> Vec<u16
     for k in order {
         let g = &goods[k];
         let count = deposit_count(g, rng);
-        let Some(text) = g.distribution else {
+        let Some(text) = g.distribution.as_deref() else {
             continue;
         };
         // A rule that does not parse places nothing, as in FMG.
@@ -560,7 +560,7 @@ mod tests {
             for r in &g.recipes {
                 assert!(r.windows(2).all(|w| w[0].0 < w[1].0), "{}", g.name);
             }
-            if let Some(d) = g.distribution {
+            if let Some(d) = &g.distribution {
                 assert!(Distribution::parse(d).is_ok(), "{}: {d}", g.name);
             }
         }
@@ -646,7 +646,7 @@ mod tests {
             }
             assert_ne!(w.biomes[cell], crate::biomes::GLACIER);
             let good = &goods[g as usize - 1];
-            let text = good.distribution.unwrap();
+            let text = good.distribution.clone().unwrap();
             // A rule with no random function holds on each of its cells.
             if !["random", "elevation", "habitability"]
                 .iter()
@@ -665,7 +665,7 @@ mod tests {
                     pop: 0.0,
                 };
                 assert!(
-                    Distribution::parse(text).unwrap().fits(&view, &mut rng()),
+                    Distribution::parse(&text).unwrap().fits(&view, &mut rng()),
                     "{}",
                     good.name
                 );

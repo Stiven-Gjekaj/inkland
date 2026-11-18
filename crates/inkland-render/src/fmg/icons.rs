@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn each_good_has_its_icon() {
         for good in inkland_core::economy::goods::catalogue() {
-            let path = goods_icon_path(good.icon);
+            let path = goods_icon_path(&good.icon);
             assert_ne!(path, "goods/unknown", "{}", good.name);
             let s = symbol(&path, &kebab(&path)).unwrap();
             assert!(s.contains("viewBox=\"0 0 100 100\""), "{}", good.name);

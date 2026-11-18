@@ -79,7 +79,7 @@ fn place_of_cell(world: &World) -> BTreeMap<usize, usize> {
 /// A producing cell: its colour and opacity.
 struct CellShade {
     cell: usize,
-    color: &'static str,
+    color: String,
     opacity: f64,
 }
 
@@ -87,13 +87,13 @@ struct CellShade {
 /// opacity by its output value (`buildCellOverview`).
 fn cell_overview(world: &World) -> Vec<CellShade> {
     let e = &world.economy;
-    let mut cells: Vec<(usize, f64, &'static str)> = Vec::new();
+    let mut cells: Vec<(usize, f64, String)> = Vec::new();
     for (c, rural) in e.rural_output.iter().enumerate() {
         // FMG reads the goods of a cell in the order of their ids.
         let mut rural = rural.clone();
         rural.sort_by_key(|&(g, _)| g);
         let mut value = 0.0;
-        let mut top: Option<(&'static str, f64)> = None;
+        let mut top: Option<(String, f64)> = None;
         for (g, units) in rural {
             let Some(good) = e.good(g) else {
                 continue;
@@ -103,8 +103,8 @@ fn cell_overview(world: &World) -> Vec<CellShade> {
                 continue;
             }
             value += v;
-            if top.is_none_or(|(_, t)| v > t) {
-                top = Some((good.color, v));
+            if top.as_ref().is_none_or(|(_, t)| v > *t) {
+                top = Some((good.color.clone(), v));
             }
         }
         if let Some((color, _)) = top {
@@ -125,7 +125,7 @@ fn cell_overview(world: &World) -> Vec<CellShade> {
 /// A sector of a pie: its goods, colour, and part of the circle.
 struct Sector {
     goods: Vec<u32>,
-    color: &'static str,
+    color: String,
     share: f64,
 }
 
@@ -144,14 +144,14 @@ fn burg_circles(world: &World) -> Vec<BurgCircle> {
     let e = &world.economy;
     let mut values: Vec<(usize, f64, Vec<Sector>)> = Vec::new();
     for (i, pe) in e.places.iter().enumerate() {
-        let mut goods: Vec<(u32, &'static str, f64)> = Vec::new();
+        let mut goods: Vec<(u32, String, f64)> = Vec::new();
         let mut production = pe.production.clone();
         production.sort_by_key(|&(g, _)| g);
         for (g, units) in production {
             if let Some(good) = e.good(g) {
                 let v = units * good.value;
                 if v > 0.0 {
-                    goods.push((g, good.color, v));
+                    goods.push((g, good.color.clone(), v));
                 }
             }
         }
@@ -177,16 +177,16 @@ fn burg_circles(world: &World) -> Vec<BurgCircle> {
         let scale = (1.0 - rest_drawn) / (1.0 - rest_share);
         let mut sectors: Vec<Sector> = goods[..own]
             .iter()
-            .map(|&(g, color, v)| Sector {
-                goods: vec![g],
-                color,
-                share: v / value * scale,
+            .map(|(g, color, v)| Sector {
+                goods: vec![*g],
+                color: color.clone(),
+                share: *v / value * scale,
             })
             .collect();
         if !rest.is_empty() {
             sectors.push(Sector {
                 goods: rest.iter().map(|g| g.0).collect(),
-                color: OTHER_FILL,
+                color: OTHER_FILL.to_owned(),
                 share: rest_drawn,
             });
         }
@@ -212,8 +212,8 @@ struct ResourceIcon {
     cell: usize,
     at: [f64; 2],
     good: u32,
-    color: &'static str,
-    icon: &'static str,
+    color: String,
+    icon: String,
 }
 
 /// The deposits of the cells (`buildResourceIcons`).
@@ -232,8 +232,8 @@ fn resource_icons(world: &World) -> Vec<ResourceIcon> {
             cell,
             at,
             good: good.id,
-            color: good.color,
-            icon: good.icon,
+            color: good.color.clone(),
+            icon: good.icon.clone(),
         });
     }
     out
@@ -557,13 +557,13 @@ pub fn goods(s: &mut String, ctx: &Ctx) {
                 n(y),
                 n(half),
                 d.color,
-                stroke_of(d.color)
+                stroke_of(&d.color)
             );
         }
         let _ = writeln!(
             s,
             "<use href=\"#{}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"{lines}/></g>",
-            icons::kebab(&icons::goods_icon_path(d.icon)),
+            icons::kebab(&icons::goods_icon_path(&d.icon)),
             n(x - half),
             n(y - half),
             n(size),
@@ -717,12 +717,12 @@ mod tests {
         let sectors = [
             Sector {
                 goods: vec![1],
-                color: "#ff0000",
+                color: "#ff0000".to_owned(),
                 share: 0.75,
             },
             Sector {
                 goods: vec![2, 3],
-                color: OTHER_FILL,
+                color: OTHER_FILL.to_owned(),
                 share: 0.25,
             },
         ];

@@ -878,7 +878,7 @@ impl<'a> Gen<'a> {
         let good = e.good(u32::from(self.soc().cells.good[c]))?;
         good.tags
             .iter()
-            .any(|&t| t == "ore" || t == "mineral")
+            .any(|t| t == "ore" || t == "mineral")
             .then_some(good)
     }
     /// The ore or mineral that the place of a cell extracts in the last run
@@ -902,7 +902,7 @@ impl<'a> Gen<'a> {
     }
     /// The names of the goods that the market of a cell had in stock or
     /// traded in the last run (`getMarketGoods`).
-    fn market_goods(&self, c: usize) -> std::collections::BTreeSet<&'static str> {
+    fn market_goods(&self, c: usize) -> std::collections::BTreeSet<&'a str> {
         let e = self.input.economy;
         let id = e.cell_market.get(c).copied().unwrap_or(0);
         let Some(market) = e.market(id) else {
@@ -917,7 +917,7 @@ impl<'a> Gen<'a> {
         let dealt = e.deals.iter().filter(|d| d.market == id).map(|d| d.good);
         stocked
             .chain(dealt)
-            .filter_map(|g| e.good(g).map(|g| g.name))
+            .filter_map(|g| e.good(g).map(|g| g.name.as_str()))
             .collect()
     }
     /// The trade of the market of a cell, square-rooted so the busiest
@@ -958,7 +958,13 @@ impl<'a> Gen<'a> {
         Some(match kind {
             // Rich deposits draw miners: gold, silver, and gems most.
             "mines" => self.deposit(c).map_or(0.0, |d| {
-                d.value * d.value * if d.tags.contains(&"luxury") { 4.0 } else { 1.0 }
+                d.value
+                    * d.value
+                    * if d.tags.iter().any(|t| t == "luxury") {
+                        4.0
+                    } else {
+                        1.0
+                    }
             }),
             "bridges" => libm::sqrt(at(&self.trade.burg_trade, burg_id(c))),
             "merchant-houses" => at(&self.trade.margin, market(c)).max(0.0),
@@ -2145,7 +2151,7 @@ mod tests {
                 "mines" => {
                     assert!(place(m.cell).is_some());
                     let good = e.good(u32::from(soc.cells.good[m.cell])).unwrap();
-                    assert!(good.tags.iter().any(|&t| t == "ore" || t == "mineral"));
+                    assert!(good.tags.iter().any(|t| t == "ore" || t == "mineral"));
                     assert!(name.contains(": "), "{name}");
                 }
                 "merchant-houses" => {

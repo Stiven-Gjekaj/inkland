@@ -453,7 +453,7 @@ pub fn goods_rows(world: &World) -> Vec<Row> {
                 ],
                 false,
             )
-            .with_color(g.color)
+            .with_color(&g.color)
         })
         .collect()
 }
