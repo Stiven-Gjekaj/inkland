@@ -183,8 +183,8 @@ pub struct Placed {
     pub id: String,
     pub kind: Kind,
     /// The style group of the label: `capital`, `city`, `town`, `village`,
-    /// `fort`, `hamlet`, `river`, `lake`, `ocean`, `state`, `region`, or
-    /// `feature`.
+    /// `fort`, `hamlet`, `river`, `lake`, `ocean`, `island`, `state`,
+    /// `region`, or `feature`.
     pub group: &'static str,
     pub text: String,
     pub family: String,
@@ -991,87 +991,45 @@ pub fn place_with(
         });
     }
 
-    // Named lakes, with optional labels.
+    // Named lakes, oceans, and islands, with optional labels, in the label
+    // groups `lake`, `ocean`, and `island`. A continent holds the states,
+    // so it has no label.
     for n in &world.names.features {
         let Some(name) = n.name.as_deref() else {
             continue;
         };
-        if !matches!(n.group, "freshwater" | "frozen") {
-            continue;
-        }
+        let (group, prefix, default_pt, spread, rank) = match n.group {
+            "freshwater" | "salt" | "frozen" | "dry" | "sinkhole" | "lava" => {
+                ("lake", "lake", sizes.river, (0.05, 0.3), 6)
+            }
+            "ocean" | "sea" | "gulf" => ("ocean", "water", sizes.region, (0.1, 0.6), 6),
+            "island" | "isle" | "lake_island" => {
+                ("island", "island", sizes.place_town, (0.05, 0.3), 7)
+            }
+            _ => continue,
+        };
         let g = &world.grid;
         let area: Vec<bool> = world.features.of_cell.iter().map(|&f| f == n.id).collect();
         if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
             continue;
         }
-        let look = style("lake");
-        let size = look.size.unwrap_or_else(|| pt(sizes.river));
+        let look = style(group);
+        let size = look.size.unwrap_or_else(|| pt(default_pt));
         let name = look.text(name);
         let f = FontMetrics::of(&look.family);
         requests.push(Request {
             place: None,
             candidates: area_candidates(
-                world,
-                page,
-                inner,
-                &area,
-                &name,
-                f,
-                size,
-                look.halo,
-                (0.05, 0.3),
+                world, page, inner, &area, &name, f, size, look.halo, spread,
             ),
-            id: format!("label-lake-{}", n.id),
+            id: format!("label-{prefix}-{}", n.id),
             kind: Kind::Region,
-            group: "lake",
+            group,
             text: name,
             family: look.family,
             required: false,
-            rank: 6,
+            rank,
         });
-    }
-
-    // Named oceans, seas, and gulfs, with optional labels: only in colour
-    // mode, as the custom labels of the original program.
-    if config.render.mode == inkland_core::config::RenderMode::Colour {
-        for n in &world.names.features {
-            let Some(name) = n.name.as_deref() else {
-                continue;
-            };
-            if !matches!(n.group, "ocean" | "sea" | "gulf") {
-                continue;
-            }
-            let g = &world.grid;
-            let area: Vec<bool> = world.features.of_cell.iter().map(|&f| f == n.id).collect();
-            if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
-                continue;
-            }
-            let look = style("ocean");
-            let size = look.size.unwrap_or_else(|| pt(sizes.region));
-            let name = look.text(name);
-            let f = FontMetrics::of(&look.family);
-            requests.push(Request {
-                place: None,
-                candidates: area_candidates(
-                    world,
-                    page,
-                    inner,
-                    &area,
-                    &name,
-                    f,
-                    size,
-                    look.halo,
-                    (0.1, 0.6),
-                ),
-                id: format!("label-water-{}", n.id),
-                kind: Kind::Region,
-                group: "ocean",
-                text: name,
-                family: look.family,
-                required: false,
-                rank: 6,
-            });
-        }
     }
 
     // States.
@@ -1684,6 +1642,53 @@ mod tests {
             }
         }
         rivers.len()
+    }
+
+    #[test]
+    fn lakes_oceans_and_islands_get_optional_labels() {
+        // Whether a label has room depends on the world. So the test looks
+        // at worlds until it has seen a placed label of each kind, and
+        // checks the rules in each world on the way.
+        let mut kinds = std::collections::BTreeSet::new();
+        for seed in 1..=40 {
+            let (w, c) = world(
+                seed,
+                "archipelago",
+                json!({ "world": { "cells": 4000, "template": "archipelago" } }),
+            );
+            let labels = check_no_overlap(&w, &c);
+            for n in &w.names.features {
+                let prefix = match n.group {
+                    "freshwater" | "salt" | "frozen" | "dry" | "sinkhole" | "lava" => "lake",
+                    "ocean" | "sea" | "gulf" => "water",
+                    "island" | "isle" | "lake_island" => "island",
+                    _ => continue,
+                };
+                let id = format!("label-{prefix}-{}", n.id);
+                let placed = labels.placed.iter().find(|l| l.id == id);
+                let unplaced = labels.unplaced.iter().find(|u| u.id == id);
+                // Each named feature in the view has a label or is in the list.
+                assert!(
+                    placed.is_some() || unplaced.is_some(),
+                    "{seed} {id} {}",
+                    n.group
+                );
+                assert!(unplaced.is_none_or(|u| !u.required), "{seed} {id}");
+                if let Some(l) = placed {
+                    assert_eq!(l.text, n.name.clone().unwrap());
+                    kinds.insert(l.group);
+                }
+            }
+            assert_eq!(labels.required_unplaced(), 0, "{seed}");
+            if kinds.len() == 3 {
+                break;
+            }
+        }
+        assert_eq!(
+            kinds.into_iter().collect::<Vec<_>>(),
+            ["island", "lake", "ocean"],
+            "a label of each kind has room in some world"
+        );
     }
 
     #[test]

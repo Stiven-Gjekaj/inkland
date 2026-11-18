@@ -311,7 +311,7 @@ fn the_ice_layer_draws_the_ice_of_a_cold_world() {
 }
 
 #[test]
-fn named_seas_get_labels_in_colour_mode_only() {
+fn named_seas_get_labels_in_both_modes() {
     let w = world();
     let named: Vec<u32> = w
         .names
@@ -323,10 +323,20 @@ fn named_seas_get_labels_in_colour_mode_only() {
     assert!(!named.is_empty(), "the test world has a named sea");
     let svg = render_with(&[LayerName::Labels], StyleName::Default);
     assert!(svg.contains("id=\"label-water-"));
+    // An ocean label has the style of the custom labels.
+    let doc = roxmltree::Document::parse(&svg).unwrap();
+    let text = doc
+        .descendants()
+        .find(|n| {
+            n.attribute("id")
+                .is_some_and(|i| i.starts_with("label-water-"))
+        })
+        .unwrap();
+    assert_eq!(text.parent().unwrap().attribute("id"), Some("labels-added"));
     let mut c = base_config();
     c.render.mode = RenderMode::PrintSafe;
     let print = crate::svg::render(w, &c, &c.variants[0]).svg;
-    assert!(!print.contains("label-water-"));
+    assert!(print.contains("id=\"label-water-"));
 }
 
 #[test]

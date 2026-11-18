@@ -194,10 +194,14 @@ pub fn fix_refs(value: &str) -> String {
     out
 }
 
-/// The style group of a label group of inkland.
+/// The style group of a label group of inkland. The original program has
+/// no label groups for lakes, oceans, and islands: lakes take the group of
+/// rivers, oceans the group of custom labels (`added`), and islands the
+/// group of provinces.
 pub fn style_group(group: &str) -> &str {
     match group {
         "lake" => "river",
+        "island" => "province",
         "region" | "feature" | "ocean" => "added",
         other => other,
     }
