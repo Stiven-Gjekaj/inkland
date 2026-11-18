@@ -145,30 +145,51 @@ FMG tool that inkland does not have yet.
 - **Economy.** The economy of the selected state: the economy type, the
   people, the inequality, the trade balance, the day balance, the
   prosperity, the product, the wealth, the sectors, the taxes, the
-  expenses, the main exports and imports, and the trade partners.
+  expenses, the main exports and imports, and the trade partners. The
+  fields under the table set the sales tax, the poll tax, the market fee,
+  the military budget, and the tariff (a share of the price, or
+  `embargo`) of the state.
 - **Goods.** The goods, with the color, the type (raw or made), the unit,
   the units made in a day, the units in stock in all markets, and the base
   price.
 - **Journeys.** The journeys (type, start, end, distance, speed, total
-  time) and the segments of the selected journey.
+  time) and the segments of the selected journey. "Draw" makes a new
+  journey: click the stops, then double-click or press Enter. The field
+  gives the name.
 - **Markers.** The markers, with the name, the type, and the legend. Click
   a marker to read its full legend.
 - **Markets.** The markets, with the color, the state, the cells, the
-  burgs, the stock, the sales, the purchases, and the value.
+  burgs, the stock, the sales, the purchases, and the value. "Add on the
+  map" adds a market: click the burg of its center. Select a market and
+  click "Move" to move its center to another burg.
 - **Measurers.** The measurers: the type, the number of points, and the
-  length. Generation adds the default ruler.
+  length. Generation adds the default ruler. "Draw" makes a new measurer:
+  click its points, then double-click or press Enter. The field gives the
+  kind (`ruler`, `opisometer`, `route-opisometer`, or `planimeter`).
+  Under the measurers, the legend boxes. "Draw" adds a legend box at a
+  click. The field gives the title and the items, as
+  `Title; #rrggbb text; #rrggbb text`.
 - **Military.** The forces of each state by unit, the total with the
   crew, the people, the rate, the war alert, the upkeep, and the power.
-  Under them, the regiments of the selected state.
+  Under them, the regiments of the selected state. "Draw" adds a regiment
+  at a click in a state. The field gives the troops as
+  `Unit=people, Unit=people`. Select a regiment to move it, or to set its
+  troops.
 - **Notes.** The notes of the regiments, the markers, and the zones, and
   the text of the selected note.
 - **Stability.** The parts of the stability of the selected state, the
   total, and the provinces, least stable first.
 - **Zones.** The zones, with the type, the cells, the area, the people,
-  and the hatch pattern of the fill.
-- These dialogs show the generated world. They do not edit, because the
-  config does not hold these data. Diplomacy, Military, Stability, and
+  and the hatch pattern of the fill. "Draw" makes a new zone: click its
+  outline, then double-click or press Enter. The field gives the name and
+  the type, as `Name; Type`.
+- Each edit of these dialogs adds one entry to a list of the world part
+  of the config (`world.markets`, `world.regiments`, `world.zones`, and
+  the other lists). The entry finds its item by a point, so the edit comes
+  back after each regeneration. Diplomacy, Military, Stability, and
   Economy share one select of the state.
+- The Add group of the Tools tab starts the same draw tools: Market,
+  Regiment, Zone, Journey, Measurer, and Legend.
 - **Cells.** The Cell Details dialog. It shows the facts of the cell
   under the pointer, with the good of the deposit and the market.
 - **Print.** The checks of the report of the shown variant, with PASS or
