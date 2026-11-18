@@ -439,6 +439,17 @@ pub fn cell_lines(q: &Value) -> Vec<(String, String)> {
         ("Province".to_owned(), name_of(&q["province"])),
         ("Culture".to_owned(), name_of(&q["culture"])),
         ("Religion".to_owned(), name_of(&q["religion"])),
+        // FMG `infoGood` and `infoMarket`.
+        (
+            "Good".to_owned(),
+            q["deposit"]["name"].as_str().unwrap_or("n/a").to_owned(),
+        ),
+        (
+            "Market".to_owned(),
+            q["market"]["center"]
+                .as_str()
+                .map_or_else(|| "n/a".to_owned(), |c| format!("{c} market")),
+        ),
     ];
     let regions: Vec<&str> = q["regions"]
         .as_array()
@@ -589,6 +600,8 @@ mod tests {
         let get = |k: &str| lines.iter().find(|(l, _)| l == k).map(|(_, v)| v.clone());
         assert_eq!(get("Pinned areas").as_deref(), Some("hills"));
         assert!(get("Burg").unwrap().starts_with("Ostrey, 0 away"));
+        assert!(get("Market").unwrap().ends_with(" market"));
+        assert!(get("Good").is_some());
         let status = status_text(&q);
         assert!(
             status.contains("(land)") && status.contains("near Ostrey"),
