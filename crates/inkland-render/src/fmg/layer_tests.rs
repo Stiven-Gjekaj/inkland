@@ -85,7 +85,8 @@ fn group_id(layer: LayerName) -> Option<&'static str> {
         Military => Some("armies"),
         Journeys => Some("journeys"),
         Rulers => Some("ruler"),
-        Texture | Ice | Population | Markers | Features => None,
+        Markers => Some("markers"),
+        Texture | Ice | Population | Features => None,
         Coast | Regions | Roads | Places => None,
     }
 }
@@ -744,4 +745,27 @@ fn the_other_measurers_draw_their_shapes() {
     // The area of the triangle: 100 x 100 / 2 square miles.
     assert!(svg.contains(">5K square miles</text>"));
     parse_and_draw(&svg);
+}
+
+#[test]
+fn markers_show_the_economy_kinds_with_the_icons_of_fmg() {
+    let w = world();
+    let list = data::markers(w).unwrap();
+    for (m, d) in w.markers.iter().zip(&list) {
+        assert_ne!(d.icon, "\u{2753}", "{} has an FMG icon", m.kind);
+    }
+    let svg = render_with(&[LayerName::Markers], StyleName::Default);
+    for (kind, icon) in [
+        ("mines", "\u{26CF}\u{FE0F}"),
+        ("guild-halls", "\u{1F3DB}\u{FE0F}"),
+        ("merchant-houses", "\u{2696}\u{FE0F}"),
+        ("customs-houses", "\u{1F6C3}"),
+    ] {
+        let i = w.markers.iter().position(|m| m.kind == kind).expect(kind);
+        assert_eq!(list[i].icon, icon, "{kind}");
+        let id = format!("<svg id=\"marker-{}\"", w.markers[i].id);
+        let at = svg.find(&id).expect(kind);
+        let end = at + svg[at..].find("</svg>").unwrap();
+        assert!(svg[at..end].contains(&format!(">{icon}</text>")), "{kind}");
+    }
 }
