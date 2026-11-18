@@ -5,8 +5,10 @@
 //!   deposits are placed before `rankCells`, as in FMG, and live in
 //!   `Society::cells.good`.
 //! - `demand`: what people need and how they spend.
+//! - `finance`: the taxes, tariffs, and budget of a state (`State::economy`).
 
 pub mod demand;
+pub mod finance;
 pub mod goods;
 pub mod goods_data;
 

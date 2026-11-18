@@ -129,6 +129,10 @@ pub struct State {
     pub diplomacy: Vec<crate::diplomacy::Relation>,
     /// Old wars, sorted by start, then the ongoing wars.
     pub campaigns: Vec<crate::diplomacy::Campaign>,
+    /// How ready for war the state is, from 0.1 to 5 (FMG `alert`).
+    pub alert: f64,
+    /// Taxes, fee, tariffs, budget, and treasury (FMG `economy`).
+    pub economy: crate::economy::finance::StateFinance,
 }
 
 impl Default for State {
@@ -154,6 +158,8 @@ impl Default for State {
             coa: None,
             diplomacy: Vec::new(),
             campaigns: Vec::new(),
+            alert: 1.0,
+            economy: crate::economy::finance::StateFinance::default(),
         }
     }
 }
@@ -442,6 +448,9 @@ pub fn specify(soc: &mut Society, later: &Later) {
             places: &soc.places,
             religions,
             development: &soc.development,
+            cells: &soc.cells,
+            cell_state: &soc.cell_state,
+            cell_culture: &soc.cell_culture,
         },
         &mut soc.states,
         &mut frng,

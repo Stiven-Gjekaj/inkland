@@ -11,11 +11,12 @@
 //!   reaches takes the state of the nearest cell with a state.
 
 use crate::cultures::{BIOME_COST, Culture, CultureType, Key, type_cost};
+use crate::economy::finance::{Budget, Tariff, TariffRule};
 use crate::features::{FeatureKind, Features};
 use crate::grid::Grid;
 use crate::names::Chain;
 use crate::population::Cells;
-use crate::rand::{Rand, rn};
+use crate::rand::{Rand, js_round, rn};
 use crate::society::{NONE, Place, State};
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap, VecDeque};
@@ -384,6 +385,9 @@ pub struct FormInput<'a> {
     pub places: &'a [Place],
     pub religions: &'a crate::religions::Religions,
     pub development: &'a [u8],
+    pub cells: &'a Cells,
+    pub cell_state: &'a [u32],
+    pub cell_culture: &'a [u32],
 }
 
 fn median(mut v: Vec<f64>) -> f64 {
@@ -398,10 +402,10 @@ fn median(mut v: Vec<f64>) -> f64 {
     }
 }
 
-/// The form, form name, and full name of each state (`defineStateForms`).
-/// FMG has a "Neutrals" state 0 with the area of the land without a state;
-/// in inkland that area is 0. inkland has no diplomacy, so the vassal forms
-/// (Marches, Dominion, Protectorate of a vassal) do not come.
+/// The form, form name, and full name of each state, and its taxes, market
+/// fee, tariffs, war alert, and budget (`defineStateForms`). FMG has a
+/// "Neutrals" state 0 with the area of the land without a state; in inkland
+/// that area is 0.
 pub fn forms(input: &FormInput, states: &mut [State], rng: &mut Rand) {
     if states.is_empty() {
         return;
@@ -447,6 +451,290 @@ pub fn forms(input: &FormInput, states: &mut [State], rng: &mut Rand) {
         let form_name = select_form(input, s, tier, base, rng);
         s.form_name = tribal_form(input, s, tier, form_name);
         s.full_name = full_name(s, rng);
+        // The tax rates draw last, as in FMG; the fee follows the sales tax.
+        let (sales_tax, poll_tax) = tax_rates(s, rng);
+        s.economy.sales_tax = sales_tax;
+        s.economy.poll_tax = poll_tax;
+        s.economy.market_fee = market_fee(s);
+    }
+    // These read the other states but draw no random numbers.
+    let alerts: Vec<f64> = states.iter().map(|s| alert(s, states)).collect();
+    let tariffs: Vec<Vec<TariffRule>> = states.iter().map(|s| define_tariffs(s, states)).collect();
+    for (k, (a, t)) in alerts.into_iter().zip(tariffs).enumerate() {
+        states[k].alert = a;
+        states[k].economy.tariffs = t;
+    }
+    let budgets: Vec<Budget> = states
+        .iter()
+        .map(|s| Budget {
+            expenses: expenses(s, capital_population(input, s), states),
+            corruption: corruption(s, diversity(input, s), states),
+        })
+        .collect();
+    for (s, b) in states.iter_mut().zip(budgets) {
+        s.economy.budget = b;
+    }
+}
+
+/// The base tax rates and market fee of each form (`DEFAULT_TAX_BY_FORM`):
+/// sales tax, poll tax, and fee.
+fn tax_bases(form: &str) -> (f64, f64, f64) {
+    match form {
+        "Theocracy" => (0.05, 0.07, 50.0),
+        "Union" => (0.1, 0.0, 0.0),
+        "Republic" => (0.05, 0.05, 15.0),
+        "Anarchy" => (0.0, 0.0, 0.0),
+        _ => (0.08, 0.07, 30.0),
+    }
+}
+
+/// The most that the market fee of a state lies above the base of its form
+/// (`MAX_MARKET_FEE_FACTOR`).
+const MAX_MARKET_FEE_FACTOR: f64 = 1.5;
+/// The corruption of each form (`CORRUPTION_BY_FORM`).
+fn form_corruption(form: &str) -> f64 {
+    match form {
+        "Theocracy" => 12.0,
+        "Republic" => 8.0,
+        "Union" => 4.0,
+        "Anarchy" => 0.0,
+        _ => 15.0,
+    }
+}
+/// The form names that double the corruption of their form.
+const DESPOTIC_FORMS: [&str; 5] = ["Despotate", "Horde", "Junta", "Satrapy", "Shogunate"];
+/// What the size of the largest state adds to corruption.
+const SIZE_CORRUPTION: f64 = 15.0;
+/// What a state of strangers only adds to corruption, half for culture and
+/// half for faith.
+const DIVERSITY_CORRUPTION: f64 = 10.0;
+/// The base percents of court, administration, and infrastructure of each
+/// form (`EXPENSES_BY_FORM`).
+fn form_expenses(form: &str) -> [f64; 3] {
+    match form {
+        "Theocracy" => [30.0, 10.0, 8.0],
+        "Republic" | "Union" => [5.0, 20.0, 12.0],
+        "Anarchy" => [0.0, 0.0, 0.0],
+        _ => [20.0, 10.0, 8.0],
+    }
+}
+/// What ruling the most places adds to administration.
+const SIZE_ADMINISTRATION: f64 = 15.0;
+/// What an all-urban state adds to infrastructure.
+const URBAN_INFRASTRUCTURE: f64 = 20.0;
+/// The base of the military expense.
+const MILITARY_SPENDING: f64 = 25.0;
+/// What war alert 1 adds to the military expense, by its root.
+const ALERT_MILITARY: f64 = 20.0;
+
+/// `true` if the state levies taxes (`levies`): an anarchy does not.
+pub fn levies(s: &State) -> bool {
+    s.id != NONE && s.form != "Anarchy"
+}
+
+/// The sales and poll tax rates (`defineTaxRates`).
+fn tax_rates(s: &State, rng: &mut Rand) -> (f64, f64) {
+    let (sales, poll, _) = tax_bases(&s.form);
+    let sales_tax = rn(
+        rng.gauss(sales, sales * 0.5, sales * 0.25, sales * 2.0, 4),
+        2,
+    );
+    let poll_tax = rn(rng.gauss(poll, poll * 0.5, poll * 0.25, poll * 2.0, 4), 2);
+    (sales_tax, poll_tax)
+}
+
+/// The fee of the form, moved as the sales tax is (`defineMarketFee`).
+pub fn market_fee(s: &State) -> f64 {
+    let (sales, _, fee) = tax_bases(&s.form);
+    if s.id == NONE || sales == 0.0 || fee == 0.0 {
+        return 0.0;
+    }
+    js_round(fee * (s.economy.sales_tax / sales).clamp(0.25, MAX_MARKET_FEE_FACTOR))
+}
+
+/// The import rules of a state from its relations (`defineTariffs`): 5% on
+/// all, none for allies, friends, vassals, and suzerains, 20% for
+/// suspicion, 30% for rivals, and an embargo for enemies.
+pub fn define_tariffs(s: &State, states: &[State]) -> Vec<TariffRule> {
+    use crate::diplomacy::Relation;
+    if !levies(s) {
+        return Vec::new();
+    }
+    let mut rules = vec![TariffRule {
+        states: None,
+        goods: None,
+        rate: Tariff::Rate(0.05),
+    }];
+    let (mut free, mut suspicion, mut rival, mut enemy) = (vec![], vec![], vec![], vec![]);
+    for (other, &relation) in s.diplomacy.iter().enumerate().skip(1) {
+        let other = other as u32;
+        if other == s.id || other as usize > states.len() {
+            continue;
+        }
+        match relation {
+            Relation::Ally | Relation::Friendly | Relation::Vassal | Relation::Suzerain => {
+                free.push(other)
+            }
+            Relation::Suspicion => suspicion.push(other),
+            Relation::Rival => rival.push(other),
+            Relation::Enemy => enemy.push(other),
+            _ => {}
+        }
+    }
+    for (list, rate) in [
+        (free, Tariff::Rate(0.0)),
+        (suspicion, Tariff::Rate(0.2)),
+        (rival, Tariff::Rate(0.3)),
+        (enemy, Tariff::Embargo),
+    ] {
+        if !list.is_empty() {
+            rules.push(TariffRule {
+                states: Some(list),
+                goods: None,
+                rate,
+            });
+        }
+    }
+    rules
+}
+
+/// How ready for war the state is, from 0.1 to 5 (`defineAlert`).
+pub fn alert(s: &State, states: &[State]) -> f64 {
+    use crate::diplomacy::Relation;
+    let expansionism = states.iter().fold(0.0, |t, x| t + x.expansionism);
+    let area = states.iter().fold(0.0, |t, x| t + x.area);
+    let rate = |r: Relation| match r {
+        Relation::Ally => -0.2,
+        Relation::Friendly => -0.1,
+        Relation::Suspicion => 0.1,
+        Relation::Enemy => 1.0,
+        Relation::Rival => 0.5,
+        Relation::Vassal => 0.5,
+        Relation::Suzerain => -0.5,
+        _ => 0.0,
+    };
+    let expansion_rate = (s.expansionism / expansionism / (s.area / area)).clamp(0.25, 4.0);
+    let has = |r: Relation| s.diplomacy.contains(&r);
+    let diplomacy_rate = if has(Relation::Enemy) {
+        1.0
+    } else if has(Relation::Rival) {
+        0.8
+    } else if has(Relation::Suspicion) {
+        0.5
+    } else {
+        0.1
+    };
+    let neighbors_rate = s.neighbors.iter().fold(0.5f64, |t, &n| {
+        let relation = if n == NONE {
+            Relation::Suspicion
+        } else {
+            states
+                .get(n as usize - 1)
+                .and_then(|o| o.diplomacy.get(s.id as usize).copied())
+                .unwrap_or(Relation::None)
+        };
+        t + rate(relation)
+    });
+    rn(
+        expansion_rate * diplomacy_rate * neighbors_rate.clamp(0.3, 3.0),
+        2,
+    )
+    .clamp(0.1, 5.0)
+}
+
+/// The population of the capital of a state.
+fn capital_population(input: &FormInput, s: &State) -> f64 {
+    input
+        .places
+        .get((s.capital as usize).wrapping_sub(1))
+        .map_or(0.0, |p| p.population)
+}
+
+/// The four expenses in whole percents of the taxes (`defineExpenses`).
+/// `capital` is the population of the capital.
+pub fn expenses(s: &State, capital: f64, states: &[State]) -> [f64; 4] {
+    if !levies(s) {
+        return [0.0; 4];
+    }
+    let [court, administration, infrastructure] = form_expenses(&s.form);
+    let urban = s.urban;
+    let people = urban + s.rural;
+    let primacy = if urban != 0.0 { capital / urban } else { 1.0 };
+    let most = states.iter().fold(1.0f64, |m, x| m.max(f64::from(x.burgs)));
+    [
+        js_round(court * (0.5 + primacy.min(1.0))),
+        js_round(administration + SIZE_ADMINISTRATION * libm::sqrt(f64::from(s.burgs) / most)),
+        js_round(
+            infrastructure
+                + URBAN_INFRASTRUCTURE * if people != 0.0 { urban / people } else { 0.0 },
+        ),
+        js_round(MILITARY_SPENDING + ALERT_MILITARY * libm::sqrt(s.alert)).min(100.0),
+    ]
+}
+
+/// The percent of each expense that officials pocket (`defineCorruption`).
+/// `diversity` is the share of strangers (`diversity`).
+pub fn corruption(s: &State, diversity: f64, states: &[State]) -> f64 {
+    if !levies(s) {
+        return 0.0;
+    }
+    let despotic = if DESPOTIC_FORMS.contains(&s.form_name.as_str()) {
+        2.0
+    } else {
+        1.0
+    };
+    let form = form_corruption(&s.form) * despotic;
+    js_round(form + SIZE_CORRUPTION * size(s, states) + DIVERSITY_CORRUPTION * diversity)
+}
+
+/// The size against the largest state by the root of cells, 0 to 1; 0 for
+/// a lone city-state (`getSize`).
+pub fn size(s: &State, states: &[State]) -> f64 {
+    let largest = states.iter().fold(0.0f64, |m, x| m.max(f64::from(x.cells)));
+    if s.burgs > 1 && largest != 0.0 {
+        libm::sqrt(f64::from(s.cells) / largest)
+    } else {
+        0.0
+    }
+}
+
+/// The share of people outside the culture of the state and the faith of
+/// its capital, each counting half: 0 to 1 (`getDiversity`).
+pub fn diversity(input: &FormInput, s: &State) -> f64 {
+    let religion_of = |c: usize| {
+        input
+            .religions
+            .cell_religion
+            .get(c)
+            .copied()
+            .unwrap_or(NONE)
+    };
+    let faith = input
+        .places
+        .get((s.capital as usize).wrapping_sub(1))
+        .map_or(NONE, |p| religion_of(p.cell));
+    let mut burg_pop = vec![0.0; input.cell_state.len()];
+    for p in input.places {
+        burg_pop[p.cell] = p.population;
+    }
+    let (mut people, mut strangers) = (0.0, 0.0);
+    for c in 0..input.cell_state.len() {
+        if input.cell_state[c] != s.id {
+            continue;
+        }
+        let weight = input.cells.pop[c] + burg_pop[c];
+        people += weight;
+        if input.cell_culture[c] != s.culture {
+            strangers += weight / 2.0;
+        }
+        if religion_of(c) != faith {
+            strangers += weight / 2.0;
+        }
+    }
+    if people != 0.0 {
+        strangers / people
+    } else {
+        0.0
     }
 }
 
@@ -615,6 +903,102 @@ mod tests {
         // On one landmass with more states, each state has a neighbor.
         if s.states.len() > 1 {
             assert!(s.states.iter().any(|st| !st.neighbors.is_empty()));
+        }
+    }
+
+    fn state(id: u32, form: &str) -> crate::society::State {
+        crate::society::State {
+            id,
+            form: form.to_owned(),
+            ..crate::society::State::default()
+        }
+    }
+
+    #[test]
+    fn the_fee_follows_the_sales_tax_of_the_form() {
+        // Twice the base sales tax of a monarchy: its base fee x 1.5 at
+        // most; a tenth of the base of a republic: a quarter at least.
+        let mut a = state(1, "Monarchy");
+        a.economy.sales_tax = 0.2;
+        let mut b = state(2, "Republic");
+        b.economy.sales_tax = 0.005;
+        let c = state(3, "Anarchy");
+        assert_eq!(super::market_fee(&a), 45.0);
+        assert_eq!(super::market_fee(&b), 4.0);
+        assert_eq!(super::market_fee(&c), 0.0);
+    }
+
+    #[test]
+    fn a_budget_comes_from_the_form_the_state_and_its_war_alert() {
+        let mut a = state(1, "Monarchy");
+        a.burgs = 4;
+        a.urban = 20.0;
+        a.rural = 80.0;
+        a.alert = 0.25;
+        a.cells = 100;
+        let mut b = a.clone();
+        b.id = 2;
+        b.alert = 100.0;
+        let states = vec![a.clone(), b.clone()];
+        // Court 20 x (0.5 + half of the townspeople in the capital),
+        // administration 10 + 15, infrastructure 8 + 20 x 0.2, military
+        // 25 + 20 x 0.5.
+        assert_eq!(super::expenses(&a, 10.0, &states), [20.0, 25.0, 12.0, 35.0]);
+        // At war alert 100 the military takes all the taxes.
+        assert_eq!(super::expenses(&b, 10.0, &states)[3], 100.0);
+        assert_eq!(
+            super::expenses(&state(3, "Anarchy"), 10.0, &states),
+            [0.0; 4]
+        );
+        // Corruption: the form, the size (as large as the largest), and the
+        // strangers.
+        assert_eq!(super::corruption(&a, 0.0, &states), 30.0);
+        assert_eq!(super::corruption(&a, 0.5, &states), 35.0);
+    }
+
+    #[test]
+    fn tariffs_follow_relations() {
+        use crate::diplomacy::Relation;
+        use crate::economy::finance::Tariff;
+        let mut a = state(1, "Monarchy");
+        a.diplomacy = vec![
+            Relation::None,
+            Relation::None,
+            Relation::Ally,
+            Relation::Rival,
+            Relation::Enemy,
+            Relation::Neutral,
+        ];
+        let states: Vec<_> = (1..=5).map(|k| state(k, "Monarchy")).collect();
+        let rules = super::define_tariffs(&a, &states);
+        assert_eq!(rules.len(), 4);
+        assert_eq!(rules[0].states, None);
+        assert_eq!(rules[0].rate, Tariff::Rate(0.05));
+        assert_eq!(rules[1].states, Some(vec![2]));
+        assert_eq!(rules[1].rate, Tariff::Rate(0.0));
+        assert_eq!(rules[2].states, Some(vec![3]));
+        assert_eq!(rules[3].rate, Tariff::Embargo);
+        assert!(super::define_tariffs(&state(1, "Anarchy"), &states).is_empty());
+    }
+
+    #[test]
+    fn each_state_gets_its_taxes_alert_and_budget() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 3, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 4000, "template": "pangea", "states": 8 }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        for st in &w.society.states {
+            let e = &st.economy;
+            assert!((0.1..=5.0).contains(&st.alert), "{}", st.alert);
+            if super::levies(st) {
+                assert!(e.sales_tax > 0.0 && !e.tariffs.is_empty());
+                assert!(e.budget.of(crate::economy::finance::Expense::Military) >= 25.0);
+                assert!(e.budget.corruption > 0.0);
+            } else {
+                assert_eq!(e.budget.total(), 0.0);
+            }
         }
     }
 
