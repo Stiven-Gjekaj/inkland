@@ -21,6 +21,7 @@ import { SocietyDialog } from "dialogs/society.slint";
 import { CellsDialog } from "dialogs/cells.slint";
 import { EmblemsDialog } from "dialogs/emblems.slint";
 import { DiplomacyDialog } from "dialogs/diplomacy.slint";
+import { MilitaryDialog } from "dialogs/military.slint";
 
 export { AppState, Actions, Tool, Ui, Dialogs, Lists, Opts, Theme }
 
@@ -94,6 +95,7 @@ export component AppWindow inherits Window {
         if Dialogs.cells: CellsDialog {}
         if Dialogs.emblems: EmblemsDialog {}
         if Dialogs.diplomacy: DiplomacyDialog {}
+        if Dialogs.military: MilitaryDialog {}
         if Dialogs.states: SocietyDialog {
             id: "states";
             title: "States Editor";

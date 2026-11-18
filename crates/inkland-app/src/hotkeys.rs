@@ -55,6 +55,7 @@ const SHIFT_TOOLS: &[(char, &str)] = &[
     ('W', "variants"),
     ('Y', "emblems"),
     ('D', "diplomacy"),
+    ('M', "military"),
 ];
 
 /// The tools of the Shift and number hotkeys: `!` is Shift+1 on most

@@ -1,0 +1,48 @@
+// The Military Overview of FMG: the forces of each state by unit, the war
+// alert, the upkeep, and the power. Under it, the Regiments Overview of
+// FMG for the selected state. It does not edit, because the config has no
+// regiments.
+
+import { Theme, Label, Select, FormRow, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component MilitaryDialog inherits Dialog {
+    id: "military";
+    title: "Military Overview";
+    content-width: 730px;
+    pos-x: 380px;
+    pos-y: 50px;
+    Table {
+        header: Lists.military-header;
+        widths: [96px, 44px, 44px, 44px, 44px, 44px, 44px, 48px, 66px, 46px, 36px, 46px, 44px];
+        rows: Lists.military;
+        list-height: 160px;
+        select(id) => {
+            AppState.overview-state = id.to-float() - 1;
+            Actions.selection-changed();
+        }
+    }
+    FormRow {
+        label: "Regiments of";
+        label-width: 90px;
+        Select {
+            dialog: true;
+            width: 200px;
+            model: Lists.state-names;
+            current-index <=> AppState.overview-state;
+            selected(i) => { Actions.selection-changed(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Table {
+        header: Lists.regiment-header;
+        widths: [170px, 50px, 50px, 50px, 50px, 50px, 50px, 56px, 56px];
+        rows: Lists.regiments;
+        list-height: 160px;
+    }
+    Tip {
+        dialog: true;
+        text: "Click a state to see its regiments. Total counts the crew of each unit. Power is the troops times the unit power and the upkeep.";
+    }
+}

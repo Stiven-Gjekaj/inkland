@@ -87,6 +87,7 @@ const IMPLEMENTED: &[&str] = &[
     "cells",
     "emblems",
     "diplomacy",
+    "military",
 ];
 /// The config of a new map, when no file is given.
 const NEW_CONFIG: &str = r#"{ "version": 1, "seed": 1, "frame": { "width": 400, "height": 300 },
@@ -1184,6 +1185,11 @@ impl Controller {
         let w = open(d.get_diplomacy());
         l.set_relations(rows(w, &|w| ov::relation_rows(w, selected)));
         g.set_chronicle(s(w.map(ov::chronicle_text).unwrap_or_default()));
+        l.set_military_header(model(ov::military_header().iter().map(s).collect()));
+        l.set_regiment_header(model(ov::regiment_header().iter().map(s).collect()));
+        let w = open(d.get_military());
+        l.set_military(rows(w, &ov::military_rows));
+        l.set_regiments(rows(w, &|w| ov::regiment_rows(w, selected)));
     }
 
     fn update_lists(&self, st: &State) {
