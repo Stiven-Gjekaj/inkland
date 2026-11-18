@@ -348,14 +348,21 @@ fn point_candidates(
         .collect()
 }
 
+/// The cells of an area mask, in increasing order.
+fn members_of(area: &[bool]) -> Vec<usize> {
+    (0..area.len()).filter(|&c| area[c]).collect()
+}
+
 /// The depth of each cell of an area: 1 on its edge, more inside, 0 for
-/// cells outside the area.
-fn depths(world: &World, area: &[bool]) -> Vec<u32> {
+/// cells outside the area. `members` are the cells of the area, in
+/// increasing order. The work is in proportion to the size of the area,
+/// not to the size of the grid.
+fn depths(world: &World, area: &[bool], members: &[usize]) -> Vec<u32> {
     let g = &world.grid;
     let mut depth = vec![0u32; g.len()];
     let mut queue = VecDeque::new();
-    for c in 0..g.len() {
-        if area[c] && (g.border[c] || g.neighbors(c).any(|m| !area[m])) {
+    for &c in members {
+        if g.border[c] || g.neighbors(c).any(|m| !area[m]) {
             depth[c] = 1;
             queue.push_back(c);
         }
@@ -399,6 +406,7 @@ fn area_candidates(
     page: &Page,
     inner: [f64; 4],
     area: &[bool],
+    members: &[usize],
     text: &str,
     f: &FontMetrics,
     size: f64,
@@ -406,14 +414,16 @@ fn area_candidates(
     spread: (f64, f64),
 ) -> Vec<Candidate> {
     let g = &world.grid;
-    let depth = depths(world, area);
+    let depth = depths(world, area, members);
     let max_depth = depth.iter().copied().max().unwrap_or(0).max(1);
     let in_area = |q: [f64; 2]| {
         let w = page.to_world(q);
         let [x0, y0, x1, y1] = page.view;
         w[0] >= x0 && w[0] <= x1 && w[1] >= y0 && w[1] <= y1 && area[g.find_cell(w[0], w[1])]
     };
-    let mut cells: Vec<(u32, usize)> = (0..g.len())
+    let mut cells: Vec<(u32, usize)> = members
+        .iter()
+        .copied()
         .filter(|&c| depth[c] > 0)
         .filter(|&c| {
             let q = page.to_page(g.points[c]);
@@ -994,6 +1004,12 @@ pub fn place_with(
     // Named lakes, oceans, and islands, with optional labels, in the label
     // groups `lake`, `ocean`, and `island`. A continent holds the states,
     // so it has no label.
+    // The cells of each feature, in increasing order.
+    let mut feature_cells: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
+    for (c, &f) in world.features.of_cell.iter().enumerate() {
+        feature_cells.entry(f).or_default().push(c);
+    }
+    let mut feature_mask = vec![false; world.grid.len()];
     for n in &world.names.features {
         let Some(name) = n.name.as_deref() else {
             continue;
@@ -1009,19 +1025,37 @@ pub fn place_with(
             _ => continue,
         };
         let g = &world.grid;
-        let area: Vec<bool> = world.features.of_cell.iter().map(|&f| f == n.id).collect();
-        if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
+        let members = feature_cells.get(&n.id).map_or(&[][..], Vec::as_slice);
+        if !members.iter().any(|&c| in_view(g.points[c])) {
             continue;
         }
         let look = style(group);
         let size = look.size.unwrap_or_else(|| pt(default_pt));
         let name = look.text(name);
         let f = FontMetrics::of(&look.family);
+        // One mask serves all features: set the cells of this feature, and
+        // clear them again after.
+        for &c in members {
+            feature_mask[c] = true;
+        }
+        let candidates = area_candidates(
+            world,
+            page,
+            inner,
+            &feature_mask,
+            members,
+            &name,
+            f,
+            size,
+            look.halo,
+            spread,
+        );
+        for &c in members {
+            feature_mask[c] = false;
+        }
         requests.push(Request {
             place: None,
-            candidates: area_candidates(
-                world, page, inner, &area, &name, f, size, look.halo, spread,
-            ),
+            candidates,
             id: format!("label-{prefix}-{}", n.id),
             kind: Kind::Region,
             group,
@@ -1063,6 +1097,7 @@ pub fn place_with(
                 page,
                 inner,
                 &area,
+                &members_of(&area),
                 &name,
                 f,
                 size,
@@ -1106,6 +1141,7 @@ pub fn place_with(
                 page,
                 inner,
                 &area,
+                &members_of(&area),
                 &name,
                 f,
                 size,
@@ -1159,6 +1195,7 @@ pub fn place_with(
                     page,
                     inner,
                     &area,
+                    &members_of(&area),
                     &name,
                     f,
                     size,
@@ -1523,6 +1560,7 @@ mod tests {
             &page,
             inner,
             &area,
+            &members_of(&area),
             "Long Name",
             f,
             size,
