@@ -55,6 +55,7 @@ const SHIFT_TOOLS: &[(char, &str)] = &[
     ('W', "variants"),
     ('Y', "emblems"),
     ('D', "diplomacy"),
+    ('J', "journeys"),
     ('G', "goods"),
     ('O', "notes"),
     ('K', "markers"),

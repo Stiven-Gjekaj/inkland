@@ -692,6 +692,81 @@ pub fn economy_lines(world: &World, selected: u32) -> Vec<Row> {
         .collect()
 }
 
+/// The name of the place on a cell, else `cell N` (FMG
+/// `cellEndpointLabel`).
+fn endpoint(world: &World, cell: usize) -> String {
+    world
+        .society
+        .places
+        .iter()
+        .find(|p| p.cell == cell)
+        .map_or_else(|| format!("cell {cell}"), |p| p.name.clone())
+}
+
+/// The Journeys Overview of FMG: the journey, the type, the start, the
+/// end, the distance, the mean speed, and the calendar time. The swatch
+/// has the color of the journey.
+pub fn journey_rows(world: &World, unit: &str) -> Vec<Row> {
+    use inkland_core::journeys::format_travel_time;
+    world
+        .journeys
+        .iter()
+        .map(|j| {
+            let from = j
+                .segments
+                .first()
+                .map_or_else(|| "unset".to_owned(), |s| endpoint(world, s.from));
+            let to = j
+                .segments
+                .last()
+                .map_or_else(|| "unset".to_owned(), |s| endpoint(world, s.to));
+            row(
+                j.id.to_string(),
+                vec![
+                    j.name.clone(),
+                    j.kind.to_owned(),
+                    from,
+                    to,
+                    format!("{} {unit}", num(j.totals.distance, 1)),
+                    format!("{} km/h", num(j.totals.avg_speed, 1)),
+                    format_travel_time(j.totals.elapsed_hours),
+                ],
+                false,
+            )
+            .with_color(j.color.clone())
+        })
+        .collect()
+}
+
+/// The segments of a journey, as the Journey Editor of FMG lists them: the
+/// name, the transport, the distance, and the time.
+pub fn segment_rows(world: &World, journey: &str, unit: &str) -> Vec<Row> {
+    use inkland_core::journeys::{format_hours, is_stay};
+    let Some(j) = world.journeys.iter().find(|j| j.id.to_string() == journey) else {
+        return Vec::new();
+    };
+    j.segments
+        .iter()
+        .map(|s| {
+            let distance = if is_stay(s) {
+                "-".to_owned()
+            } else {
+                format!("{} {unit}", num(s.distance, 1))
+            };
+            row(
+                s.id.to_string(),
+                vec![
+                    s.name.clone(),
+                    s.transport.to_owned(),
+                    distance,
+                    format_hours(s.hours),
+                ],
+                false,
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -928,5 +1003,25 @@ mod tests {
         );
         assert_eq!(gini(&[1.0, 1.0, 1.0]), 0.0);
         assert!((gini(&[0.0, 0.0, 3.0]) - 2.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_journey_rows_give_the_totals_and_the_segments() {
+        let (_, w) = world();
+        let rows = journey_rows(&w, "mi");
+        assert_eq!(rows.len(), w.journeys.len());
+        assert!(!rows.is_empty(), "the world has a journey");
+        let j = &w.journeys[0];
+        assert_eq!(rows[0].cells[0], j.name);
+        assert_eq!(rows[0].cells[1], j.kind);
+        assert_eq!(
+            rows[0].cells[4],
+            format!("{} mi", num(j.totals.distance, 1))
+        );
+        assert_eq!(rows[0].color.as_deref(), Some(j.color.as_str()));
+        let segments = segment_rows(&w, &rows[0].id, "mi");
+        assert_eq!(segments.len(), j.segments.len());
+        assert_eq!(segments[0].cells[1], j.segments[0].transport);
+        assert!(segment_rows(&w, "0", "mi").is_empty());
     }
 }

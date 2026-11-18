@@ -87,6 +87,7 @@ const IMPLEMENTED: &[&str] = &[
     "cells",
     "emblems",
     "diplomacy",
+    "journeys",
     "economy",
     "markets",
     "goods",
@@ -1192,6 +1193,17 @@ impl Controller {
         let w = open(d.get_diplomacy());
         l.set_relations(rows(w, &|w| ov::relation_rows(w, selected)));
         g.set_chronicle(s(w.map(ov::chronicle_text).unwrap_or_default()));
+        let w = open(d.get_journeys());
+        let unit = st.editor.config().units.name.clone();
+        let journeys = w.map(|w| ov::journey_rows(w, &unit)).unwrap_or_default();
+        // The first journey shows when no journey is selected.
+        let mut sel = g.get_selected_journey();
+        if !journeys.iter().any(|r| r.id == sel.as_str()) {
+            sel = s(journeys.first().map_or("", |r| r.id.as_str()));
+            g.set_selected_journey(sel.clone());
+        }
+        l.set_journeys(table(journeys));
+        l.set_journey_segments(rows(w, &|w| ov::segment_rows(w, &sel, &unit)));
         l.set_economy_lines(rows(open(d.get_economy()), &|w| {
             ov::economy_lines(w, selected)
         }));

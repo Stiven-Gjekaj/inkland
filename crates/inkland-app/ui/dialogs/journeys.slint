@@ -1,0 +1,37 @@
+// The Journeys Overview of FMG, with the segments of the selected journey
+// as the Journey Editor of FMG lists them. It does not edit, because the
+// config has no journeys.
+
+import { Theme, Label, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions, Lists } from "../globals.slint";
+
+export component JourneysDialog inherits Dialog {
+    id: "journeys";
+    title: "Journeys Overview";
+    content-width: 640px;
+    pos-x: 420px;
+    pos-y: 60px;
+    Table {
+        header: ["Journey", "Type", "From", "To", "Distance", "Speed", "Total time"];
+        widths: [160px, 84px, 84px, 84px, 66px, 60px, 60px];
+        rows: Lists.journeys;
+        selected: AppState.selected-journey;
+        list-height: 100px;
+        select(id) => {
+            AppState.selected-journey = id;
+            Actions.selection-changed();
+        }
+    }
+    Label { dialog: true; text: "Segments"; font-weight: 700; }
+    Table {
+        header: ["Segment", "Transport", "Distance", "Time"];
+        widths: [300px, 110px, 80px, 80px];
+        rows: Lists.journey-segments;
+        list-height: 200px;
+    }
+    Tip {
+        dialog: true;
+        text: "Speed is the mean speed of the moving segments. Total time counts each travel day of a transport as a full day.";
+    }
+}
