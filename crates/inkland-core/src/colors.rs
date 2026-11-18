@@ -107,6 +107,18 @@ pub const SET2: [&str; 6] = [
     "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854", "#ffd92f",
 ];
 
+/// The colors of `d3.schemeCategory10`.
+pub const CATEGORY10: [&str; 10] = [
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",
+    "#bcbd22", "#17becf",
+];
+
+/// The color of item `index` from `d3.schemeCategory10`, in a cycle
+/// (`getCardinalColor`).
+pub fn cardinal_color(index: usize) -> &'static str {
+    CATEGORY10[index % CATEGORY10.len()]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +135,12 @@ mod tests {
     fn hex_round_trips() {
         assert_eq!(Rgb::from_hex("#66c2a5").unwrap().hex(), "#66c2a5");
         assert!(Rgb::from_hex("red").is_none());
+    }
+
+    #[test]
+    fn cardinal_colors_cycle() {
+        assert_eq!(cardinal_color(0), "#1f77b4");
+        assert_eq!(cardinal_color(9), "#17becf");
+        assert_eq!(cardinal_color(10), "#1f77b4");
     }
 }
