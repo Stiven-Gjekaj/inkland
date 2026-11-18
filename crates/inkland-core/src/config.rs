@@ -1400,6 +1400,9 @@ pub struct Render {
     /// Options of the layer `emblems`.
     #[serde(default, skip_serializing_if = "EmblemOptions::is_default")]
     pub emblems: EmblemOptions,
+    /// Rules for the labels of all variants.
+    #[serde(default, skip_serializing_if = "LabelRules::is_default")]
+    pub labels: LabelRules,
 }
 
 /// Options of the layer `emblems`: the coats of arms of the states, the
@@ -1439,7 +1442,82 @@ impl Default for Render {
             extras: Extras::default(),
             layers: default_layers(),
             emblems: EmblemOptions::default(),
+            labels: LabelRules::default(),
         }
+    }
+}
+
+/// Rules for the labels. A name is "generated" when the config does not
+/// write it: the name of a pin, of a region, of a river, the `capital_of`
+/// of a pin, a rename, or a name of an overlay. Generation gives the other
+/// names to rivers, lakes, seas, islands, states, provinces, and places.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct LabelRules {
+    /// `false`: show no label with a generated name. Default `true`.
+    pub generated: bool,
+    /// `true`: the report of each variant has the check
+    /// `no_generated_labels`. It fails when the variant shows a label with
+    /// a generated name. Default `false`.
+    pub check_generated: bool,
+}
+
+impl Default for LabelRules {
+    fn default() -> Self {
+        Self {
+            generated: true,
+            check_generated: false,
+        }
+    }
+}
+
+impl LabelRules {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+impl Config {
+    /// The names that the config writes, in lower case. A label with
+    /// another name has a generated name (`LabelRules`).
+    pub fn written_names(&self) -> std::collections::BTreeSet<String> {
+        let mut names = std::collections::BTreeSet::new();
+        let mut add = |n: Option<&String>| {
+            if let Some(n) = n.filter(|n| !n.trim().is_empty()) {
+                names.insert(n.trim().to_lowercase());
+            }
+        };
+        let pins = &self.pins;
+        for p in &pins.points {
+            add(p.name.as_ref());
+            add(p.capital_of.as_ref());
+        }
+        for r in &pins.regions {
+            add(r.name.as_ref());
+        }
+        for r in &pins.rivers {
+            add(r.name.as_ref());
+        }
+        for z in &self.world.zones {
+            add(z.name.as_ref());
+        }
+        for r in &self.world.renames {
+            add(r.name.as_ref());
+            add(r.full_name.as_ref());
+        }
+        for o in self.overlays.values() {
+            for p in &o.add.places {
+                add(p.name.as_ref());
+                add(p.capital_of.as_ref());
+            }
+            for f in &o.add.features {
+                add(f.name.as_ref());
+            }
+            for n in o.rename.values() {
+                add(Some(n));
+            }
+        }
+        names
     }
 }
 

@@ -1219,6 +1219,23 @@ pub fn place_with(
         }
     }
 
+    // Leave out the labels with a generated name, when the config asks.
+    let mut out = Labels::default();
+    if !config.render.labels.generated {
+        let written = config.written_names();
+        requests.retain(|r| {
+            let keep = written.contains(&r.text.trim().to_lowercase());
+            if !keep {
+                out.unplaced.push(Unplaced {
+                    id: r.id.clone(),
+                    reason: "generated",
+                    required: false,
+                });
+            }
+            keep
+        });
+    }
+
     requests.sort_by(|a, b| a.rank.cmp(&b.rank).then_with(|| a.id.cmp(&b.id)));
 
     // River segments, for the cost of crossing a river.
@@ -1244,7 +1261,6 @@ pub fn place_with(
     }
     let mut gone = vec![false; obstacles.len()];
 
-    let mut out = Labels::default();
     for req in requests {
         if req.place.is_some_and(|p| out.hidden_places.contains(&p)) {
             out.unplaced.push(Unplaced {
@@ -1497,6 +1513,34 @@ mod tests {
         assert!(ids.contains(&"label-region-hills"));
         assert!(ids.iter().any(|i| i.starts_with("label-state-")));
         assert_eq!(labels.required_unplaced(), 0, "{:?}", labels.unplaced);
+    }
+
+    #[test]
+    fn generated_names_can_be_left_out() {
+        // The capital names the state, so its label is a written name too.
+        let (w, mut c) = world(3, "pangea", json!({}));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let all = place(&w, &c, &v, &page);
+        let written = c.written_names();
+        let generated = |l: &Labels| {
+            l.placed
+                .iter()
+                .filter(|p| !written.contains(&p.text.to_lowercase()))
+                .count()
+        };
+        assert!(generated(&all) > 0, "the world shows generated names");
+        c.render.labels.generated = false;
+        let only = place(&w, &c, &v, &page);
+        assert_eq!(generated(&only), 0);
+        let ids: Vec<&str> = only.placed.iter().map(|l| l.id.as_str()).collect();
+        assert!(ids.contains(&"label-place-ostrey"));
+        assert!(ids.contains(&"label-region-hills"));
+        assert!(
+            only.unplaced
+                .iter()
+                .any(|u| u.reason == "generated" && !u.required)
+        );
     }
 
     #[test]

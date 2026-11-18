@@ -317,6 +317,15 @@ Label options.
 | `hide` | boolean |  | `false` | `true`: do not show the label. |
 | `size_pt` | number |  |  | Font size, in points. Default: the size of the label kind. |
 
+### LabelRules
+
+Rules for the labels. A name is "generated" when the config does not write it: the name of a pin, of a region, of a river, the `capital_of` of a pin, a rename, or a name of an overlay. Generation gives the other names to rivers, lakes, seas, islands, states, provinces, and places.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `check_generated` | boolean |  | `false` | `true`: the report of each variant has the check `no_generated_labels`. It fails when the variant shows a label with a generated name. Default `false`. |
+| `generated` | boolean |  | `true` | `false`: show no label with a generated name. Default `true`. |
+
 ### Lattice
 
 The lattice of the points of the first grid.
@@ -602,6 +611,7 @@ Render options for all variants.
 | `font_sizes_pt` | [`FontSizes`](#fontsizes) |  |  | Font sizes, in points. |
 | `fonts` | [`Fonts`](#fonts) |  |  | Font families. The SVG names each family exactly as given here. The SVG never embeds a font. |
 | `fonts_allowed` | array of string |  | `["Caladea","Inter","IM Fell English","IM Fell English SC"]` | Font families that the SVG can use. A family in `fonts` that is not in this list is an error. |
+| `labels` | [`LabelRules`](#labelrules) |  |  | Rules for the labels of all variants. |
 | `layers` | array of [`LayerName`](#layername) |  | see the type | Layers to draw. In `print-safe` mode the layers are drawn in this order, from bottom to top. In `colour` mode the renderer draws them in the layer order of Azgaar's Fantasy Map Generator. A layer that is only for `colour` mode draws nothing in `print-safe` mode. |
 | `min_line_width_pt` | number |  | `0.5` | Smallest permitted line width, in points. |
 | `mode` | [`RenderMode`](#rendermode) |  | `"print-safe"` | Render mode. `print-safe` is black on white only. `colour` draws the map as Azgaar's Fantasy Map Generator does, with the style in `style`. |

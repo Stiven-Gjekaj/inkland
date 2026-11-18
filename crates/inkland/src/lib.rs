@@ -336,7 +336,7 @@ pub fn generate_with_world(
                 list.push(json!({ "name": "overlay_road_length", "pass": bad == 0, "count": bad }));
             }
         }
-        add_labels(&mut report, &rendered.labels);
+        add_labels(&mut report, &rendered.labels, config);
         // The print checks run on the written SVG text.
         let checks = check_svg(&svg, config);
         if let Some(list) = report["checks"].as_array_mut() {
@@ -359,7 +359,7 @@ pub fn generate_with_world(
 /// `all_labels_placed` check, and a `LABEL_UNPLACED` warning for each
 /// required label without a place. Optional labels, such as the labels of
 /// generated towns, are in the list but do not fail the check.
-fn add_labels(report: &mut Value, labels: &inkland_render::labels::Labels) {
+fn add_labels(report: &mut Value, labels: &inkland_render::labels::Labels, config: &Config) {
     let missing = labels.required_unplaced();
     report["labels"] = serde_json::json!({
         "placed": labels.placed.len(),
@@ -375,6 +375,22 @@ fn add_labels(report: &mut Value, labels: &inkland_render::labels::Labels) {
             "pass": missing == 0,
             "count": missing,
         }));
+        // The labels that show a name that the config does not write.
+        if config.render.labels.check_generated {
+            let written = config.written_names();
+            let ids: Vec<&str> = labels
+                .placed
+                .iter()
+                .filter(|l| !written.contains(&l.text.trim().to_lowercase()))
+                .map(|l| l.id.as_str())
+                .collect();
+            list.push(serde_json::json!({
+                "name": "no_generated_labels",
+                "pass": ids.is_empty(),
+                "count": ids.len(),
+                "ids": ids,
+            }));
+        }
     }
     if let Some(list) = report["warnings"].as_array_mut() {
         for u in labels.unplaced.iter().filter(|u| u.required) {
@@ -503,6 +519,32 @@ mod tests {
             v[k] = val.clone();
         }
         serde_json::from_value(v).unwrap()
+    }
+
+    #[test]
+    fn the_report_can_check_for_generated_names() {
+        let check = |c: &Config| {
+            let out = generate(c, None).unwrap();
+            out.variants[0].report["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|x| x["name"] == "no_generated_labels")
+                .cloned()
+        };
+        let mut c = config(json!({ "world": { "cells": 2000, "template": "pangea" } }));
+        assert!(check(&c).is_none(), "the check is off by default");
+        c.render.labels.check_generated = true;
+        let shown = check(&c).unwrap();
+        assert_eq!(
+            shown["pass"], false,
+            "generation names the state and the places"
+        );
+        assert!(shown["count"].as_u64().unwrap() > 0);
+        c.render.labels.generated = false;
+        let hidden = check(&c).unwrap();
+        assert_eq!(hidden["pass"], true);
+        assert_eq!(hidden["count"], 0);
     }
 
     #[test]
