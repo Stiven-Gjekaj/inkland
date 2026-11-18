@@ -124,14 +124,19 @@ fn line_length(points: &[[f64; 2]]) -> f64 {
 /// middle of its two neighbours, so that the line has no zigzag between
 /// the cell sites. The ends and the cells of places do not move.
 fn taut_points(input: &Input, cells: &[usize]) -> Vec<[f64; 2]> {
-    let grid = input.grid;
+    taut_line(input.grid, cells, &|c| {
+        input.society.places.iter().any(|p| p.cell == c)
+    })
+}
+
+/// The taut line through the given cells. The ends and the cells where
+/// `fixed` is `true` do not move.
+fn taut_line(grid: &Grid, cells: &[usize], fixed: &dyn Fn(usize) -> bool) -> Vec<[f64; 2]> {
     let mut points: Vec<[f64; 2]> = cells.iter().map(|&c| grid.points[c]).collect();
     let fixed: Vec<bool> = cells
         .iter()
         .enumerate()
-        .map(|(i, &c)| {
-            i == 0 || i + 1 == cells.len() || input.society.places.iter().any(|p| p.cell == c)
-        })
+        .map(|(i, &c)| i == 0 || i + 1 == cells.len() || fixed(c))
         .collect();
     for _ in 0..TAUT_PASSES {
         for i in 1..cells.len().saturating_sub(1) {
@@ -204,68 +209,81 @@ impl Router<'_> {
         Some(c)
     }
 
-    /// The least-cost path from `from` to `to`, both included. A step into
-    /// a cell of `avoid` costs `REUSE_COST` times more.
-    fn route(&self, from: usize, to: usize, avoid: &[bool]) -> Option<Vec<usize>> {
-        let grid = self.input.grid;
-        let n = grid.len();
-        let goal = grid.points[to];
-        let h = |c: usize| dist(grid.points[c], goal);
-        let mut cost = vec![f64::INFINITY; n];
-        let mut prev = vec![usize::MAX; n];
-        let mut heap = BinaryHeap::new();
-        cost[from] = 0.0;
-        heap.push(Reverse((Key(h(from)), from)));
-        while let Some(Reverse((Key(f), c))) = heap.pop() {
-            if c == to {
-                let mut path = vec![c];
-                let mut cur = c;
-                while cur != from {
-                    cur = prev[cur];
-                    path.push(cur);
-                }
-                path.reverse();
-                return Some(path);
-            }
-            if f - h(c) > cost[c] + 1e-9 {
-                continue;
-            }
-            for m in grid.neighbors(c) {
-                let Some(mut s) = self.step(c, m) else {
-                    continue;
-                };
-                if avoid[m] && m != to {
-                    s *= REUSE_COST;
-                }
-                let next = cost[c] + s;
-                if next < cost[m] {
-                    cost[m] = next;
-                    prev[m] = c;
-                    heap.push(Reverse((Key(next + h(m)), m)));
-                }
-            }
-        }
-        None
-    }
-
     /// A path through the given cells in order.
     fn route_through(&self, stops: &[usize]) -> Option<Vec<usize>> {
-        let n = self.input.grid.len();
-        let mut avoid = vec![false; n];
-        let mut path = vec![stops[0]];
-        for w in stops.windows(2) {
-            let leg = self.route(w[0], w[1], &avoid)?;
-            for &c in &leg[1..] {
-                path.push(c);
+        search_through(self.input.grid, stops, &|a, b| self.step(a, b))
+    }
+}
+
+/// The cost of a step from a cell to a neighbour, or `None` if the step is
+/// not possible.
+type StepCost<'a> = &'a dyn Fn(usize, usize) -> Option<f64>;
+
+/// The least-cost path from `from` to `to`, both included. A step into a
+/// cell of `avoid` costs `REUSE_COST` times more.
+fn search(
+    grid: &Grid,
+    from: usize,
+    to: usize,
+    avoid: &[bool],
+    step: StepCost,
+) -> Option<Vec<usize>> {
+    let n = grid.len();
+    let goal = grid.points[to];
+    let h = |c: usize| dist(grid.points[c], goal);
+    let mut cost = vec![f64::INFINITY; n];
+    let mut prev = vec![usize::MAX; n];
+    let mut heap = BinaryHeap::new();
+    cost[from] = 0.0;
+    heap.push(Reverse((Key(h(from)), from)));
+    while let Some(Reverse((Key(f), c))) = heap.pop() {
+        if c == to {
+            let mut path = vec![c];
+            let mut cur = c;
+            while cur != from {
+                cur = prev[cur];
+                path.push(cur);
             }
-            // A later leg goes back over this leg only where no other way
-            // is near.
-            for &c in &leg[..leg.len() - 1] {
-                avoid[c] = true;
+            path.reverse();
+            return Some(path);
+        }
+        if f - h(c) > cost[c] + 1e-9 {
+            continue;
+        }
+        for m in grid.neighbors(c) {
+            let Some(mut s) = step(c, m) else {
+                continue;
+            };
+            if avoid[m] && m != to {
+                s *= REUSE_COST;
+            }
+            let next = cost[c] + s;
+            if next < cost[m] {
+                cost[m] = next;
+                prev[m] = c;
+                heap.push(Reverse((Key(next + h(m)), m)));
             }
         }
-        Some(path)
     }
+    None
+}
+
+/// A least-cost path through the given cells in order.
+fn search_through(grid: &Grid, stops: &[usize], step: StepCost) -> Option<Vec<usize>> {
+    let mut avoid = vec![false; grid.len()];
+    let mut path = vec![stops[0]];
+    for w in stops.windows(2) {
+        let leg = search(grid, w[0], w[1], &avoid, step)?;
+        for &c in &leg[1..] {
+            path.push(c);
+        }
+        // A later leg goes back over this leg only where no other way
+        // is near.
+        for &c in &leg[..leg.len() - 1] {
+            avoid[c] = true;
+        }
+    }
+    Some(path)
 }
 
 /// Route all roads.
