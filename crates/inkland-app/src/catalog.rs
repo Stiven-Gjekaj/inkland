@@ -396,6 +396,7 @@ pub const TOOLS: &[ToolDef] = &[
     tool("routes", "Routes", "Edit", "Shift+U", true),
     tool("states", "States", "Edit", "Shift+S", true),
     tool("units", "Units", "Edit", "Shift+Q", true),
+    tool("zones", "Zones", "Edit", "", true),
     tool("variants", "Variants", "Edit", "Shift+W", true),
     tool("submap", "Submap", "Edit", "", true),
     tool("add-burg", "Burg", "Add", "Shift+1", true),

@@ -269,6 +269,7 @@ export global Lists {
     // The overviews of the shown world. Read only.
     in property <[string]> state-names;
     in property <[TableRow]> relations;
+    in property <[TableRow]> zones;
     in property <[TableRow]> notes;
     in property <[TableRow]> markers;
     in property <[string]> military-header;
@@ -343,6 +344,7 @@ export global Dialogs {
     in-out property <bool> print;
     in-out property <bool> emblems;
     in-out property <bool> diplomacy;
+    in-out property <bool> zones;
     in-out property <bool> notes;
     in-out property <bool> markers;
     in-out property <bool> military;
@@ -364,6 +366,7 @@ export global Dialogs {
         if id == "provinces" { self.provinces = true; }
         if id == "cells" { self.cells = true; }
         if id == "diplomacy" { self.diplomacy = true; }
+        if id == "zones" { self.zones = true; }
         if id == "notes" { self.notes = true; }
         if id == "markers" { self.markers = true; }
         if id == "military" { self.military = true; }
@@ -388,6 +391,7 @@ export global Dialogs {
         if id == "provinces" { self.provinces = false; }
         if id == "cells" { self.cells = false; }
         if id == "diplomacy" { self.diplomacy = false; }
+        if id == "zones" { self.zones = false; }
         if id == "notes" { self.notes = false; }
         if id == "markers" { self.markers = false; }
         if id == "military" { self.military = false; }
@@ -412,6 +416,7 @@ export global Dialogs {
         self.provinces = false;
         self.cells = false;
         self.diplomacy = false;
+        self.zones = false;
         self.notes = false;
         self.markers = false;
         self.military = false;

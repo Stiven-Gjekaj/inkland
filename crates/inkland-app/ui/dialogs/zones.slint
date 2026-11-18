@@ -1,0 +1,25 @@
+// The Zones Editor of FMG: the zones of the shown world, with the
+// description, the type, the cells, the area, the people, and the hatch
+// pattern of the fill. It does not edit, because the config has no zones.
+
+import { Theme, Label, Table, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { Lists } from "../globals.slint";
+
+export component ZonesDialog inherits Dialog {
+    id: "zones";
+    title: "Zones Editor";
+    content-width: 560px;
+    pos-x: 440px;
+    pos-y: 80px;
+    Table {
+        header: ["Description", "Type", "Cells", "Area", "Population", "Fill"];
+        widths: [170px, 90px, 44px, 80px, 70px, 50px];
+        rows: Lists.zones;
+        list-height: 240px;
+    }
+    Tip {
+        dialog: true;
+        text: "Zones: " + Lists.zones.length + ". The world makes the zones after the markers.";
+    }
+}

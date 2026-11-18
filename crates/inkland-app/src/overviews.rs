@@ -260,6 +260,51 @@ pub fn note_text(world: &World, id: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The Zones Editor of FMG: the description, the type, the cells, the area
+/// in square units, the people, and the fill. The fill is an FMG hatch
+/// pattern, for example `hatch1`, so the row has no swatch.
+pub fn zone_rows(world: &World, unit: &str) -> Vec<Row> {
+    use inkland_core::military::{POPULATION_SCALE, URBANIZATION_RATE};
+    let cells = &world.society.cells;
+    let mut place_of = vec![None; cells.pop.len()];
+    for p in &world.society.places {
+        if let Some(slot) = place_of.get_mut(p.cell) {
+            *slot = Some(p.population);
+        }
+    }
+    world
+        .zones
+        .iter()
+        .map(|z| {
+            let at = |v: &Vec<f64>, c: usize| v.get(c).copied().unwrap_or(0.0);
+            let area = z.cells.iter().fold(0.0, |t, c| t + at(&cells.area, *c));
+            let rural = z.cells.iter().fold(0.0, |t, c| t + at(&cells.pop, *c));
+            let urban = z.cells.iter().fold(0.0, |t, c| {
+                t + place_of.get(*c).copied().flatten().unwrap_or(0.0)
+            });
+            let people = rn(
+                rural * POPULATION_SCALE + urban * POPULATION_SCALE * URBANIZATION_RATE,
+                0,
+            );
+            row(
+                z.id.to_string(),
+                vec![
+                    z.name.clone(),
+                    z.kind.to_owned(),
+                    z.cells.len().to_string(),
+                    format!("{} {unit}2", si(area)),
+                    si(people),
+                    z.color
+                        .trim_start_matches("url(#")
+                        .trim_end_matches(')')
+                        .to_owned(),
+                ],
+                false,
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,5 +414,21 @@ mod tests {
             assert!(note_text(&w, &r.id).ends_with(&n.note));
         }
         assert_eq!(note_text(&w, "zone:none"), "");
+    }
+
+    #[test]
+    fn the_zone_rows_count_the_cells_of_each_zone() {
+        let (_, w) = world();
+        let rows = zone_rows(&w, "mi");
+        assert_eq!(rows.len(), w.zones.len());
+        assert!(!rows.is_empty(), "the world has zones");
+        for (r, z) in rows.iter().zip(&w.zones) {
+            assert_eq!(r.cells[0], z.name);
+            assert_eq!(r.cells[1], z.kind);
+            assert_eq!(r.cells[2], z.cells.len().to_string());
+            assert!(r.cells[3].ends_with(" mi2"), "{}", r.cells[3]);
+            assert!(z.color.contains(r.cells[5].as_str()), "{}", z.color);
+            assert!(!r.cells[5].contains('('));
+        }
     }
 }
