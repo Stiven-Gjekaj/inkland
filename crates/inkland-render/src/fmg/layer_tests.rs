@@ -989,3 +989,51 @@ fn the_depths_option_sets_or_removes_the_depth_layers() {
     assert_eq!(one.matches("class=\"depth\"").count(), 1);
     assert!(one.contains("fill=\"#123456\""));
 }
+
+#[test]
+fn terrain_relief_draws_mountain_chains_in_colour_mode() {
+    let icons = |terrain: bool| {
+        let mut c = base_config();
+        c.render.layers = vec![LayerName::Relief];
+        c.render.relief.terrain = terrain;
+        relief_icons_of(&c)
+    };
+    let w = world();
+    let up = crate::fmg::geom::Px::new(
+        &crate::page::Page::new(&base_config(), &base_config().variants[0]),
+        w.width,
+        w.height,
+    )
+    .unit_px;
+    // Mountains on ridges lower than the mountain height of FMG.
+    let low_mounts = |v: &[super::layers::marks::ReliefIcon]| {
+        v.iter()
+            .filter(|i| i.kind.starts_with("mount"))
+            .filter(|i| {
+                let p = [(i.x + i.s / 2.0) / up, (i.y + i.s / 2.0) / up];
+                let c = w.grid.find_cell(p[0], p[1]);
+                w.heights[c] - w.sea_level + 20.0 < 71.0
+            })
+            .count()
+    };
+    let (fmg, new) = (icons(false), icons(true));
+    assert!(low_mounts(&new) > low_mounts(&fmg));
+    // Peaks of a chain overlap.
+    let m: Vec<_> = new.iter().filter(|i| i.kind.starts_with("mount")).collect();
+    let overlap = m.iter().enumerate().any(|(k, a)| {
+        m[k + 1..].iter().any(|b| {
+            (a.x - b.x).abs() < 0.8 * a.s.min(b.s) && (a.y - b.y).abs() < 0.8 * a.s.min(b.s)
+        })
+    });
+    assert!(overlap);
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Relief];
+    parse_and_draw(&crate::svg::render(w, &c, &c.variants[0]).svg);
+}
+
+fn relief_icons_of(c: &Config) -> Vec<super::layers::marks::ReliefIcon> {
+    let page = crate::page::Page::new(c, &c.variants[0]);
+    let labels = crate::labels::Labels::default();
+    let ctx = Ctx::new(world(), c, &c.variants[0], &page, &labels);
+    super::layers::marks::relief_icons(&ctx)
+}

@@ -186,8 +186,21 @@ pub fn relief_icons(ctx: &Ctx) -> Vec<ReliefIcon> {
     // Placed points of each pool, in buckets, for the spacing test.
     let mut placed: BTreeMap<usize, Buckets> = BTreeMap::new();
     let mut out = Vec::new();
+    let terrain = ctx
+        .config
+        .render
+        .relief
+        .terrain
+        .then(|| crate::decor::relief_terrain(w));
+    if let Some(t) = &terrain {
+        chains(ctx, t, &order, &mut rng, &mut out);
+    }
     for (_, c) in order {
         if !w.features.is_land(c) || river[c] {
+            continue;
+        }
+        // The chains drew the ridges and their feet.
+        if terrain.as_ref().is_some_and(|t| t.ridge[c] || t.foot[c]) {
             continue;
         }
         let site = g.points[c];
@@ -215,7 +228,19 @@ pub fn relief_icons(ctx: &Ctx) -> Vec<ReliefIcon> {
         if rule.is_none() && POOLS[biome].1.is_empty() {
             continue;
         }
-        let radius = spacing(density);
+        // With the terrain: forests in groups, closer in the highland, and
+        // fewer symbols on the open plains.
+        let mut radius = spacing(density);
+        if let (Some(t), None) = (&terrain, rule) {
+            let forest = matches!(biome, 5..=9 | 12);
+            if forest && t.clump[c] < -0.15 || !forest && t.clump[c] < 0.2 {
+                continue;
+            }
+            if forest {
+                let high = ((w.heights[c] - w.sea_level) / 30.0).clamp(0.0, 1.0);
+                radius *= 1.1 - 0.35 * high;
+            }
+        }
         let poly: Vec<[f64; 2]> = g.polygons[c]
             .iter()
             .map(|&v| {
@@ -282,7 +307,10 @@ pub fn relief_icons(ctx: &Ctx) -> Vec<ReliefIcon> {
                 let pool = POOLS[biome].1;
                 let total: f64 = pool.iter().map(|e| e.1).sum();
                 for p in points {
-                    let s = (4.0 + rng.unit()) * 4.0;
+                    let mut s = (4.0 + rng.unit()) * 4.0;
+                    if terrain.is_some() {
+                        s *= 0.85 + 0.3 * rng.unit();
+                    }
                     let target = rng.unit() * total;
                     let mut acc = 0.0;
                     let mut kind = pool[0].0;
@@ -309,6 +337,95 @@ pub fn relief_icons(ctx: &Ctx) -> Vec<ReliefIcon> {
         }
     }
     out
+}
+
+/// The mountain chains of `render.relief.terrain`: overlapping peaks at each
+/// ridge cell and between each two ridge cells, highest first and larger at
+/// the crest, then hills at the feet of the ridges. The icons are in world
+/// pixels.
+fn chains(
+    ctx: &Ctx,
+    t: &crate::decor::ReliefTerrain,
+    order: &[(u64, usize)],
+    rng: &mut Rand,
+    out: &mut Vec<ReliefIcon>,
+) {
+    let w = ctx.world;
+    let g = &w.grid;
+    let up = ctx.px.unit_px;
+    let [vx0, vy0, vx1, vy1] = ctx.px.page.view;
+    let margin = g.step_x.max(g.step_y) * 3.0;
+    let in_view = |p: [f64; 2]| {
+        p[0] >= vx0 - margin && p[0] <= vx1 + margin && p[1] >= vy0 - margin && p[1] <= vy1 + margin
+    };
+    // Icon centres and sizes, for the overlap test.
+    let mut peaks: Vec<([f64; 2], f64)> = Vec::new();
+    let free = |peaks: &[([f64; 2], f64)], p: [f64; 2], s: f64, gap: f64| {
+        peaks.iter().all(|(q, r)| {
+            let d = gap * s.min(*r);
+            (p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) >= d * d
+        })
+    };
+    let mut ridges: Vec<usize> = (0..g.len()).filter(|&c| t.ridge[c]).collect();
+    ridges.sort_by(|&a, &b| w.heights[b].total_cmp(&w.heights[a]).then(a.cmp(&b)));
+    for &c in &ridges {
+        let mut spots = vec![(g.points[c], t.crest[c])];
+        for m in g.neighbors(c).filter(|&m| t.ridge[m] && m > c) {
+            let (a, b) = (g.points[c], g.points[m]);
+            spots.push((
+                [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0],
+                (t.crest[c] + t.crest[m]) / 2.0,
+            ));
+        }
+        let kind = if w.temperature[c] <= -1.0 {
+            "mountSnow"
+        } else {
+            "mount"
+        };
+        for (p, crest) in spots {
+            if !in_view(p) {
+                continue;
+            }
+            let s = 18.0 + 24.0 * crest;
+            let centre = [p[0] * up, p[1] * up];
+            if !free(&peaks, centre, s, 0.4) {
+                continue;
+            }
+            peaks.push((centre, s));
+            let variant = 1 + (rng.unit() * f64::from(icons::variants(kind))) as u32;
+            out.push(ReliefIcon {
+                kind,
+                variant,
+                x: centre[0] - s / 2.0,
+                y: centre[1] - s / 2.0,
+                s,
+            });
+        }
+    }
+    for &(_, c) in order {
+        if !t.foot[c] || !in_view(g.points[c]) {
+            continue;
+        }
+        let j = g.step_x.min(g.step_y) * 0.3 * up;
+        let p = g.points[c];
+        let centre = [
+            p[0] * up + rng.uniform(-j, j),
+            p[1] * up + rng.uniform(-j, j),
+        ];
+        let s = 8.0 + 4.0 * rng.unit();
+        if !free(&peaks, centre, s, 0.9) {
+            continue;
+        }
+        peaks.push((centre, s));
+        let variant = 1 + (rng.unit() * f64::from(icons::variants("hill"))) as u32;
+        out.push(ReliefIcon {
+            kind: "hill",
+            variant,
+            x: centre[0] - s / 2.0,
+            y: centre[1] - s / 2.0,
+            s,
+        });
+    }
 }
 
 /// Relief icons (`drawRelief`). An icon under a label is left out, as in
