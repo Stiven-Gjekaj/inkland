@@ -128,6 +128,39 @@ pub fn apply_heights(grid: &Grid, heights: &mut [f64], areas: &[Area], sea_level
     }
 }
 
+/// Make the land cells of the `wooded` areas forest, where the weight of
+/// the area is at least a half. A cell in a region pin keeps its biome.
+/// `temps` gives the temperature of each cell, which picks the forest.
+pub fn apply_biomes(
+    grid: &Grid,
+    heights: &[f64],
+    biomes: &mut [u8],
+    temps: &[f64],
+    areas: &[Area],
+    regions: &[crate::fit::FitRegion],
+    sea_level: f64,
+) {
+    let wooded: Vec<&Area> = areas
+        .iter()
+        .filter(|a| a.pin.character == Character::Wooded)
+        .collect();
+    if wooded.is_empty() {
+        return;
+    }
+    for (c, b) in biomes.iter_mut().enumerate() {
+        let p = grid.points[c];
+        if heights[c] < sea_level || wooded.iter().all(|a| a.weight(p) < 0.5) {
+            continue;
+        }
+        if !crate::fit::ruling_at(regions, p).is_empty() {
+            continue;
+        }
+        if let Some(forest) = crate::biomes::forced(crate::config::RegionKind::Forest, temps[c]) {
+            *b = forest;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,6 +218,29 @@ mod tests {
         assert!(flat < base, "{flat} {base}");
         assert!(rough_sd > flat_sd);
         assert_eq!(wooded, base);
+    }
+
+    #[test]
+    fn a_wooded_area_makes_forest() {
+        let forest = |b: u8| (5..=9).contains(&b);
+        let count = |areas: serde_json::Value| {
+            let w = crate::world::World::build(&config(areas)).unwrap();
+            (0..w.grid.len())
+                .filter(|&k| {
+                    let [x, y] = w.grid.points[k];
+                    (110.0..190.0).contains(&x)
+                        && (60.0..140.0).contains(&y)
+                        && w.heights[k] >= 20.0
+                })
+                .map(|k| (forest(w.biomes[k]), 1))
+                .fold((0, 0), |(f, n), (is, one)| (f + usize::from(is), n + one))
+        };
+        let (before, _) = count(json!([]));
+        let (after, land) = count(json!([
+            { "id": "greenwood", "character": "wooded", "box": [100, 50, 200, 150] }
+        ]));
+        assert!(after > before);
+        assert_eq!(after, land, "each land cell inside is forest");
     }
 
     #[test]

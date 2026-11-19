@@ -433,7 +433,7 @@ impl World {
                 river_cells[c] = true;
             }
         }
-        let biomes = crate::biomes::biomes(
+        let mut biomes = crate::biomes::biomes(
             &grid,
             &heights,
             sea_level,
@@ -442,6 +442,15 @@ impl World {
             &river_cells,
             &drainage.flux,
             &regions,
+        );
+        crate::character::apply_biomes(
+            &grid,
+            &heights,
+            &mut biomes,
+            &temperature,
+            &areas,
+            &regions,
+            sea_level,
         );
         let groups = crate::geonames::groups(&grid, &features, &lakes, base_grid_len, sea_level);
         let mut society = crate::society::build(&crate::society::Input {

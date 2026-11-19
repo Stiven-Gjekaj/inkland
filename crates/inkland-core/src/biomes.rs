@@ -81,7 +81,7 @@ fn by_climate(moisture: f64, temp: f64, height: f64, sea_level: f64, river: bool
     MATRIX[m][t]
 }
 
-fn forced(kind: RegionKind, temp: f64) -> Option<u8> {
+pub(crate) fn forced(kind: RegionKind, temp: f64) -> Option<u8> {
     match kind {
         RegionKind::Marsh => Some(WETLAND),
         RegionKind::Forest if temp >= 20.0 => Some(TROPICAL_SEASONAL_FOREST),
