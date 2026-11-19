@@ -1108,8 +1108,178 @@ fn sub_line(pts: &[[f64; 2]], acc: &[f64], s0: f64, s1: f64) -> Vec<[f64; 2]> {
     out
 }
 
-/// Candidates for a river label: straight parts of the river, inside the
-/// map. The text sits above the line and reads from left to right.
+/// The points of a line at each `step` of its length, with its two ends.
+fn resample(pts: &[[f64; 2]], step: f64) -> Vec<[f64; 2]> {
+    let acc = lengths(pts);
+    let total = acc[acc.len() - 1];
+    let n = ((total / step.max(1e-9)).ceil() as usize).max(1);
+    (0..=n)
+        .map(|k| point_at(pts, &acc, total * k as f64 / n as f64))
+        .collect()
+}
+
+/// The step of a smoothed river line, in mm.
+const SMOOTH_STEP: f64 = 0.25;
+
+/// A smooth copy of a line, for the text of a label: the line at each
+/// `SMOOTH_STEP`, then three passes of a mean over `radius` mm on each
+/// side. The ends stay. The bends of the hand-drawn river and of its cells
+/// go, and the large bends stay.
+fn smooth_line(pts: &[[f64; 2]], radius: f64) -> Vec<[f64; 2]> {
+    let mut line = resample(pts, SMOOTH_STEP);
+    let n = line.len();
+    let w = ((radius / SMOOTH_STEP).round() as usize).max(1);
+    for _ in 0..3 {
+        let prev = line.clone();
+        for (i, p) in line
+            .iter_mut()
+            .enumerate()
+            .take(n.saturating_sub(1))
+            .skip(1)
+        {
+            // A window that stays inside the line, so that the ends stay.
+            let k = w.min(i).min(n - 1 - i);
+            let (mut x, mut y) = (0.0, 0.0);
+            for q in &prev[i - k..=i + k] {
+                x += q[0];
+                y += q[1];
+            }
+            let m = (2 * k + 1) as f64;
+            *p = [x / m, y / m];
+        }
+    }
+    line
+}
+
+/// The largest turn of a line between two letters, in degrees: the change
+/// of direction over each `step` of its length.
+pub fn max_turn(pts: &[[f64; 2]], step: f64) -> f64 {
+    let line = resample(pts, step);
+    let h = headings(&line);
+    h.windows(2)
+        .map(|w| {
+            let mut d = (w[1] - w[0]).abs() % 360.0;
+            if d > 180.0 {
+                d = 360.0 - d;
+            }
+            d
+        })
+        .fold(0.0, f64::max)
+}
+
+/// The largest turn of a river label between two letters, in degrees.
+pub const MAX_LETTER_TURN: f64 = 12.0;
+
+/// The largest turn between two letters of a placed path label that the
+/// check `path_labels_fit` accepts, in degrees.
+pub const MAX_FIT_TURN: f64 = 20.0;
+
+/// Why the text of a placed label does not fit its path, or `None` if it
+/// fits or is not on a path: the path is shorter than the text, two
+/// letters turn more than `MAX_FIT_TURN` from one to the next, or two
+/// letters overlap on the inner side of a bend.
+pub fn path_fit_fault(l: &Placed) -> Option<String> {
+    let Geometry::Path { points, offset } = &l.geometry else {
+        return None;
+    };
+    if points.len() < 2 {
+        return Some("the path has no length".to_owned());
+    }
+    let f = FontMetrics::of(&l.family);
+    let advances: Vec<f64> = l
+        .text
+        .chars()
+        .map(|c| f.width(&c.to_string(), l.size, 0.0) + l.spacing)
+        .collect();
+    let width: f64 = advances.iter().sum();
+    let acc = lengths(points);
+    let total = acc[acc.len() - 1];
+    if width > total {
+        return Some(format!(
+            "the text is {width:.1} mm long, and its path {total:.1} mm"
+        ));
+    }
+    // The middle of each letter along the path; the text is centred.
+    let mut s = (total - width) / 2.0;
+    let mut middles = Vec::new();
+    for a in &advances {
+        middles.push((s + a / 2.0, *a));
+        s += a;
+    }
+    let heading = |s: f64, half: f64| {
+        let p = point_at(points, &acc, (s - half).max(0.0));
+        let q = point_at(points, &acc, (s + half).min(total));
+        libm::atan2(q[1] - p[1], q[0] - p[0])
+    };
+    // The height of the tops of the letters over the path.
+    let top = offset + f.cap(l.size);
+    for w in middles.windows(2) {
+        let ((s0, a0), (s1, a1)) = (w[0], w[1]);
+        let h0 = heading(s0, a0 / 2.0);
+        let h1 = heading(s1, a1 / 2.0);
+        let mut turn = (h1 - h0).to_degrees();
+        while turn > 180.0 {
+            turn -= 360.0;
+        }
+        while turn < -180.0 {
+            turn += 360.0;
+        }
+        if turn.abs() > MAX_FIT_TURN {
+            return Some(format!("two letters turn {:.0} degrees", turn.abs()));
+        }
+        // On the page, y goes down: a turn to the left (less than 0) bends
+        // the path up, so the tops of the letters come closer.
+        let step = s1 - s0;
+        let bend = -turn.to_radians() / step.max(1e-9);
+        let room = step * (1.0 - bend * top);
+        if room < 0.5 * (a0 + a1) / 2.0 {
+            return Some("two letters overlap in a bend".to_owned());
+        }
+    }
+    None
+}
+
+/// The distance of the points of `line` above the path `pts` on the page,
+/// for text that reads along `pts`: the largest distance of a point whose
+/// foot is on the path, 0 if none is above it.
+fn above(line: &[[f64; 2]], pts: &[[f64; 2]]) -> f64 {
+    let mut most: f64 = 0.0;
+    for &p in line {
+        let mut best: Option<(f64, f64)> = None;
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let d = [b[0] - a[0], b[1] - a[1]];
+            let l2 = d[0] * d[0] + d[1] * d[1];
+            if l2 <= 0.0 {
+                continue;
+            }
+            let t = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / l2;
+            if !(0.0..=1.0).contains(&t) {
+                continue;
+            }
+            let foot = [a[0] + d[0] * t, a[1] + d[1] * t];
+            let dist = ((p[0] - foot[0]).powi(2) + (p[1] - foot[1]).powi(2)).sqrt();
+            let l = l2.sqrt();
+            // Above the line on the page: the side of `up`.
+            let up = [d[1] / l, -d[0] / l];
+            let side = (p[0] - foot[0]) * up[0] + (p[1] - foot[1]) * up[1];
+            if best.is_none_or(|(bd, _)| dist < bd) {
+                best = Some((dist, side));
+            }
+        }
+        if let Some((_, side)) = best {
+            most = most.max(side);
+        }
+    }
+    most
+}
+
+/// Candidates for a river label: smooth parts of the river, inside the
+/// map. The text follows a smoothed copy of the river, so that the letters
+/// keep an even spacing and turn at most `MAX_LETTER_TURN` from one to the
+/// next. It sits above the river, clear of the river line, and reads from
+/// left to right. If no part is smooth and long enough, the label stands
+/// level above the river.
 #[allow(clippy::too_many_arguments)]
 fn river_candidates(
     line: &[[f64; 2]],
@@ -1124,34 +1294,43 @@ fn river_candidates(
     if line.len() < 2 {
         return Vec::new();
     }
-    let mut acc = vec![0.0];
-    for w in line.windows(2) {
-        let d = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
-        acc.push(acc[acc.len() - 1] + d);
-    }
+    let smooth = smooth_line(line, 1.5 * size);
+    let acc = lengths(&smooth);
     let total = acc[acc.len() - 1];
-    let len = 1.4 * f.width(text, size, spacing);
+    let width = f.width(text, size, spacing);
+    let len = 1.4 * width;
     let (ch, dd) = (f.cap(size), 0.6 * f.descent(size));
     let gap = 0.6;
+    let letter = (width / text.chars().count().max(1) as f64).max(0.3 * size);
     let mut out = Vec::new();
     let mut s = 0.0;
     while s + len <= total {
-        let mut pts = sub_line(line, &acc, s, s + len);
+        let mut pts = sub_line(&smooth, &acc, s, s + len);
         let (a, b) = (pts[0], pts[pts.len() - 1]);
         let chord = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
         let straight = chord / len;
         let inside = pts
             .iter()
             .all(|p| p[0] >= inner[0] && p[0] <= inner[2] && p[1] >= inner[1] && p[1] <= inner[3]);
-        if straight >= 0.8 && inside {
+        if straight >= 0.8 && inside && max_turn(&pts, letter) <= MAX_LETTER_TURN {
             if b[0] < a[0] {
                 pts.reverse();
             }
-            let mut pacc = vec![0.0];
-            for w in pts.windows(2) {
-                let d = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
-                pacc.push(pacc[pacc.len() - 1] + d);
-            }
+            // Clear of the river: the text stands above the highest point
+            // of the river line along it.
+            let near: Vec<[f64; 2]> = line
+                .iter()
+                .copied()
+                .filter(|p| {
+                    let lo = [a[0].min(b[0]) - 1.0, a[1].min(b[1]) - 1.0];
+                    let hi = [a[0].max(b[0]) + 1.0, a[1].max(b[1]) + 1.0];
+                    p[0] >= lo[0] && p[0] <= hi[0] && p[1] >= lo[1] - len && p[1] <= hi[1] + len
+                })
+                .collect();
+            let offset = gap + above(&near, &pts);
+            // A point each half mm is enough for the text to follow.
+            let pts = resample(&pts, 0.5);
+            let pacc = lengths(&pts);
             let plen = pacc[pacc.len() - 1];
             let parts = ((plen / (1.2 * size)).ceil() as usize).max(1);
             let boxes = (0..parts)
@@ -1164,7 +1343,7 @@ fn river_candidates(
                     let u = [(q[0] - p[0]) / l, (q[1] - p[1]) / l];
                     // Above the line on the page, for text that reads to the right.
                     let up = [u[1], -u[0]];
-                    let lift = gap + (ch - dd) / 2.0;
+                    let lift = offset + (ch - dd) / 2.0;
                     Obb {
                         c: [
                             (p[0] + q[0]) / 2.0 + up[0] * lift,
@@ -1179,17 +1358,72 @@ fn river_candidates(
             out.push(Candidate {
                 geometry: Geometry::Path {
                     points: pts,
-                    offset: gap,
+                    offset,
                 },
                 boxes,
                 size,
                 spacing,
-                cost: middle + 2.0 * (1.0 - straight),
+                cost: middle + 2.0 * (1.0 - straight) + 0.2 * (offset - gap),
                 tier: 0,
                 river: Some(river),
             });
         }
         s += 1.5;
+    }
+    out.extend(level_river_candidates(
+        line, inner, river, text, f, size, pad,
+    ));
+    out
+}
+
+/// Level labels above a river, for a river with no smooth part that is
+/// long enough: one at each few mm of the river, clear of the river line.
+/// They come after the labels along the river.
+fn level_river_candidates(
+    line: &[[f64; 2]],
+    inner: [f64; 4],
+    river: usize,
+    text: &str,
+    f: &FontMetrics,
+    size: f64,
+    pad: f64,
+) -> Vec<Candidate> {
+    let acc = lengths(line);
+    let total = acc[acc.len() - 1];
+    let w = f.width(text, size, 0.0);
+    let gap = 0.6;
+    let mut out = Vec::new();
+    let stations = ((total / 3.0).ceil() as usize).max(1);
+    for k in 0..=stations {
+        let s = total * k as f64 / stations as f64;
+        let [x, y0] = point_at(line, &acc, s);
+        // The lowest baseline that keeps the text clear of the river line
+        // below it, over the width of the text.
+        let top = line
+            .iter()
+            .filter(|p| (p[0] - x).abs() <= w / 2.0 + gap)
+            .map(|p| p[1])
+            .fold(y0, f64::min);
+        let y = top - gap - 0.6 * f.descent(size);
+        let b = text_box(x, y, "middle", w, f, size, pad);
+        if !b.inside(inner) {
+            continue;
+        }
+        let middle = (s - total / 2.0).abs() / total.max(1e-9);
+        out.push(Candidate {
+            boxes: vec![b],
+            geometry: Geometry::Point {
+                x,
+                y,
+                anchor: "middle",
+                angle: 0,
+            },
+            size,
+            spacing: 0.0,
+            cost: middle + (y0 - top),
+            tier: 1,
+            river: Some(river),
+        });
     }
     out
 }
@@ -2666,6 +2900,107 @@ mod tests {
         // It stands in the strait.
         let at = page.to_world([x, 0.0]);
         assert!((190.0..=210.0).contains(&at[0]), "at x {}", at[0]);
+    }
+
+    /// A river that zigzags by 1 mm, as the line of its cells does, along
+    /// a straight course of `len` mm.
+    fn zigzag(len: f64) -> Vec<[f64; 2]> {
+        (0..=(len as usize))
+            .map(|i| [20.0 + i as f64, 50.0 + if i % 2 == 0 { 0.0 } else { 0.8 }])
+            .collect()
+    }
+
+    fn path_label(points: Vec<[f64; 2]>) -> Placed {
+        Placed {
+            id: "label-river-x".to_owned(),
+            kind: Kind::River,
+            group: "river",
+            text: "The River Dunn".to_owned(),
+            family: "IM Fell English".to_owned(),
+            size: 2.3,
+            spacing: 0.23,
+            geometry: Geometry::Path {
+                points,
+                offset: 0.6,
+            },
+            boxes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_path_label_on_a_zigzag_does_not_fit_and_on_a_smooth_line_fits() {
+        assert!(path_fit_fault(&path_label(zigzag(60.0))).is_some());
+        let smooth = vec![[20.0, 50.0], [50.0, 48.0], [80.0, 50.0]];
+        assert_eq!(path_fit_fault(&path_label(resample(&smooth, 0.5))), None);
+        // A path shorter than its text does not fit.
+        assert!(path_fit_fault(&path_label(vec![[0.0, 0.0], [5.0, 0.0]])).is_some());
+    }
+
+    #[test]
+    fn a_river_label_follows_a_smooth_copy_of_its_river_clear_of_it() {
+        let f = FontMetrics::of("IM Fell English");
+        let line = zigzag(80.0);
+        let inner = [0.0, 0.0, 200.0, 200.0];
+        let out = river_candidates(&line, inner, 0, "The River Dunn", f, 2.3, 0.2, 0.23);
+        let paths: Vec<&Candidate> = out
+            .iter()
+            .filter(|c| matches!(c.geometry, Geometry::Path { .. }))
+            .collect();
+        assert!(!paths.is_empty());
+        for c in paths {
+            let Geometry::Path { points, offset } = &c.geometry else {
+                unreachable!()
+            };
+            let letter = f.width("The River Dunn", 2.3, 0.23) / 14.0;
+            assert!(
+                max_turn(points, letter) <= MAX_LETTER_TURN,
+                "{}",
+                max_turn(points, letter)
+            );
+            assert!(*offset >= 0.6);
+            let mut placed = path_label(points.clone());
+            placed.geometry = c.geometry.clone();
+            assert_eq!(path_fit_fault(&placed), None);
+            // No point of the river is inside the boxes of the text.
+            for b in &c.boxes {
+                for p in &line {
+                    let d = [p[0] - b.c[0], p[1] - b.c[1]];
+                    let along = (d[0] * b.u[0] + d[1] * b.u[1]).abs();
+                    let across = (-d[0] * b.u[1] + d[1] * b.u[0]).abs();
+                    assert!(
+                        !(along < b.h[0] && across < b.h[1] - 0.2),
+                        "{p:?} in the text"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_short_tight_river_gets_a_level_label() {
+        let f = FontMetrics::of("IM Fell English");
+        // A river of 12 mm that turns back on itself.
+        let line: Vec<[f64; 2]> = (0..=24)
+            .map(|i| {
+                let t = f64::from(i) / 24.0 * std::f64::consts::PI * 1.5;
+                [50.0 + 4.0 * libm::cos(t), 50.0 + 4.0 * libm::sin(t)]
+            })
+            .collect();
+        let out = river_candidates(
+            &line,
+            [0.0, 0.0, 200.0, 200.0],
+            0,
+            "The Tey",
+            f,
+            2.3,
+            0.2,
+            0.23,
+        );
+        assert!(!out.is_empty());
+        assert!(
+            out.iter()
+                .all(|c| matches!(c.geometry, Geometry::Point { angle: 0, .. }))
+        );
     }
 
     #[test]
