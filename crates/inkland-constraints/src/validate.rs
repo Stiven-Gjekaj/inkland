@@ -493,6 +493,20 @@ impl<'a> Validator<'a> {
                     "edge must be 0 or more",
                 );
             }
+            if !(r.roughness.is_finite() && r.roughness >= 0.0) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{p}/roughness"),
+                    "roughness must be 0 or more",
+                );
+            }
+            if r.coast_detail.is_some_and(|d| !(1..=8).contains(&d)) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{p}/coast_detail"),
+                    "coast_detail must be 1 to 8",
+                );
+            }
             if r.landlocked && !r.kind.is_water() {
                 self.err(
                     ErrorCode::ValueOutOfRange,

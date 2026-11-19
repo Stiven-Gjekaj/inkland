@@ -184,6 +184,27 @@ fn island_town_in_a_forced_sea_is_feasible() {
 }
 
 #[test]
+fn negative_roughness_and_coast_detail_out_of_range_are_refused() {
+    let c = with(json!({ "pins": { "regions": [
+        { "id": "sea", "kind": "sea", "box": [0, 0, 50, 300], "roughness": -1 },
+        { "id": "isle", "kind": "land", "box": [100, 0, 150, 50], "roughness": 4, "coast_detail": 9 }
+    ]}}));
+    assert_eq!(
+        codes(&c),
+        vec![
+            (
+                ErrorCode::ValueOutOfRange,
+                "/pins/regions/0/roughness".into()
+            ),
+            (
+                ErrorCode::ValueOutOfRange,
+                "/pins/regions/1/coast_detail".into()
+            ),
+        ]
+    );
+}
+
+#[test]
 fn city_next_to_a_forced_sea_is_feasible() {
     let c = with(json!({ "pins": {
         "points": [{ "id": "a", "kind": "city", "at": [21, 150], "port": true }],

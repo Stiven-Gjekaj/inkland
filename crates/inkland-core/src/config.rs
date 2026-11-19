@@ -1095,6 +1095,20 @@ pub struct RegionPin {
     /// in a lowland. Default 0.
     #[serde(default, skip_serializing_if = "is_zero_i32")]
     pub priority: i32,
+    /// The largest distance, in units, by which fractal noise moves the
+    /// outline in or out. The coast becomes natural, with bays and capes.
+    /// The largest bays are about 4 times this size. A side of the outline
+    /// on a frame edge does not move. 0: the outline is exact. Default 0.
+    #[serde(default, skip_serializing_if = "is_zero_f64")]
+    #[schemars(range(min = 0.0))]
+    pub roughness: f64,
+    /// The number of noise layers of a rough outline. 1 to 8. Each layer
+    /// adds bays and capes of half the size of the layer before it. 1
+    /// gives a smooth, wavy coast. 8 gives a very detailed coast. Has an
+    /// effect only with a `roughness`. Default 4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1, max = 8))]
+    pub coast_detail: Option<u32>,
     /// Name of the area, for its label.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -2003,6 +2017,10 @@ fn default_jitter() -> f64 {
 }
 fn is_zero_i32(v: &i32) -> bool {
     *v == 0
+}
+
+fn is_zero_f64(v: &f64) -> bool {
+    *v == 0.0
 }
 
 fn is_default_jitter(v: &f64) -> bool {

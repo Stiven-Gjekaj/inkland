@@ -194,7 +194,7 @@ impl World {
             }
         }
 
-        let regions = FitRegion::all(&pins.regions, sea_level);
+        let regions = FitRegion::all(&pins.regions, sea_level, [w, h], &tree);
         apply_regions(&base_grid, &mut base_heights, &regions, sea_level);
         let points: Vec<FitPoint> = pins
             .points
@@ -299,14 +299,7 @@ impl World {
 
         // The pins hold on the second grid too: a new cell in a region gets
         // a height in its range, and each port keeps water next to it.
-        let islands: Vec<usize> = pins
-            .points
-            .iter()
-            .zip(&pin_cells)
-            .filter(|(p, _)| p.island)
-            .map(|(_, &c)| c)
-            .collect();
-        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level, &islands);
+        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level, &pin_cells);
         let points: Vec<FitPoint> = pins
             .points
             .iter()
@@ -389,7 +382,7 @@ impl World {
         }
         let mut heights = flow.heights;
         // Pins win: the new heights stay in the ranges of the regions.
-        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level, &islands);
+        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level, &pin_cells);
         let mut features = features;
         features.set_lake_heights(&heights);
         let mut river_cells = vec![false; grid.len()];

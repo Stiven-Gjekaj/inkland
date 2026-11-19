@@ -243,6 +243,11 @@ fn segments_touch(a: Point, b: Point, c: Point, d: Point) -> bool {
         || on_segment(c, d, b)
 }
 
+/// The distance from `p` to the segment from `a` to `b`.
+pub fn segment_distance(a: Point, b: Point, p: Point) -> f64 {
+    segment_point_dist2(a, b, p).sqrt()
+}
+
 fn segment_point_dist2(a: Point, b: Point, p: Point) -> f64 {
     let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
     let len2 = dx * dx + dy * dy;
