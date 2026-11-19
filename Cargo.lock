@@ -2604,6 +2604,7 @@ dependencies = [
  "clap",
  "inkland",
  "jsonschema",
+ "png",
  "serde_json",
  "tempfile",
 ]

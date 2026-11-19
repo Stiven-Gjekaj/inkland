@@ -267,7 +267,11 @@ fn generate(args: GenerateArgs, verbose: bool) -> Result<Value, Vec<Error>> {
     for s in &args.set {
         overrides.push(Override::parse(s).map_err(|e| vec![e])?);
     }
-    let config = inkland::parse_config(&text, &overrides).map_err(|e| vec![e])?;
+    let mut config = inkland::parse_config(&text, &overrides).map_err(|e| vec![e])?;
+    // The image of an `image` template is relative to the config file.
+    let folder = args.config.parent().unwrap_or(Path::new(""));
+    inkland::load_template_image(&mut config, |image| std::fs::read(folder.join(image)))
+        .map_err(|e| vec![e])?;
     if let Some(name) = &args.variant
         && !config.variants.iter().any(|v| &v.name == name)
     {

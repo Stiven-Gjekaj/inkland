@@ -181,6 +181,52 @@ fn schema_error_is_exit_2_with_a_pointer() {
     assert_eq!(out["error"]["path"], "/world/template");
 }
 
+/// A gray PNG image of `w` x `h` pixels.
+fn gray_png(w: u32, h: u32, pixel: impl Fn(u32, u32) -> u8) -> Vec<u8> {
+    let data: Vec<u8> = (0..h)
+        .flat_map(|y| (0..w).map(move |x| (x, y)))
+        .map(|(x, y)| pixel(x, y))
+        .collect();
+    let mut out = Vec::new();
+    let mut e = png::Encoder::new(&mut out, w, h);
+    e.set_color(png::ColorType::Grayscale);
+    e.write_header().unwrap().write_image_data(&data).unwrap();
+    out
+}
+
+#[test]
+fn image_template_is_read_next_to_the_config() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("maps")).unwrap();
+    // Sea in the west half, land in the east half.
+    let png = gray_png(8, 8, |x, _| if x < 4 { 10 } else { 120 });
+    std::fs::write(dir.path().join("maps/heights.png"), png).unwrap();
+    let mut c = minimal();
+    c["world"] = json!({ "cells": 1000, "template": { "image": "heights.png" } });
+    c["pins"] = json!({ "points": [{ "id": "a", "kind": "town", "at": [80, 40] }] });
+    let config = dir.path().join("maps/map.json");
+    std::fs::write(&config, serde_json::to_string(&c).unwrap()).unwrap();
+    let (code, out) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--dry-run",
+    ]);
+    assert_eq!(code, 0, "{out}");
+
+    // A missing image is a read error with the path of the template.
+    std::fs::remove_file(dir.path().join("maps/heights.png")).unwrap();
+    let (code, out) = run(&[
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--dry-run",
+    ]);
+    assert_ne!(code, 0);
+    assert_eq!(out["error"]["code"], "IO_READ");
+    assert_eq!(out["error"]["path"], "/world/template/image");
+}
+
 #[test]
 fn infeasible_pin_is_exit_3() {
     let dir = tempfile::tempdir().unwrap();

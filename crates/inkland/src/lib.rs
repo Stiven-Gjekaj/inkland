@@ -9,6 +9,7 @@ pub use inkland_core::world::World;
 pub use inkland_edit::{Command, History, PinList, Script};
 pub use inkland_io::azgaar::{Import, ImportSummary};
 pub use inkland_io::config::{Override, config_hash, parse_config};
+pub use inkland_io::heights::load_template_image;
 pub use inkland_io::report::DryRunReport;
 
 use inkland_io::report::{Check, PinCounts, Tool};
