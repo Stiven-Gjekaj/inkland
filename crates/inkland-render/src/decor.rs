@@ -51,8 +51,9 @@ pub fn chaikin(points: &[[f64; 2]], closed: bool, rounds: usize) -> Vec<[f64; 2]
 /// both render modes (`render.relief.terrain`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReliefTerrain {
-    /// A ridge cell: a hill or mountain cell that is higher than all of its
-    /// neighbors but two, so it is on a crest line.
+    /// A ridge cell: a cell in the highest 15 percent of the land, at least
+    /// `RIDGE_HEIGHT` above sea level, higher than all of its neighbors but
+    /// two and higher than their mean, so it is on a crest line.
     pub ridge: Vec<bool>,
     /// A foot cell: a land cell next to a ridge cell, not itself a ridge.
     pub foot: Vec<bool>,
@@ -73,20 +74,32 @@ pub fn relief_terrain(world: &World) -> ReliefTerrain {
     let n = g.len();
     let sea = world.sea_level;
     let land = |c: usize| world.features.is_land(c);
+    // The height of the highest 15 percent of the land.
+    let mut land_heights: Vec<f64> = (0..n)
+        .filter(|&c| land(c))
+        .map(|c| world.heights[c])
+        .collect();
+    land_heights.sort_by(f64::total_cmp);
+    let top = land_heights
+        .get(land_heights.len() * 85 / 100)
+        .copied()
+        .unwrap_or(f64::INFINITY);
+    let least = top.max(sea + RIDGE_HEIGHT);
     let mut ridge = vec![false; n];
     for (c, r) in ridge.iter_mut().enumerate() {
         let h = world.heights[c];
-        if !land(c) || h < sea + RIDGE_HEIGHT {
+        if !land(c) || h < least {
             continue;
         }
-        let (mut count, mut lower) = (0, 0);
+        let (mut count, mut lower, mut sum) = (0, 0, 0.0);
         for m in g.neighbors(c) {
             count += 1;
+            sum += world.heights[m];
             if world.heights[m] < h {
                 lower += 1;
             }
         }
-        *r = count > 0 && lower + 2 >= count;
+        *r = count > 0 && lower + 2 >= count && h >= sum / f64::from(count) + 1.0;
     }
     let foot: Vec<bool> = (0..n)
         .map(|c| land(c) && !ridge[c] && g.neighbors(c).any(|m| ridge[m]))
