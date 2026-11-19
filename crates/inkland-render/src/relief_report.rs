@@ -16,6 +16,9 @@ pub struct ReliefSummary {
     /// For each id in `hide_in`, the number of symbols of each kind that
     /// it leaves out. A symbol in two shapes counts for the first.
     pub hidden: BTreeMap<String, BTreeMap<String, usize>>,
+    /// For each region pin and area pin, the number of shown symbols of
+    /// each kind inside it. A symbol in two shapes counts for both.
+    pub pins: BTreeMap<String, BTreeMap<String, usize>>,
 }
 
 /// The relief symbols of a variant, before the labels clear their places.
@@ -68,8 +71,29 @@ pub fn summary(world: &World, config: &Config, variant: &Variant) -> ReliefSumma
     for id in config.relief_of(variant).hide_in.iter() {
         out.hidden.entry(id.clone()).or_default();
     }
+    let pins: Vec<(String, inkland_core::geom::Shape)> = config
+        .pins
+        .regions
+        .iter()
+        .map(|r| r.id.clone())
+        .chain(config.pins.areas.iter().map(|a| a.id.clone()))
+        .filter_map(|id| config.pin_shape(&id).map(|s| (id, s)))
+        .collect();
+    for (id, _) in &pins {
+        out.pins.entry(id.clone()).or_default();
+    }
     for (kind, p) in symbols {
-        match shapes.iter().find(|(_, s)| s.contains(p)) {
+        let hider = shapes.iter().find(|(_, s)| s.contains(p));
+        if hider.is_none() {
+            for (id, _) in pins.iter().filter(|(_, s)| s.contains(p)) {
+                *out.pins
+                    .entry(id.clone())
+                    .or_default()
+                    .entry(kind.clone())
+                    .or_default() += 1;
+            }
+        }
+        match hider {
             Some((id, _)) => {
                 *out.hidden
                     .entry(id.clone())
@@ -149,6 +173,14 @@ mod tests {
             assert!(now.hidden["fen"].values().sum::<usize>() > 0, "{mode}");
             // The two maps share one terrain, so the symbols add up.
             assert_eq!(count(&then.shown), count(&now.shown) + hidden, "{mode}");
+            // Each pin has its counts; the hidden fen shows none now.
+            assert!(count(&then.pins["fen"]) > 0, "{mode}");
+            assert_eq!(count(&now.pins["fen"]), 0, "{mode}");
+            assert_eq!(
+                count(&then.pins["fen"]),
+                count(&now.hidden["fen"]),
+                "{mode}"
+            );
         }
     }
 }

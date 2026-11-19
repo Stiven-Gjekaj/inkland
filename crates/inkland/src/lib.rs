@@ -342,7 +342,8 @@ pub fn generate_with_world(
         }
         add_labels(&mut report, &rendered.labels, config);
         let relief = inkland_render::relief_report::summary(w, config, v);
-        report["relief"] = json!({ "shown": relief.shown, "hidden": relief.hidden });
+        report["relief"] =
+            json!({ "shown": relief.shown, "hidden": relief.hidden, "pins": relief.pins });
         // The print checks run on the written SVG text.
         let checks = check_svg(&svg, config);
         if let Some(list) = report["checks"].as_array_mut() {
@@ -894,6 +895,7 @@ mod tests {
         let fen = total(&now["hidden"]["fen"]);
         assert!(fen > 0, "{now}");
         assert_eq!(total(&then["shown"]), total(&now["shown"]) + fen);
+        assert_eq!(total(&then["pins"]["fen"]), fen);
     }
 
     #[test]
