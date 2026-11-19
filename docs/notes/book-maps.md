@@ -101,17 +101,26 @@ that water in `details.at`.
   the reason `collision` or `outside`. With `at`, the label always goes
   to `at`.
 
-## Level labels
+## Curved and level labels
 
 ```json
-"render": { "labels": { "max_angle": 0 } }
+"render": { "labels": { "curved": true, "max_angle": 0 } }
 ```
 
-The placer can turn an area label 90 degrees, to read from bottom to top
-in a tall, narrow area. `max_angle` is the largest turn, in degrees. `0`
-gives only level labels. It applies to the labels of states, regions,
-lakes, seas, islands, and overlay features, in both render modes. The
-default is 90.
+- An area label can follow a smooth curve along the middle of its area,
+  as the original program draws state labels. The curve is one arc. Its
+  direction changes by 40 degrees or less from one end to the other. The
+  text reads from left to right. Its letters are spaced to fill part of
+  the curve. This applies to states, regions, lakes, seas, and islands.
+- The SVG keeps the text as a `text` element with a `textPath`, with no
+  stroke. In `print-safe` mode, white boxes along the curve make the halo.
+- The placer takes a curve before a straight label that fits as well.
+  `curved: false` gives only straight area labels.
+- A straight area label can turn 90 degrees, to read from bottom to top
+  in a tall, narrow area. `max_angle` is the largest angle to the level,
+  in degrees, of a straight label and of each part of a curve. `0` gives
+  only level, straight labels. It applies in both render modes. The
+  default is 90.
 
 ## No symbol without a label
 
