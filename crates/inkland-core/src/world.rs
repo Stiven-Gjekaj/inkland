@@ -820,8 +820,7 @@ mod tests {
 #[cfg(test)]
 mod pin_tests {
     use super::*;
-    use crate::fit::effective_range;
-    use crate::geom::Shape;
+    use crate::fit::{FitRegion, effective_range};
     use proptest::prelude::*;
     use serde_json::json;
 
@@ -881,8 +880,8 @@ mod pin_tests {
             let w = World::build(&c).map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
             let sea = w.sea_level;
 
-            for r in &c.pins.regions {
-                let shape = Shape::of(r).unwrap();
+            let fit = FitRegion::all(&c.pins.regions, sea, [w.width, w.height], &SeedTree::new(c.seed));
+            for (r, shape) in c.pins.regions.iter().zip(&fit) {
                 let [lo, hi] = effective_range(r, sea);
                 for cell in 0..w.grid.len() {
                     if !shape.contains(w.grid.points[cell]) {
@@ -930,8 +929,13 @@ mod pin_tests {
                 assert_eq!(w.grid.find_cell(p.at[0], p.at[1]), cell, "{lattice}");
                 assert!(w.features.is_land(cell), "{lattice}: {} is not land", p.id);
             }
-            for r in &c.pins.regions {
-                let shape = Shape::of(r).unwrap();
+            let fit = FitRegion::all(
+                &c.pins.regions,
+                w.sea_level,
+                [w.width, w.height],
+                &SeedTree::new(c.seed),
+            );
+            for (r, shape) in c.pins.regions.iter().zip(&fit) {
                 let [lo, hi] = effective_range(r, w.sea_level);
                 for cell in (0..w.grid.len()).filter(|&k| shape.contains(w.grid.points[k])) {
                     let h = w.heights[cell];

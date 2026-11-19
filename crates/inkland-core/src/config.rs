@@ -1177,10 +1177,13 @@ pub struct RegionPin {
     /// The largest distance, in units, by which fractal noise moves the
     /// outline in or out. The coast becomes natural, with bays and capes.
     /// The largest bays are about 4 times this size. A side of the outline
-    /// on a frame edge does not move. 0: the outline is exact. Default 0.
-    #[serde(default, skip_serializing_if = "is_zero_f64")]
+    /// on a frame edge does not move. 0: the outline is exact. Default: 0
+    /// for `sea` and `lake`; for the other kinds, 3 percent of the size of
+    /// the shape (the square root of the area of its bounding box), at most
+    /// 20, so that a box does not show as a rectangle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0.0))]
-    pub roughness: f64,
+    pub roughness: Option<f64>,
     /// The number of noise layers of a rough outline. 1 to 8. Each layer
     /// adds bays and capes of half the size of the layer before it. 1
     /// gives a smooth, wavy coast. 8 gives a very detailed coast. Has an
@@ -1254,6 +1257,19 @@ impl RegionKind {
 }
 
 impl RegionPin {
+    /// The roughness of the outline: `roughness`, or the default of the
+    /// kind for a shape with the bounding box `[x0, y0, x1, y1]`.
+    pub fn roughness_for(&self, bbox: [f64; 4]) -> f64 {
+        match self.roughness {
+            Some(r) => r,
+            None if self.kind.is_water() => 0.0,
+            None => {
+                let size = ((bbox[2] - bbox[0]).max(0.0) * (bbox[3] - bbox[1]).max(0.0)).sqrt();
+                (0.03 * size).min(20.0)
+            }
+        }
+    }
+
     /// The height range of the region: `height` if it is given, else the
     /// default range of the kind.
     pub fn height_range(&self) -> [f64; 2] {
@@ -2142,10 +2158,6 @@ fn default_jitter() -> f64 {
 }
 fn is_zero_i32(v: &i32) -> bool {
     *v == 0
-}
-
-fn is_zero_f64(v: &f64) -> bool {
-    *v == 0.0
 }
 
 fn is_default_jitter(v: &f64) -> bool {

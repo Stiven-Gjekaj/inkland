@@ -511,7 +511,7 @@ impl<'a> Validator<'a> {
                     "edge must be 0 or more",
                 );
             }
-            if !(r.roughness.is_finite() && r.roughness >= 0.0) {
+            if r.roughness.is_some_and(|v| !(v.is_finite() && v >= 0.0)) {
                 self.err(
                     ErrorCode::ValueOutOfRange,
                     format!("{p}/roughness"),

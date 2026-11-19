@@ -59,8 +59,8 @@ struct Rough {
 }
 
 impl Rough {
-    fn of(pin: &RegionPin, tree: &SeedTree) -> Option<Rough> {
-        let amount = pin.roughness;
+    fn of(pin: &RegionPin, shape: &Shape, tree: &SeedTree) -> Option<Rough> {
+        let amount = pin.roughness_for(shape.bbox());
         if !(amount.is_finite() && amount > 0.0) {
             return None;
         }
@@ -110,7 +110,7 @@ impl<'a> FitRegion<'a> {
             .enumerate()
             .filter_map(|(index, pin)| {
                 let shape = Shape::of(pin)?;
-                let rough = Rough::of(pin, tree);
+                let rough = Rough::of(pin, &shape, tree);
                 let shelf = pin.shelf.filter(|w| *w > 0.0 && pin.kind.is_water());
                 let coast = if rough.is_some() || shelf.is_some() {
                     coast_sides(&shape, frame)
@@ -470,15 +470,15 @@ mod tests {
         }))
         .unwrap();
         let w = crate::world::World::build(&c).unwrap();
-        let inside =
-            |b: [f64; 4], p: [f64; 2]| p[0] >= b[0] && p[0] <= b[2] && p[1] >= b[1] && p[1] <= b[3];
+        // The outlines as the terrain uses them: rough by default.
+        let fit = FitRegion::all(&c.pins.regions, 20.0, [300.0, 200.0], &SeedTree::new(2));
         let (mut wolds, mut low) = (0, 0);
         for (cell, &p) in w.grid.points.iter().enumerate() {
             let h = w.heights[cell];
-            if inside([120.0, 70.0, 180.0, 130.0], p) {
+            if fit[1].contains(p) {
                 assert!((40.0..=50.0).contains(&h), "wolds {h}");
                 wolds += 1;
-            } else if inside([40.0, 30.0, 260.0, 170.0], p) {
+            } else if fit[0].contains(p) {
                 assert!((22.0..=34.0).contains(&h), "lowland {h}");
                 low += 1;
             }
@@ -713,6 +713,27 @@ mod tests {
         let w = crate::world::World::build(&c).unwrap();
         let port = w.pin_cells[0];
         assert!(w.grid.neighbors(port).any(|m| w.heights[m] < 20.0));
+    }
+
+    #[test]
+    fn a_land_box_is_rough_by_default_and_a_sea_box_is_exact() {
+        let r = regions(json!([
+            { "id": "wolds", "kind": "hills", "box": [20, 20, 80, 80] },
+            { "id": "bay", "kind": "sea", "box": [0, 0, 15, 100] },
+            { "id": "exact", "kind": "hills", "box": [20, 20, 80, 80], "roughness": 0 }
+        ]));
+        // 3 percent of 60 units.
+        assert!((r[0].roughness_for([20.0, 20.0, 80.0, 80.0]) - 1.8).abs() < 1e-9);
+        let fit = FitRegion::all(&r, 20.0, [100.0, 100.0], &SeedTree::new(1));
+        let differs = |f: &FitRegion| {
+            (0..10_000).any(|k| {
+                let p = [f64::from(k % 100) + 0.5, f64::from(k / 100) + 0.5];
+                f.contains(p) != f.shape.contains(p)
+            })
+        };
+        assert!(differs(&fit[0]));
+        assert!(!differs(&fit[1]));
+        assert!(!differs(&fit[2]));
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {
