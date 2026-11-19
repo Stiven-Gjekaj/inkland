@@ -956,6 +956,31 @@ fn water_fallback(
     out
 }
 
+/// The connected parts of an area: for each cell, the index of its part
+/// (cells joined through neighbors in the area), or `usize::MAX` outside
+/// the area.
+fn connected_parts(g: &inkland_core::grid::Grid, area: &[bool]) -> Vec<usize> {
+    let mut part = vec![usize::MAX; area.len()];
+    let mut next = 0;
+    for start in 0..area.len() {
+        if !area[start] || part[start] != usize::MAX {
+            continue;
+        }
+        let mut queue = VecDeque::from([start]);
+        part[start] = next;
+        while let Some(c) = queue.pop_front() {
+            for m in g.neighbors(c) {
+                if area[m] && part[m] == usize::MAX {
+                    part[m] = next;
+                    queue.push_back(m);
+                }
+            }
+        }
+        next += 1;
+    }
+    part
+}
+
 fn box_points(b: &Obb) -> impl Iterator<Item = [f64; 2]> + '_ {
     (0..5).flat_map(move |i| {
         (0..3).map(move |j| {
@@ -1537,40 +1562,87 @@ pub fn place_with(
         if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
             continue;
         }
+        // The parts of the state to label: all of it, or, for a state with
+        // seats on other land, the part of the capital and the part of each
+        // seat. The label of a seat part has the key of its seat pin.
+        let seat_places: Vec<&inkland_core::society::Place> = st
+            .seats
+            .iter()
+            .filter_map(|&id| world.society.places.iter().find(|p| p.id == id))
+            .collect();
+        let mut parts: Vec<(String, Option<String>, Vec<bool>, bool)> = Vec::new();
+        if seat_places.is_empty() {
+            let in_view_capital = capital.is_some_and(|p| in_view(p.at));
+            parts.push((st.id.to_string(), key.clone(), area, in_view_capital));
+        } else {
+            let part_of = connected_parts(g, &area);
+            let main = capital.map(|p| part_of[p.cell]);
+            let main_area: Vec<bool> = (0..g.len())
+                .map(|c| area[c] && (main.is_none() || part_of[c] == main.unwrap_or(0)))
+                .collect();
+            parts.push((
+                st.id.to_string(),
+                key.clone(),
+                main_area,
+                capital.is_some_and(|p| in_view(p.at)),
+            ));
+            let mut done: Vec<usize> = main.into_iter().collect();
+            for (k, seat) in seat_places.iter().enumerate() {
+                let part = part_of[seat.cell];
+                if part == usize::MAX || done.contains(&part) {
+                    continue;
+                }
+                done.push(part);
+                let seat_key = seat.pin.clone();
+                if seat_key.as_deref().is_some_and(|k| !shown("state", k)) {
+                    continue;
+                }
+                let id = format!("{}-{}", st.id, k + 1);
+                if let Some(sk) = &seat_key {
+                    state_keys.insert(id.clone(), sk.clone());
+                }
+                let part_area: Vec<bool> = (0..g.len()).map(|c| part_of[c] == part).collect();
+                parts.push((id, seat_key, part_area, in_view(seat.at)));
+            }
+        }
         let look = style("state");
-        let size = match &key {
-            Some(k) => size_of("state", k, &look, sizes.state),
-            None => look.size.unwrap_or_else(|| pt(sizes.state)),
-        };
         let name = look.text(&st.name);
         let f = FontMetrics::of(&look.family);
-        // A state whose capital is outside the view can show only a small
-        // part in the view. Its label is optional.
-        let capital_in_view = capital.is_some_and(|p| in_view(p.at));
-        requests.push(Request {
-            place: None,
-            candidates: area_candidates(
-                world,
-                page,
-                inner,
-                &area,
-                &members_of(&area),
-                &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
-                None,
-                &name,
-                f,
-                size,
-                look.halo,
-                (0.15, 0.8),
-            ),
-            id: format!("label-state-{}", st.id),
-            kind: Kind::State,
-            group: "state",
-            text: name,
-            family: look.family,
-            required: capital_in_view,
-            rank: 2,
-        });
+        for (id, part_key, part_area, part_in_view) in parts {
+            if !(0..g.len()).any(|c| part_area[c] && in_view(g.points[c])) {
+                continue;
+            }
+            let size = match &part_key {
+                Some(k) => size_of("state", k, &look, sizes.state),
+                None => look.size.unwrap_or_else(|| pt(sizes.state)),
+            };
+            // A part whose capital or seat is outside the view can show only
+            // a small piece in the view. Its label is optional.
+            requests.push(Request {
+                place: None,
+                candidates: area_candidates(
+                    world,
+                    page,
+                    inner,
+                    &part_area,
+                    &members_of(&part_area),
+                    &|p: [f64; 2]| part_area[world.grid.find_cell(p[0], p[1])],
+                    None,
+                    &name,
+                    f,
+                    size,
+                    look.halo,
+                    (0.15, 0.8),
+                ),
+                id: format!("label-state-{id}"),
+                kind: Kind::State,
+                group: "state",
+                text: name.clone(),
+                family: look.family.clone(),
+                required: part_in_view,
+                rank: 2,
+            });
+        }
     }
 
     // Pinned regions with a name.
@@ -2529,6 +2601,44 @@ mod tests {
         // It stands in the strait.
         let at = page.to_world([x, 0.0]);
         assert!((190.0..=210.0).contains(&at[0]), "at x {}", at[0]);
+    }
+
+    #[test]
+    fn each_part_of_a_state_with_seats_gets_a_label() {
+        // One state on two shores of a strait: the capital in the west, a
+        // seat in the east.
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({
+                "world": { "cells": 3000, "template": "pangea", "fill_land": true, "states": 1 },
+                "pins": {
+                    "points": [
+                        { "id": "solmere", "kind": "city", "name": "Solmere", "at": [110, 150], "capital_of": "Lassiter" },
+                        { "id": "east-lassiter", "kind": "town", "name": "Eastwatch", "at": [300, 150], "capital_of": "Lassiter" }
+                    ],
+                    "regions": [{ "id": "strait", "kind": "sea", "box": [190, 0, 215, 300] }]
+                }
+            }),
+        );
+        let st = &w.society.states[0];
+        assert_eq!(st.seats.len(), 1, "one state with a seat");
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let labels = place(&w, &c, &v, &page);
+        let states: Vec<&Placed> = labels
+            .placed
+            .iter()
+            .filter(|l| l.kind == Kind::State)
+            .collect();
+        let ids: Vec<&str> = states.iter().map(|l| l.id.as_str()).collect();
+        assert_eq!(ids.len(), 2, "{ids:?} {:?}", labels.unplaced);
+        assert!(ids.contains(&format!("label-state-{}", st.id).as_str()));
+        assert!(ids.contains(&format!("label-state-{}-1", st.id).as_str()));
+        assert!(states.iter().all(|l| l.text == states[0].text));
+        // One label on each shore.
+        let x = |l: &Placed| page.to_world(l.boxes[0].c)[0];
+        assert!(states.iter().any(|l| x(l) < 190.0) && states.iter().any(|l| x(l) > 215.0));
     }
 
     #[test]
