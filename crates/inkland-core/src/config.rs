@@ -1124,7 +1124,8 @@ pub struct Pins {
 /// A soft area with a character of the land. Give exactly one of
 /// `polygon`, `box`, and `circle`. The outline is loose: fractal noise moves
 /// it, and the effect fades out over the `edge` outside it. An area changes
-/// only land: the coast stays where it is. A region pin rules over an area.
+/// only land: the coast stays where it is. Inside a land region, the region
+/// sets the height range, and the area shapes the land in that range.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AreaPin {

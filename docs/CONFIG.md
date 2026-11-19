@@ -48,7 +48,7 @@ Type: `"state"`, `"culture"`, `"religion"`, `"province"`
 
 ### AreaPin
 
-A soft area with a character of the land. Give exactly one of `polygon`, `box`, and `circle`. The outline is loose: fractal noise moves it, and the effect fades out over the `edge` outside it. An area changes only land: the coast stays where it is. A region pin rules over an area.
+A soft area with a character of the land. Give exactly one of `polygon`, `box`, and `circle`. The outline is loose: fractal noise moves it, and the effect fades out over the `edge` outside it. An area changes only land: the coast stays where it is. Inside a land region, the region sets the height range, and the area shapes the land in that range.
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|

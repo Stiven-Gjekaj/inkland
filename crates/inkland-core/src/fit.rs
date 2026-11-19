@@ -355,6 +355,22 @@ pub fn forced_water(regions: &[FitRegion], p: [f64; 2]) -> bool {
     ruling_at(regions, p).iter().any(|r| r.pin.kind.is_water())
 }
 
+/// The height range at `p` when only land regions rule it and none has a
+/// `shelf`, else `None`.
+pub fn land_range_at(regions: &[FitRegion], p: [f64; 2]) -> Option<[f64; 2]> {
+    let rule = ruling_at(regions, p);
+    let first = rule.first()?;
+    if rule
+        .iter()
+        .any(|r| r.pin.kind.is_water() || r.shelf.is_some())
+    {
+        return None;
+    }
+    Some(rule.iter().skip(1).fold(first.range, |[lo, hi], r| {
+        [lo.max(r.range[0]), hi.min(r.range[1])]
+    }))
+}
+
 /// `true` if only land regions rule the point `p`.
 pub fn forced_land(regions: &[FitRegion], p: [f64; 2]) -> bool {
     let rule = ruling_at(regions, p);

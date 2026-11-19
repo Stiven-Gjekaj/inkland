@@ -3,8 +3,9 @@
 //! An area has a loose outline: fractal noise moves its edge. Inside, its
 //! weight is its `strength`. Outside, the weight fades to 0 over its
 //! `edge`. An area changes only land cells, so the coast stays where it
-//! is. The region pins come after the areas, so a region rules over an
-//! area. The noise comes from the seed tree.
+//! is. The region pins come after the areas, so a region sets the height
+//! range, and an area shapes the land inside that range. The noise comes
+//! from the seed tree.
 
 use crate::config::{AreaPin, Character, Config, Point};
 use crate::geom::{Shape, dist, segment_distance};
@@ -89,6 +90,21 @@ impl<'a> Area<'a> {
         w * self.strength
     }
 
+    /// The place from 0 (bottom) to 1 (top) in the height range of a
+    /// region that the character gives to land at the place `t`.
+    fn place_in_range(&self, p: Point, t: f64) -> f64 {
+        let n = self.relief.at(p);
+        match self.pin.character {
+            Character::Rough => {
+                let ridged = (1.0 - (2.0 * n).abs()).clamp(0.0, 1.0);
+                0.2 * t + 0.8 * ridged * ridged
+            }
+            Character::Rolling => 0.25 * t + 0.75 * (0.5 + n).clamp(0.0, 1.0),
+            Character::Flat => 0.05 + 0.15 * t,
+            Character::Wooded => t,
+        }
+    }
+
     /// The height above sea level that the character gives to land with
     /// the height `above` sea level at `p`.
     fn target(&self, p: Point, above: f64) -> f64 {
@@ -125,6 +141,46 @@ pub fn apply_heights(grid: &Grid, heights: &mut [f64], areas: &[Area], sea_level
             }
         }
         *h = (sea_level + above.max(0.0)).trunc().clamp(sea_level, 100.0);
+    }
+}
+
+/// Steer the heights of the cells in land regions by the areas. A region
+/// maps the whole height scale into its range, so the change of the first
+/// pass becomes too small to see. This pass gives the character again as a
+/// place in the range: `rough` gives ridges up to the top, `rolling` gives
+/// low swells, and `flat` keeps the land near the bottom. `range_at` gives
+/// the range of a cell that only land regions rule, else `None`.
+pub fn apply_in_ranges(
+    grid: &Grid,
+    heights: &mut [f64],
+    areas: &[Area],
+    range_at: impl Fn(usize) -> Option<[f64; 2]>,
+) {
+    if areas.is_empty() {
+        return;
+    }
+    for (c, h) in heights.iter_mut().enumerate() {
+        let Some([lo, hi]) = range_at(c) else {
+            continue;
+        };
+        let p = grid.points[c];
+        let span = (hi - lo).max(0.0);
+        if span == 0.0 {
+            continue;
+        }
+        let start = ((*h - lo) / span).clamp(0.0, 1.0);
+        let mut t = start;
+        for a in areas {
+            let w = a.weight(p);
+            if w > 0.0 {
+                t += w * (a.place_in_range(p, t) - t);
+            }
+        }
+        if t != start {
+            *h = (lo + t * span)
+                .round()
+                .clamp(lo.ceil(), hi.floor().max(lo.ceil()));
+        }
     }
 }
 
@@ -241,6 +297,53 @@ mod tests {
         ]));
         assert!(after > before);
         assert_eq!(after, land, "each land cell inside is forest");
+    }
+
+    /// The mean height and the height spread of the cells inside a plains
+    /// region, with and without an area over it.
+    #[test]
+    fn an_area_shapes_the_land_inside_a_region() {
+        let spread = |areas: serde_json::Value| {
+            let c: Config = serde_json::from_value(json!({
+                "version": 1, "seed": 3, "frame": { "width": 300, "height": 200 },
+                "world": { "cells": 4000, "template": "pangea" },
+                "pins": {
+                    "regions": [{ "id": "vale", "kind": "plains", "box": [90, 40, 210, 160],
+                                  "height": [21, 38] }],
+                    "areas": areas
+                }
+            }))
+            .unwrap();
+            let w = crate::world::World::build(&c).unwrap();
+            let hs: Vec<f64> = (0..w.base.grid.len())
+                .filter(|&k| {
+                    let [x, y] = w.base.grid.points[k];
+                    (110.0..190.0).contains(&x) && (60.0..140.0).contains(&y)
+                })
+                .map(|k| w.base.heights[k])
+                .collect();
+            assert!(hs.iter().all(|h| (21.0..=38.0).contains(h)), "{hs:?}");
+            let mean = hs.iter().sum::<f64>() / hs.len() as f64;
+            (
+                mean,
+                (hs.iter().map(|h| (h - mean).powi(2)).sum::<f64>() / hs.len() as f64).sqrt(),
+            )
+        };
+        let box_ = json!([100, 50, 200, 150]);
+        let of = |k: &str| spread(json!([{ "id": "a", "character": k, "box": box_ }]));
+        let (plain_mean, plain) = spread(json!([]));
+        let (_, rough) = of("rough");
+        let (rolling_mean, _) = of("rolling");
+        let (flat_mean, flat) = of("flat");
+        assert!(rough > plain + 1.0, "{rough} {plain}");
+        assert!(
+            (rolling_mean - plain_mean).abs() > 2.0,
+            "{rolling_mean} {plain_mean}"
+        );
+        assert!(
+            flat < plain / 2.0 && flat_mean < plain_mean - 5.0,
+            "{flat} {flat_mean}"
+        );
     }
 
     #[test]
