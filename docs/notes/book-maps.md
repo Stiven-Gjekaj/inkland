@@ -270,6 +270,10 @@ overlay:
 The label then reads from the bottom up along the strait, at the size of
 the other sea labels. The other labels stay level.
 
+Without `angle`, a level sea label gets the largest size that fits on the
+water, in the middle of the widest part of the strait. A long name in a
+narrow strait is still smaller than the other sea labels.
+
 ## The scale bar
 
 The scale bar of a `print-safe` map has paper behind it, so no symbol or
@@ -306,3 +310,10 @@ region pins and area pins.
 `report.tool.version` gives the build: `1.3.2` at a release, and for
 example `1.3.2+2-gb12d578` for a build after it. A map then records which
 build drew it.
+
+## Hill shading
+
+In `colour` mode, `render.hill_shading` lights the slopes that turn to the
+north-west and darkens the slopes that turn away. The south-east side of
+each hill is darker. On pale land the dark side shows more than the light
+side. `"hill_shading": false` leaves the shading out.

@@ -183,6 +183,15 @@ highest 15 percent of the land of the map. Each ridge cell gets a
 mountain, and each cell next to a ridge gets a hill. So a small upland
 of heights 36 to 46 shows peaks, and land below 35 shows no mountain.
 
+A `rolling` or `flat` area has no ridges either, in the area and its soft
+edge. Give the area `"peaks": true` to let its ridges show peaks. A
+`rough` area keeps its peaks; give it `"peaks": false` to keep them out.
+
+On a map with much low land, the highest 15 percent of the land can start
+near sea level. Then each local top at 35 or more is a ridge. The report
+gives the relief counts of each region and area in `relief.pins`, so that
+you can find where the peaks are.
+
 A `hills` region has no ridges, so it shows hills and no peaks. Its
 default range is 42 to 62, where the hill symbols start. Give the region
 `"peaks": true` to let its ridges show peaks. Give another region
