@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 #[derive(Parser)]
 #[command(
     name = "inkland",
-    version,
+    version = inkland::VERSION,
     about = "A deterministic fantasy map engine."
 )]
 struct Cli {

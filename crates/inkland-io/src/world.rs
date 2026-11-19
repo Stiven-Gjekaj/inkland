@@ -28,7 +28,7 @@ pub fn world_value(world: &World, config: &Config) -> Value {
     let mut v = json!({
         "format": FORMAT,
         "format_version": FORMAT_VERSION,
-        "tool": { "name": "inkland", "version": env!("CARGO_PKG_VERSION") },
+        "tool": { "name": "inkland", "version": crate::VERSION },
         "world_hash": crate::config::world_hash(config),
         "config": crate::config::world_config_value(config),
         "seed": world.seed,

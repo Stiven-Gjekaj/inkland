@@ -15,7 +15,7 @@ impl Tool {
     pub fn current() -> Self {
         Tool {
             name: "inkland",
-            version: env!("CARGO_PKG_VERSION"),
+            version: crate::VERSION,
         }
     }
 }

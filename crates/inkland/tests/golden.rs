@@ -20,6 +20,15 @@ fn sha(bytes: &[u8]) -> String {
         .collect()
 }
 
+/// The output with the package version in place of the build version, so
+/// that the hashes do not change with each commit.
+fn stable(text: &str) -> String {
+    text.replace(
+        &format!("\"{}\"", inkland::VERSION),
+        &format!("\"{}\"", env!("CARGO_PKG_VERSION")),
+    )
+}
+
 fn actual() -> BTreeMap<String, String> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(root().join("fixtures/golden"))
         .unwrap()
@@ -34,10 +43,13 @@ fn actual() -> BTreeMap<String, String> {
         let text = std::fs::read_to_string(&file).unwrap();
         let config = inkland::parse_config(&text, &[]).unwrap();
         let out = inkland::generate(&config, None).unwrap_or_else(|e| panic!("{stem}: {:?}", e[0]));
-        hashes.insert(format!("{stem}/world.json"), sha(out.world_json.as_bytes()));
+        hashes.insert(
+            format!("{stem}/world.json"),
+            sha(stable(&out.world_json).as_bytes()),
+        );
         for v in &out.variants {
             hashes.insert(format!("{stem}/{}.svg", v.name), sha(v.svg.as_bytes()));
-            let report = serde_json::to_string_pretty(&v.report).unwrap();
+            let report = stable(&serde_json::to_string_pretty(&v.report).unwrap());
             hashes.insert(
                 format!("{stem}/{}.report.json", v.name),
                 sha(report.as_bytes()),

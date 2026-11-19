@@ -17,6 +17,9 @@ use serde_json::{Value, json};
 
 /// Read the text of a `world.json`: its config and the world that the
 /// config makes.
+/// The version of this build. See `inkland_io::VERSION`.
+pub use inkland_io::VERSION;
+
 pub fn read_world(text: &str) -> Result<(Config, inkland_core::world::World), Error> {
     inkland_io::world::read_world(text)
 }
@@ -500,7 +503,7 @@ pub fn import_map(bytes: &[u8]) -> Result<Import, Error> {
 pub fn version_info() -> Value {
     json!({
         "name": "inkland",
-        "version": env!("CARGO_PKG_VERSION"),
+        "version": inkland_io::VERSION,
         "config_version": inkland_core::config::CONFIG_VERSION,
         "license": "MIT OR Apache-2.0",
         "third_party": [{
