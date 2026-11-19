@@ -1355,6 +1355,15 @@ pub struct RegionPin {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0.0))]
     pub roughness: Option<f64>,
+    /// The largest distance, in units, by which long, slow bends move the
+    /// outline in or out. The bends are about 6 times this size, so the
+    /// coast can wander far from the drawn line at map scale. Near each
+    /// pinned place, the bends fade to 0 within 2 times this value, so the
+    /// ports and the coast towns stay on the coast. A side of the outline
+    /// on a frame edge does not move. Default 0: no bends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub wander: Option<f64>,
     /// The number of noise layers of a rough outline. 1 to 8. Each layer
     /// adds bays and capes of half the size of the layer before it. 1
     /// gives a smooth, wavy coast. 8 gives a very detailed coast. Has an

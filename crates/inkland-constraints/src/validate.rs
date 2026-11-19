@@ -532,6 +532,13 @@ impl<'a> Validator<'a> {
                     "roughness must be 0 or more",
                 );
             }
+            if r.wander.is_some_and(|v| !(v.is_finite() && v >= 0.0)) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{p}/wander"),
+                    "wander must be 0 or more",
+                );
+            }
             if let Some(i) = r.islets {
                 if !(0.0..=1.0).contains(&i) {
                     self.err(

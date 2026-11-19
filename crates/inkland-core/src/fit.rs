@@ -68,6 +68,10 @@ struct Rough {
     islets: f64,
     /// The noise of the small islands.
     isle: Fractal,
+    /// The largest distance that the long bends move the outline, in units.
+    wander: f64,
+    /// The long bends.
+    bends: Fractal,
     /// The pinned places near the outline: the point pins and the places
     /// of the overlays. The noise fades out near each of them, so that a
     /// place on the coast stays on it, where the config draws the coast.
@@ -77,22 +81,33 @@ struct Rough {
 impl Rough {
     fn of(pin: &RegionPin, shape: &Shape, tree: &SeedTree) -> Option<Rough> {
         let amount = pin.roughness_for(shape.bbox());
-        if !(amount.is_finite() && amount > 0.0) {
+        let amount = if amount.is_finite() {
+            amount.max(0.0)
+        } else {
+            0.0
+        };
+        let wander = pin.wander.filter(|w| w.is_finite()).unwrap_or(0.0).max(0.0);
+        if amount <= 0.0 && wander <= 0.0 {
             return None;
         }
         let part = |name: &str| {
             Fractal::seed_of(tree.part_seed(Layer::Terrain, &format!("{name}/{}", pin.id)))
         };
         let octaves = pin.coast_detail.unwrap_or(4).clamp(1, 8);
+        // A scale of 0 gives no noise: keep the scales of the fractals
+        // above 0, and the amount makes their effect 0.
+        let unit = amount.max(1e-3);
         Some(Rough {
             amount,
-            bays: Fractal::new(part("coast-bays"), 2, 12.0 * amount),
-            noise: Fractal::new(part("coast"), octaves, 4.0 * amount),
+            wander,
+            bends: Fractal::new(part("coast-bends"), 2, 6.0 * wander.max(1e-3)),
+            bays: Fractal::new(part("coast-bays"), 2, 12.0 * unit),
+            noise: Fractal::new(part("coast"), octaves, 4.0 * unit),
             warp: [
-                Fractal::new(part("coast-warp-x"), 2, 6.0 * amount),
-                Fractal::new(part("coast-warp-y"), 2, 6.0 * amount),
+                Fractal::new(part("coast-warp-x"), 2, 6.0 * unit),
+                Fractal::new(part("coast-warp-y"), 2, 6.0 * unit),
             ],
-            islets: if pin.kind.is_water() {
+            islets: if pin.kind.is_water() || amount <= 0.0 {
                 0.0
             } else {
                 pin.islets
@@ -103,7 +118,7 @@ impl Rough {
                     })
                     .clamp(0.0, 1.0)
             },
-            isle: Fractal::new(part("coast-islets"), 2, 1.2 * amount),
+            isle: Fractal::new(part("coast-islets"), 2, 1.2 * unit),
             ports: Vec::new(),
         })
     }
@@ -118,22 +133,38 @@ impl Rough {
         2.0 * self.isle.at(p) > need
     }
 
-    /// How far the outline moves out at `p`, from `-amount` to `amount`.
-    /// Within 3 times the amount of a pinned place, the shift fades to 0.
+    /// How far the outline moves out at `p`, from `-(amount + wander)` to
+    /// `amount + wander`. Within 3 times the amount of a pinned place, the
+    /// noise fades to 0, and within 2 times the wander, the bends fade to 0.
     fn shift(&self, p: Point) -> f64 {
-        let reach = 3.0 * self.amount;
-        let calm = self
-            .ports
-            .iter()
-            .map(|&q| (dist(p, q) / reach).min(1.0))
-            .fold(1.0f64, f64::min);
-        if calm <= 0.0 {
-            return 0.0;
+        let calm = |reach: f64| {
+            if reach <= 0.0 {
+                return 0.0;
+            }
+            self.ports
+                .iter()
+                .map(|&q| (dist(p, q) / reach).min(1.0))
+                .fold(1.0f64, f64::min)
+        };
+        let mut shift = 0.0;
+        if self.amount > 0.0 {
+            shift += calm(3.0 * self.amount) * self.free_shift(p);
         }
-        calm * self.free_shift(p)
+        if self.wander > 0.0 {
+            let c = calm(2.0 * self.wander);
+            if c > 0.0 {
+                shift += c * self.wander * (3.0 * self.bends.at(p)).clamp(-1.0, 1.0);
+            }
+        }
+        shift
     }
 
-    /// The shift without the ports.
+    /// The largest distance that the outline moves, in units.
+    fn reach(&self) -> f64 {
+        self.amount + self.wander
+    }
+
+    /// The noise shift without the ports and without the bends.
     fn free_shift(&self, p: Point) -> f64 {
         let w = 1.5 * self.amount;
         let q = [p[0] + w * self.warp[0].at(p), p[1] + w * self.warp[1].at(p)];
@@ -180,7 +211,7 @@ impl<'a> FitRegion<'a> {
             .collect();
         for r in &mut regions {
             if let Some(rough) = &mut r.rough {
-                let reach = 3.0 * rough.amount;
+                let reach = (3.0 * rough.amount).max(2.0 * rough.wander);
                 let [x0, y0, x1, y1] = r.bbox;
                 rough.ports = ports
                     .iter()
@@ -217,7 +248,7 @@ impl<'a> FitRegion<'a> {
                 } else {
                     Vec::new()
                 };
-                let grow = rough.as_ref().map_or(0.0, |r| r.amount);
+                let grow = rough.as_ref().map_or(0.0, Rough::reach);
                 let [x0, y0, x1, y1] = shape.bbox();
                 let bbox = [x0 - grow, y0 - grow, x1 + grow, y1 + grow];
                 Some(FitRegion {
@@ -878,6 +909,63 @@ mod tests {
     }
 
     #[test]
+    fn a_wandering_coast_moves_far_and_keeps_its_port() {
+        let make = |wander: f64, port: bool| -> Config {
+            let mut v = json!({
+                "version": 1, "seed": 3, "frame": { "width": 400, "height": 400 },
+                "pins": { "regions": [{ "id": "sea", "kind": "sea", "roughness": 14,
+                    "wander": wander, "polygon": [[0, 0], [100, 0], [100, 400], [0, 400]] }] }
+            });
+            if port {
+                v["pins"]["points"] =
+                    json!([{ "id": "harbour", "kind": "town", "at": [100, 200] }]);
+            }
+            serde_json::from_value(v).unwrap()
+        };
+        // The x of the coast on each row: the first x that is not sea.
+        let coast = |c: &Config| -> Vec<f64> {
+            let regions = FitRegion::of_config(c);
+            (0..400)
+                .step_by(4)
+                .map(|y| {
+                    (0..400)
+                        .map(f64::from)
+                        .find(|&x| !regions[0].contains([x, f64::from(y)]))
+                        .unwrap_or(400.0)
+                })
+                .collect()
+        };
+        let spread = |xs: &[f64]| {
+            xs.iter().copied().fold(f64::MIN, f64::max)
+                - xs.iter().copied().fold(f64::MAX, f64::min)
+        };
+        let still = coast(&make(0.0, false));
+        let wandering = coast(&make(60.0, false));
+        assert!(
+            spread(&wandering) > spread(&still) + 30.0,
+            "{} {}",
+            spread(&wandering),
+            spread(&still)
+        );
+        let with_port = make(60.0, true);
+        let regions = FitRegion::of_config(&with_port);
+        assert_eq!(
+            regions[0].rough.as_ref().unwrap().shift([100.0, 200.0]),
+            0.0
+        );
+        // Without roughness, the bends alone move the coast.
+        let r = regions_of(
+            json!([{ "id": "sea", "kind": "sea", "roughness": 0, "wander": 60,
+            "polygon": [[0, 0], [100, 0], [100, 400], [0, 400]] }]),
+        );
+        let fit = FitRegion::all(&r, 20.0, [400.0, 400.0], &SeedTree::new(3));
+        assert!(
+            (0..400).any(|y| fit[0].contains([120.0, f64::from(y)])
+                || !fit[0].contains([80.0, f64::from(y)]))
+        );
+    }
+
+    #[test]
     fn a_land_box_is_rough_by_default_and_a_sea_box_is_exact() {
         let r = regions(json!([
             { "id": "wolds", "kind": "hills", "box": [20, 20, 80, 80] },
@@ -992,6 +1080,15 @@ mod tests {
         let w = crate::world::World::build(&c).unwrap();
         let port = w.pin_cells[0];
         assert!(w.grid.neighbors(port).any(|m| w.heights[m] < 20.0));
+    }
+
+    fn regions_of(v: serde_json::Value) -> Vec<RegionPin> {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 1, "frame": { "width": 400, "height": 400 },
+            "pins": { "regions": v }
+        }))
+        .unwrap();
+        c.pins.regions
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {
