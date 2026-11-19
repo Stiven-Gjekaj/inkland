@@ -579,6 +579,7 @@ fn area_candidates(
                         spacing,
                         cost: 3.0 * f64::from(outside) / 15.0
                             + 0.5 * (1.0 - f64::from(d) / f64::from(max_depth))
+                            + STRAIGHT_COST
                             + if turn == 0 { 0.0 } else { 0.4 }
                             + if tight { 0.3 } else { 0.0 }
                             + 2.0 * (1.0 - size / sizes[0]),
@@ -587,6 +588,288 @@ fn area_candidates(
                     });
                 }
             }
+        }
+    }
+    let in_map = |p: [f64; 2]| on_map(p) && in_area(p);
+    out.extend(curve_candidates(
+        &anchors, max_depth, &in_map, text, f, &sizes, halo, spread,
+    ));
+    out
+}
+
+/// The extra cost of a straight area label, so that a curve that fits as
+/// well goes first, as in the original program.
+const STRAIGHT_COST: f64 = 0.2;
+/// The most anchors that get curved candidates.
+const CURVE_ANCHORS: usize = 12;
+/// The directions of the long axis of a curved label, in degrees from the
+/// page x axis.
+const CURVE_AXES: [f64; 11] = [
+    0.0, -15.0, 15.0, -30.0, 30.0, -45.0, 45.0, -60.0, 60.0, -75.0, 75.0,
+];
+/// The number of points across the area that set the shape of a curve.
+const CURVE_STATIONS: usize = 7;
+/// The largest bend of a curve, in degrees: the most that its direction
+/// changes from one end to the other.
+const CURVE_BEND: f64 = 40.0;
+
+/// The length of a line through `q` along the unit vector `axis`, in each
+/// direction, while the line stays in the area. `in_area` takes a page
+/// point.
+fn reach(q: [f64; 2], axis: [f64; 2], in_area: &dyn Fn([f64; 2]) -> bool, limit: f64) -> f64 {
+    let mut t = 0.0;
+    while t + 0.5 <= limit {
+        let next = t + 0.5;
+        if !in_area([q[0] + axis[0] * next, q[1] + axis[1] * next]) {
+            break;
+        }
+        t = next;
+    }
+    t
+}
+
+/// The parabola `o = c0 + c1 t + c2 t^2` nearest to the points `(t, o)`,
+/// by least squares. `None` if the points do not set one.
+fn parabola(pts: &[(f64, f64)]) -> Option<[f64; 3]> {
+    // The sums of t^k and of o t^k.
+    let mut st = [0.0f64; 5];
+    let mut so = [0.0f64; 3];
+    for &(t, o) in pts {
+        let mut tk = 1.0;
+        for (k, v) in st.iter_mut().enumerate() {
+            *v += tk;
+            if k < 3 {
+                so[k] += o * tk;
+            }
+            tk *= t;
+        }
+    }
+    let m = [
+        [st[0], st[1], st[2]],
+        [st[1], st[2], st[3]],
+        [st[2], st[3], st[4]],
+    ];
+    let det = |a: [[f64; 3]; 3]| {
+        a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+            - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+            + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
+    };
+    let d = det(m);
+    if d.abs() < 1e-12 {
+        return None;
+    }
+    let mut out = [0.0; 3];
+    for (k, v) in out.iter_mut().enumerate() {
+        let mut a = m;
+        for r in 0..3 {
+            a[r][k] = so[r];
+        }
+        *v = det(a) / d;
+    }
+    Some(out)
+}
+
+/// The lengths along a line, from its first point.
+fn lengths(pts: &[[f64; 2]]) -> Vec<f64> {
+    let mut acc = vec![0.0];
+    for w in pts.windows(2) {
+        let d = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
+        acc.push(acc[acc.len() - 1] + d);
+    }
+    acc
+}
+
+/// The direction of each segment of a line, in degrees from the page x
+/// axis, from -180 to 180.
+fn headings(pts: &[[f64; 2]]) -> Vec<f64> {
+    pts.windows(2)
+        .map(|w| libm::atan2(w[1][1] - w[0][1], w[1][0] - w[0][0]).to_degrees())
+        .collect()
+}
+
+/// The largest angle of a line to the page x axis, in degrees. A line
+/// that reads from left to right has angles below 90.
+pub fn max_tilt(pts: &[[f64; 2]]) -> f64 {
+    headings(pts).iter().fold(0.0, |m, a| m.max(a.abs()))
+}
+
+/// Candidates that bend along the middle of an area (`fit-state-label.ts`
+/// of the original program). Through each anchor, a line along one of
+/// `CURVE_AXES` crosses the area. The middle of the area across that line,
+/// at `CURVE_STATIONS` points, gives a smooth curve. The text follows the
+/// curve, centred on it, with letters spaced to fill part of it. The
+/// candidates are `Geometry::Path` with no river.
+#[allow(clippy::too_many_arguments)]
+fn curve_candidates(
+    anchors: &[(u32, [f64; 2])],
+    max_depth: u32,
+    in_area: &dyn Fn([f64; 2]) -> bool,
+    text: &str,
+    f: &FontMetrics,
+    sizes: &[f64],
+    halo: f64,
+    spread: (f64, f64),
+) -> Vec<Candidate> {
+    let n = text.chars().count();
+    let mut out: Vec<Candidate> = Vec::new();
+    for &(d, q) in anchors.iter().take(CURVE_ANCHORS) {
+        for deg in CURVE_AXES {
+            let a = deg.to_radians();
+            let axis = [libm::cos(a), libm::sin(a)];
+            let across = [-axis[1], axis[0]];
+            let back = reach(q, [-axis[0], -axis[1]], in_area, 200.0);
+            let ahead = reach(q, axis, in_area, 200.0);
+            let run = back + ahead;
+            if f.width(
+                text,
+                sizes[sizes.len() - 1],
+                spread.0 * sizes[sizes.len() - 1],
+            ) > FIT * run
+            {
+                continue;
+            }
+            // The middle of the area across the axis, at each station of the
+            // inner 90 % of the run.
+            let mut mids: Vec<[f64; 2]> = Vec::new();
+            for i in 0..CURVE_STATIONS {
+                let t = -back + run * (0.05 + 0.9 * i as f64 / (CURVE_STATIONS - 1) as f64);
+                let c = [q[0] + axis[0] * t, q[1] + axis[1] * t];
+                if !in_area(c) {
+                    mids.clear();
+                    break;
+                }
+                let up = reach(c, [-across[0], -across[1]], in_area, 60.0);
+                let down = reach(c, across, in_area, 60.0);
+                let m = (down - up) / 2.0;
+                mids.push([c[0] + across[0] * m, c[1] + across[1] * m]);
+            }
+            if mids.len() < CURVE_STATIONS {
+                continue;
+            }
+            // One smooth arc: the parabola nearest to the middles, in the
+            // frame of the axis, with its bend limited to `CURVE_BEND`.
+            let local: Vec<(f64, f64)> = mids
+                .iter()
+                .map(|m| {
+                    let d = [m[0] - q[0], m[1] - q[1]];
+                    (
+                        d[0] * axis[0] + d[1] * axis[1],
+                        d[0] * across[0] + d[1] * across[1],
+                    )
+                })
+                .collect();
+            let Some([c0, c1, mut c2]) = parabola(&local) else {
+                continue;
+            };
+            let (t0, t1) = (local[0].0, local[local.len() - 1].0);
+            let arc = |c2: f64| -> Vec<[f64; 2]> {
+                (0..=12)
+                    .map(|i| {
+                        let t = t0 + (t1 - t0) * f64::from(i) / 12.0;
+                        let o = c0 + c1 * t + c2 * t * t;
+                        [
+                            q[0] + axis[0] * t + across[0] * o,
+                            q[1] + axis[1] * t + across[1] * o,
+                        ]
+                    })
+                    .collect()
+            };
+            let bend_of = |pts: &[[f64; 2]]| {
+                let heads = headings(pts);
+                let (lo, hi) = heads
+                    .iter()
+                    .fold((f64::MAX, f64::MIN), |(lo, hi), &h| (lo.min(h), hi.max(h)));
+                hi - lo
+            };
+            let mut pts = arc(c2);
+            for _ in 0..8 {
+                if bend_of(&pts) <= CURVE_BEND {
+                    break;
+                }
+                c2 /= 2.0;
+                pts = arc(c2);
+            }
+            let bend = bend_of(&pts);
+            if pts[pts.len() - 1][0] < pts[0][0] {
+                pts.reverse();
+            }
+            if bend > CURVE_BEND || max_tilt(&pts) >= 90.0 {
+                continue;
+            }
+            let acc = lengths(&pts);
+            let len = acc[acc.len() - 1];
+            let fit = sizes
+                .iter()
+                .position(|&s| f.width(text, s, spread.0 * s) <= FIT * len)
+                .unwrap_or(sizes.len() - 1);
+            let size = sizes[fit];
+            let pad = pad_of(size, halo);
+            let w0 = f.width(text, size, 0.0);
+            let spacing = if n > 1 {
+                ((0.7 * len - w0) / (n - 1) as f64).clamp(spread.0 * size, spread.1 * size)
+            } else {
+                0.0
+            };
+            let w = w0 + spacing * n.saturating_sub(1) as f64;
+            if w > len {
+                continue;
+            }
+            // The boxes of the text, centred on the middle of the curve.
+            let (ch, dd) = (f.cap(size), 0.6 * f.descent(size));
+            let s0 = (len - w) / 2.0;
+            let parts = ((w / (1.2 * size)).ceil() as usize).max(1);
+            let boxes: Vec<Obb> = (0..parts)
+                .map(|i| {
+                    let p = point_at(&pts, &acc, s0 + w * i as f64 / parts as f64);
+                    let r = point_at(&pts, &acc, s0 + w * (i + 1) as f64 / parts as f64);
+                    let l = ((r[0] - p[0]).powi(2) + (r[1] - p[1]).powi(2))
+                        .sqrt()
+                        .max(1e-9);
+                    Obb {
+                        c: [(p[0] + r[0]) / 2.0, (p[1] + r[1]) / 2.0],
+                        u: [(r[0] - p[0]) / l, (r[1] - p[1]) / l],
+                        h: [l / 2.0 + pad, (ch + dd) / 2.0 + pad],
+                    }
+                })
+                .collect();
+            let total = boxes.len() * 15;
+            let outside = boxes
+                .iter()
+                .flat_map(box_points)
+                .filter(|&p| !in_area(p))
+                .count();
+            // Skip a curve that is almost the same as one before it.
+            let mid = point_at(&pts, &acc, len / 2.0);
+            if out.iter().any(|o| match &o.geometry {
+                Geometry::Path { points, .. } => {
+                    let oa = lengths(points);
+                    let om = point_at(points, &oa, oa[oa.len() - 1] / 2.0);
+                    (o.size - size).abs() < 1e-9
+                        && (om[0] - mid[0]).abs() < 1.0
+                        && (om[1] - mid[1]).abs() < 1.0
+                }
+                Geometry::Point { .. } => false,
+            }) {
+                continue;
+            }
+            out.push(Candidate {
+                geometry: Geometry::Path {
+                    points: pts,
+                    // A negative offset puts the baseline below the curve, so
+                    // that the glyphs are centred on it.
+                    offset: -(ch - dd) / 2.0,
+                },
+                boxes,
+                size,
+                spacing,
+                cost: 3.0 * outside as f64 / total as f64
+                    + 0.5 * (1.0 - f64::from(d) / f64::from(max_depth))
+                    + 0.2 * deg.abs() / 75.0
+                    + 0.1 * bend / CURVE_BEND
+                    + 2.0 * (1.0 - size / sizes[0]),
+                tier: 0,
+                river: None,
+            });
         }
     }
     out
@@ -1343,9 +1626,11 @@ pub fn place_with(
     // Keep only the turns that the config lets labels have.
     let max_angle = config.render.labels.max_angle;
     for r in &mut requests {
-        r.candidates.retain(|c| match c.geometry {
+        r.candidates.retain(|c| match &c.geometry {
             Geometry::Point { angle, .. } => f64::from(angle.unsigned_abs()) <= max_angle,
-            Geometry::Path { .. } => true,
+            // A curved area label has no river. A river label follows its
+            // river.
+            Geometry::Path { points, .. } => c.river.is_some() || max_tilt(points) <= max_angle,
         });
     }
 
@@ -1821,10 +2106,15 @@ mod tests {
             .find(|l| l.id == "label-region-cold")
             .unwrap_or_else(|| panic!("no label; unplaced: {:?}", labels.unplaced));
         let page = Page::new(&c, &c.variants[0]);
-        let Geometry::Point { x, y, .. } = l.geometry else {
-            panic!("the label is not at a point");
+        // The middle of the text: its point, or the middle of its curve.
+        let mid = match &l.geometry {
+            Geometry::Point { x, y, .. } => [*x, *y],
+            Geometry::Path { points, .. } => {
+                let acc = lengths(points);
+                point_at(points, &acc, acc[acc.len() - 1] / 2.0)
+            }
         };
-        let at = page.to_world([x, y]);
+        let at = page.to_world(mid);
         assert!(
             Shape::of(&c.pins.regions[1]).unwrap().contains(at),
             "{at:?}"
@@ -2011,6 +2301,51 @@ mod tests {
         let hidden = place(&w, &c, &v, &page);
         assert!(hidden.no_symbol.contains(&ostrey.id));
         assert!(!hidden.no_symbol.contains(&seat));
+    }
+
+    /// The curved state and region labels of a set of labels.
+    fn curved(l: &Labels) -> Vec<&Placed> {
+        l.placed
+            .iter()
+            .filter(|p| matches!(p.kind, Kind::State | Kind::Region))
+            .filter(|p| matches!(p.geometry, Geometry::Path { .. }))
+            .collect()
+    }
+
+    #[test]
+    fn area_labels_can_bend_along_their_area() {
+        let (w, c) = world(3, "pangea", json!({}));
+        let labels = check_no_overlap(&w, &c);
+        let bent = curved(&labels);
+        assert!(!bent.is_empty(), "no area label bends");
+        for l in bent {
+            let Geometry::Path { points, offset } = &l.geometry else {
+                unreachable!()
+            };
+            // The text reads from left to right, centred on the curve.
+            assert!(points[0][0] < points[points.len() - 1][0], "{}", l.id);
+            assert!(max_tilt(points) < 90.0, "{}", l.id);
+            assert!(*offset < 0.0, "{}", l.id);
+            assert!(l.spacing > 0.0, "{}", l.id);
+        }
+    }
+
+    #[test]
+    fn max_angle_limits_the_tilt_of_a_curve() {
+        let (w, mut c) = world(3, "pangea", json!({}));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        c.render.labels.max_angle = 20.0;
+        let some = place(&w, &c, &v, &page);
+        for l in curved(&some) {
+            let Geometry::Path { points, .. } = &l.geometry else {
+                unreachable!()
+            };
+            assert!(max_tilt(points) <= 20.0, "{}", l.id);
+        }
+        c.render.labels.max_angle = 0.0;
+        let level = place(&w, &c, &v, &page);
+        assert!(curved(&level).is_empty());
     }
 
     #[test]

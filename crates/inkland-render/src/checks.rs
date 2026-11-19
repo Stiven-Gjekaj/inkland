@@ -643,6 +643,31 @@ mod tests {
     }
 
     #[test]
+    fn curved_area_labels_are_text_with_no_stroke() {
+        use inkland_core::config::Config;
+        use inkland_core::world::World;
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 3, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 2500, "template": "pangea" },
+            "variants": [{ "name": "full", "page": { "w_mm": 167, "h_mm": 250, "margin_mm": 5 } }]
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
+        eprintln!(
+            "{}",
+            svg.lines()
+                .filter(|l| l.contains("label-state"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        assert!(svg.contains("<textPath href=\"#path-label-state-"));
+        let bad = failed(&svg);
+        assert!(!bad.contains(&"no_text_stroke"), "{bad:?}");
+        assert!(!bad.contains(&"all_text_is_text_elements"), "{bad:?}");
+    }
+
+    #[test]
     fn a_transform_makes_a_line_thinner() {
         let svg = |inner: &str| {
             format!(
