@@ -1538,7 +1538,8 @@ pub struct LabelRules {
     /// a generated name. Default `false`.
     pub check_generated: bool,
     /// `print-safe` mode: `true` draws a white box behind each label that
-    /// is not on a path, so that the lines under it do not cross the text.
+    /// does not follow a river or a line, so that the lines under it do not
+    /// cross the text. A curved area label gets boxes along its curve.
     /// `false`: no box. The text never has a stroke, because a PDF printer
     /// turns stroked text into a Type 3 font. `colour` mode draws the halo
     /// of its style. Default `true`.

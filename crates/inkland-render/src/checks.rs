@@ -662,6 +662,17 @@ mod tests {
                 .join("\n")
         );
         assert!(svg.contains("<textPath href=\"#path-label-state-"));
+        // In print-safe mode, a curved area label has a white box behind it.
+        let doc = roxmltree::Document::parse(&svg).unwrap();
+        let curved = doc
+            .descendants()
+            .filter(|n| n.has_tag_name("textPath"))
+            .filter_map(|n| n.parent()?.attribute("id"))
+            .filter(|id| id.starts_with("label-state-"))
+            .collect::<Vec<_>>();
+        for id in curved {
+            assert!(svg.contains(&format!("<path id=\"halo-{id}\"")), "{id}");
+        }
         let bad = failed(&svg);
         assert!(!bad.contains(&"no_text_stroke"), "{bad:?}");
         assert!(!bad.contains(&"all_text_is_text_elements"), "{bad:?}");
