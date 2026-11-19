@@ -629,6 +629,7 @@ Render options for all variants.
 | `font_sizes_pt` | [`FontSizes`](#fontsizes) |  |  | Font sizes, in points. |
 | `fonts` | [`Fonts`](#fonts) |  |  | Font families. The SVG names each family exactly as given here. The SVG never embeds a font. |
 | `fonts_allowed` | array of string |  | `["Caladea","Inter","IM Fell English","IM Fell English SC"]` | Font families that the SVG can use. A family in `fonts` that is not in this list is an error. |
+| `hand_drawn` | boolean |  |  | The hand-drawn look of `print-safe` mode. `true`: the lines have a small seeded wobble, rivers and coasts taper, and the dash patterns are less regular. No line becomes thinner than `min_line_width_pt`. `false`: the lines are exact. `colour` mode does not use it. |
 | `labels` | [`LabelRules`](#labelrules) |  |  | Rules for the labels of all variants. |
 | `layers` | array of [`LayerName`](#layername) |  | see the type | Layers to draw. In `print-safe` mode the layers are drawn in this order, from bottom to top. In `colour` mode the renderer draws them in the layer order of Azgaar's Fantasy Map Generator. A layer that is only for `colour` mode draws nothing in `print-safe` mode. |
 | `min_line_width_pt` | number |  | `0.5` | Smallest permitted line width, in points. |
