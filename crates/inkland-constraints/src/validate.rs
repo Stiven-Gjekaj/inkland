@@ -1450,35 +1450,43 @@ impl<'a> Validator<'a> {
         let regions = self.regions();
         let shaped = self.shaped_regions();
         let sea_level = f64::from(c.world.sea_level);
-        let range_at = |p: Point| -> [f64; 2] {
-            shaped.iter().filter(|(_, _, s)| s.contains(p)).fold(
-                [0.0, 100.0],
-                |[lo, hi], (_, r, _)| {
-                    let [rlo, rhi] = r.height_range();
-                    [lo.max(rlo), hi.min(rhi)]
-                },
-            )
+        // The range at a point: the regions that hold it set it. Each end
+        // keeps the name of what sets it.
+        let range_at = |p: Point| -> Span {
+            let inside: Vec<&RegionPin> = shaped
+                .iter()
+                .filter(|(_, _, s)| s.contains(p))
+                .map(|(_, r, _)| *r)
+                .collect();
+            let mut span = Span::open();
+            for r in inside {
+                span.limit(r.height_range(), &format!("the region {:?}", r.id));
+            }
+            span
         };
         for (i, river) in c.pins.rivers.iter().enumerate() {
             let anchors: Vec<&Anchor> = std::iter::once(&river.source)
                 .chain(river.through.iter())
                 .chain(std::iter::once(&river.mouth))
                 .collect();
-            let mut ranges: Vec<Option<[f64; 2]>> = Vec::new();
+            let mut spans: Vec<Option<Span>> = Vec::new();
             for a in &anchors {
-                ranges.push(match a {
+                spans.push(match a {
                     Anchor::Point(p) => Some(range_at(*p)),
                     Anchor::Place(r) => places.get(r.place.as_str()).map(|e| range_at(e.pin.at)),
-                    Anchor::Region(r) => {
-                        regions.get(r.region.as_str()).map(|reg| reg.height_range())
-                    }
+                    Anchor::Region(r) => regions.get(r.region.as_str()).map(|reg| {
+                        let mut span = Span::open();
+                        span.limit(reg.height_range(), &format!("the region {:?}", reg.id));
+                        span
+                    }),
                 });
             }
             // An unknown reference is a REF_UNKNOWN error already.
-            if ranges.iter().any(Option::is_none) {
+            if spans.iter().any(Option::is_none) {
                 continue;
             }
-            let ranges: Vec<[f64; 2]> = ranges.into_iter().flatten().collect();
+            let spans: Vec<Span> = spans.into_iter().flatten().collect();
+            let ranges: Vec<[f64; 2]> = spans.iter().map(|s| [s.lo, s.hi]).collect();
             // The mouth of a river into water is at most at sea level. A
             // marsh mouth keeps the range of the marsh.
             let last = ranges.len() - 1;
@@ -1512,8 +1520,9 @@ impl<'a> Validator<'a> {
                         ErrorCode::RiverNotDownhill,
                         path,
                         format!(
-                            "the river {:?} cannot flow downhill here: this point allows heights {lo} to {hi}, but the next point downstream needs a height of at least {lowest}",
-                            river.id
+                            "the river {:?} cannot flow downhill here: {}",
+                            river.id,
+                            spans[k].why(lowest)
                         ),
                     );
                     break;
@@ -1618,4 +1627,52 @@ fn esc(key: &str) -> String {
 
 fn round3(v: f64) -> f64 {
     (v * 1000.0).round() / 1000.0
+}
+
+/// A height range, with the name of what sets each end.
+struct Span {
+    lo: f64,
+    lo_by: String,
+    hi: f64,
+    hi_by: String,
+}
+
+impl Span {
+    /// The whole height scale.
+    fn open() -> Self {
+        Span {
+            lo: 0.0,
+            lo_by: "the bottom of the height scale".to_owned(),
+            hi: 100.0,
+            hi_by: "the top of the height scale".to_owned(),
+        }
+    }
+
+    /// Narrow the range to `[lo, hi]`, which `by` sets.
+    fn limit(&mut self, [lo, hi]: [f64; 2], by: &str) {
+        if lo > self.lo {
+            self.lo = lo;
+            self.lo_by = by.to_owned();
+        }
+        if hi < self.hi {
+            self.hi = hi;
+            self.hi_by = by.to_owned();
+        }
+    }
+
+    /// Why a point with this range cannot be above `lowest`, the height of
+    /// the next point downstream.
+    fn why(&self, lowest: f64) -> String {
+        if self.lo > self.hi {
+            format!(
+                "no height fits this point: {} gives at least {}, and {} gives at most {}",
+                self.lo_by, self.lo, self.hi_by, self.hi
+            )
+        } else {
+            format!(
+                "this point can be at most {} ({}), but the next point downstream needs a height above {}",
+                self.hi, self.hi_by, lowest
+            )
+        }
+    }
 }
