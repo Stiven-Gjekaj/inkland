@@ -364,10 +364,14 @@ fn write_relief(
 /// river `2 * 1.5 * width_km ^ (1 / 1.8)` map pixels wide (`getWidth` turned
 /// back into `getOffset`); `mm_per_px` gives the millimetres of one map
 /// pixel on the page (see `fmg::geom::Px`).
-pub fn river_width_pt(width_km: f64, mm_per_px: f64, min_pt: f64) -> f64 {
+/// `scale` is the factor of `decor::river_scale`; a factor above 1 can go
+/// past `RIVER_MAX_PT` by the same factor.
+pub fn river_width_pt(width_km: f64, mm_per_px: f64, min_pt: f64, scale: f64) -> f64 {
     let px = 3.0 * libm::pow(width_km.max(0.0), 1.0 / 1.8);
     let w = px * mm_per_px / crate::page::MM_PER_PT;
-    w.clamp(RIVER_MIN_PT, RIVER_MAX_PT).max(min_pt)
+    (w.clamp(RIVER_MIN_PT, RIVER_MAX_PT) * scale)
+        .clamp(RIVER_MIN_PT, RIVER_MAX_PT * scale.max(1.0))
+        .max(min_pt)
 }
 
 fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Variant, page: &Page) {
@@ -391,7 +395,14 @@ fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Varian
                 None => format!("river-{}", r.id),
             };
             let d = river_curve(page, &r.points);
-            (!d.is_empty()).then(|| (id, d, line_mm(river_width_pt(r.width, mm_per_px, min))))
+            let scale = crate::decor::river_scale(world, r, config.render.river_contrast);
+            (!d.is_empty()).then(|| {
+                (
+                    id,
+                    d,
+                    line_mm(river_width_pt(r.width, mm_per_px, min, scale)),
+                )
+            })
         })
         .collect();
     items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -843,9 +854,13 @@ mod tests {
                 r.id
             );
         }
-        assert!(river_width_pt(0.0, 0.1, 0.5) >= 0.5);
-        assert!(river_width_pt(1e9, 0.1, 0.5) <= RIVER_MAX_PT);
-        assert!(river_width_pt(4.0, 0.1, 0.5) > river_width_pt(1.0, 0.1, 0.5));
+        assert!(river_width_pt(0.0, 0.1, 0.5, 1.0) >= 0.5);
+        assert!(river_width_pt(1e9, 0.1, 0.5, 1.0) <= RIVER_MAX_PT);
+        assert!(river_width_pt(4.0, 0.1, 0.5, 1.0) > river_width_pt(1.0, 0.1, 0.5, 1.0));
+        // The scale makes a river wider or thinner, never below the minimum.
+        assert!(river_width_pt(4.0, 0.1, 0.5, 2.0) > river_width_pt(4.0, 0.1, 0.5, 1.0));
+        assert!(river_width_pt(1e9, 0.1, 0.5, 2.0) <= 2.0 * RIVER_MAX_PT);
+        assert!(river_width_pt(4.0, 0.1, 0.5, 0.01) >= 0.5);
     }
 
     #[test]

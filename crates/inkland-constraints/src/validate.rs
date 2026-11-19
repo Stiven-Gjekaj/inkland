@@ -832,6 +832,13 @@ impl<'a> Validator<'a> {
     /// The style overrides.
     fn render_style(&mut self) {
         let r = &self.c.render;
+        if !(0.0..=2.0).contains(&r.river_contrast) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/render/river_contrast",
+                "river_contrast must be 0 to 2",
+            );
+        }
         for (i, d) in r.depth_lines.iter().enumerate() {
             if !(d.is_finite() && *d > 0.0 && *d <= 100.0) {
                 self.err(

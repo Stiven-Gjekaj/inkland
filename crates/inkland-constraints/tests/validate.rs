@@ -226,6 +226,12 @@ fn shelf_on_land_or_of_zero_is_refused() {
 }
 
 #[test]
+fn river_contrast_above_2_is_refused() {
+    let c = with(json!({ "render": { "river_contrast": 3 } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/render/river_contrast");
+}
+
+#[test]
 fn depth_line_of_zero_is_refused() {
     let c = with(json!({ "render": { "depth_lines": [6, 0] } }));
     one(&c, ErrorCode::ValueOutOfRange, "/render/depth_lines/1");

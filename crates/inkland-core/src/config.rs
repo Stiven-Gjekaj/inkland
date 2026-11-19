@@ -1558,6 +1558,24 @@ pub struct Render {
         skip_serializing_if = "is_default_depth_lines"
     )]
     pub depth_lines: Vec<f64>,
+    /// How strongly the width of a river follows its water, in both render
+    /// modes. 0 to 2. 0: the widths of Azgaar's Fantasy Map Generator. A
+    /// larger value makes the rivers with the most water wider and the
+    /// small streams thinner. Default 1.
+    #[serde(
+        default = "default_river_contrast",
+        skip_serializing_if = "is_default_river_contrast"
+    )]
+    #[schemars(range(min = 0.0, max = 2.0))]
+    pub river_contrast: f64,
+}
+
+fn default_river_contrast() -> f64 {
+    1.0
+}
+
+fn is_default_river_contrast(v: &f64) -> bool {
+    *v == default_river_contrast()
 }
 
 fn default_depth_lines() -> Vec<f64> {
@@ -1608,6 +1626,7 @@ impl Default for Render {
             labels: LabelRules::default(),
             relief: ReliefOptions::default(),
             depth_lines: default_depth_lines(),
+            river_contrast: default_river_contrast(),
         }
     }
 }

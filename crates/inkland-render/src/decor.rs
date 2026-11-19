@@ -47,6 +47,23 @@ pub fn chaikin(points: &[[f64; 2]], closed: bool, rounds: usize) -> Vec<[f64; 2]
     pts
 }
 
+/// The width factor of a river for `render.river_contrast`: with the
+/// contrast `k`, a river with the share `r` of the water of the largest
+/// river gets `(1 + k) * r ^ (0.6 k)`. The largest river is `1 + k` times
+/// as wide as before, and a stream with a hundredth of its water is about
+/// a seventh as wide (at `k = 1`). `k = 0` gives 1.
+pub fn river_scale(world: &World, river: &inkland_core::rivers::River, contrast: f64) -> f64 {
+    if !(contrast.is_finite() && contrast > 0.0) {
+        return 1.0;
+    }
+    let max = world.rivers.iter().map(|r| r.flux).fold(0.0f64, f64::max);
+    if max <= 0.0 {
+        return 1.0;
+    }
+    let share = (river.flux / max).clamp(1e-6, 1.0);
+    (1.0 + contrast) * libm::pow(share, 0.6 * contrast)
+}
+
 /// `true` for a cell of the first grid in the ocean at least `depth` below
 /// sea level, on the height scale.
 pub fn deep(world: &World, c: usize, depth: f64) -> bool {
@@ -341,6 +358,32 @@ mod tests {
             })
             .is_empty()
         );
+    }
+
+    #[test]
+    fn river_contrast_widens_the_main_river_and_thins_the_streams() {
+        use inkland_core::config::Config;
+        let c: Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 6, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": "pangea" }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        assert!(w.rivers.len() > 3);
+        let main = w
+            .rivers
+            .iter()
+            .max_by(|a, b| a.flux.total_cmp(&b.flux))
+            .unwrap();
+        let small = w
+            .rivers
+            .iter()
+            .min_by(|a, b| a.flux.total_cmp(&b.flux))
+            .unwrap();
+        assert_eq!(river_scale(&w, main, 1.0), 2.0);
+        assert!(river_scale(&w, small, 1.0) < 1.0);
+        assert!(river_scale(&w, small, 2.0) < river_scale(&w, small, 1.0));
+        assert_eq!(river_scale(&w, small, 0.0), 1.0);
     }
 
     #[test]

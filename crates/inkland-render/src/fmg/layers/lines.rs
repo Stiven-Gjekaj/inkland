@@ -173,7 +173,8 @@ pub fn offset(flux: f64, index: usize, width_factor: f64, start: f64) -> f64 {
 }
 
 /// The outline of a river with its width (`getRiverPath`).
-pub fn river_path(points: &[([f64; 2], f64)], width_factor: f64, start: f64) -> String {
+/// `scale` multiplies the width (`render.river_contrast`).
+pub fn river_path(points: &[([f64; 2], f64)], width_factor: f64, start: f64, scale: f64) -> String {
     let m = points.len();
     let mut left = Vec::with_capacity(m);
     let mut right = Vec::with_capacity(m);
@@ -183,7 +184,7 @@ pub fn river_path(points: &[([f64; 2], f64)], width_factor: f64, start: f64) -> 
         let ([x1, y1], f) = points[i];
         let [x2, y2] = points[(i + 1).min(m - 1)].0;
         flux = flux.max(f);
-        let off = offset(flux, i, width_factor, start);
+        let off = offset(flux, i, width_factor, start) * scale;
         let angle = libm::atan2(y0 - y2, x0 - x2);
         let (so, co) = (libm::sin(angle) * off, libm::cos(angle) * off);
         left.push([x1 - so, y1 + co]);
@@ -264,7 +265,12 @@ pub fn rivers(s: &mut String, ctx: &Ctx) {
         items.push((
             id,
             river_group(ctx, &r.cells),
-            river_path(&bent, r.width_factor, r.source_width),
+            river_path(
+                &bent,
+                r.width_factor,
+                r.source_width,
+                crate::decor::river_scale(w, r, cfg.render.river_contrast),
+            ),
         ));
     }
     items.sort_by(|a, b| a.0.cmp(&b.0));
