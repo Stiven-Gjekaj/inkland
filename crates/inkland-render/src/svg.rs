@@ -82,8 +82,8 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
     for layer in &config.render.layers {
         use inkland_core::config::LayerName;
         let parts: &[&str] = match layer {
-            LayerName::Coast => &["water-lines", "coast"],
-            LayerName::Ocean => &["water-lines"],
+            LayerName::Coast => &["depth-lines", "water-lines", "coast"],
+            LayerName::Ocean => &["depth-lines", "water-lines"],
             LayerName::Coastline => &["coast"],
             LayerName::Regions | LayerName::Borders => &["borders"],
             LayerName::Roads | LayerName::Routes => &["roads"],
@@ -103,6 +103,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
                 continue;
             }
             match *part {
+                "depth-lines" => write_depth_lines(&mut s, world, config, &page, min),
                 "water-lines" => write_water_lines(&mut s, world, &page, min, hand),
                 "coast" => write_coast(&mut s, world, config, &page, coast_w, hand),
                 "relief" => write_relief(&mut s, world, config, &page, min, &labels),
@@ -239,6 +240,38 @@ fn write_labels(s: &mut String, labels: &crate::labels::Labels, halo: bool) {
     s.push_str("</g>\n");
 }
 
+/// Depth lines: thin dashed lines around the deep ocean, one for each depth
+/// of `render.depth_lines`.
+fn write_depth_lines(s: &mut String, world: &World, config: &Config, page: &Page, min: f64) {
+    let depths = &config.render.depth_lines;
+    if depths.is_empty() {
+        return;
+    }
+    let width = 0.35f64.max(min);
+    let _ = writeln!(
+        s,
+        "<g id=\"depth-lines\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-dasharray=\"{} {}\" stroke-linejoin=\"round\">",
+        n(line_mm(width)),
+        n(line_mm(width * 4.0)),
+        n(line_mm(width * 3.0))
+    );
+    for (k, &depth) in depths.iter().enumerate() {
+        for (i, line) in crate::decor::depth_lines(world, depth).iter().enumerate() {
+            let pts: Vec<[f64; 2]> = line
+                .iter()
+                .map(|&v| world.base.grid.vertices[v as usize])
+                .collect();
+            let closed = line.len() > 2 && line.first() == line.last();
+            let smooth = crate::decor::chaikin(&pts, closed, 3);
+            let d = path_data(page, &smooth, closed);
+            if !d.is_empty() {
+                let _ = writeln!(s, "<path id=\"depth-line-{}-{}\" d=\"{d}\"/>", k + 1, i + 1);
+            }
+        }
+    }
+    s.push_str("</g>\n");
+}
+
 /// Water lines: thin lines in the water along each coast, further apart
 /// out to sea (`water::lines`).
 fn write_water_lines(s: &mut String, world: &World, page: &Page, min: f64, hand: Option<&Hand>) {
@@ -330,14 +363,14 @@ fn write_relief(
     // A symbol under a label is left out, so that the text stays clear.
     let symbols: Vec<_> = crate::decor::relief(world, page, config.seed, &config.render.relief)
         .into_iter()
-        .filter(|(_, p)| !labels.covers(*p, 1.0))
+        .filter(|(_, p, _)| !labels.covers(*p, 1.0))
         .collect();
     let _ = writeln!(
         s,
         "<g id=\"relief\" clip-path=\"url(#clip-map)\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">",
         n(line_mm(0.5f64.max(min)))
     );
-    for (sym, [x, y]) in symbols {
+    for (sym, [x, y], k) in symbols {
         let fill = match sym {
             Symbol::Mountain | Symbol::Tree => PAPER,
             Symbol::Dune => INK,
@@ -351,7 +384,7 @@ fn write_relief(
         let _ = writeln!(
             s,
             "<path d=\"{}\" fill=\"{fill}\"{stroke}/>",
-            sym.path(x, y)
+            sym.path_scaled(x, y, k)
         );
     }
     s.push_str("</g>\n");
@@ -362,10 +395,14 @@ fn write_relief(
 /// river `2 * 1.5 * width_km ^ (1 / 1.8)` map pixels wide (`getWidth` turned
 /// back into `getOffset`); `mm_per_px` gives the millimetres of one map
 /// pixel on the page (see `fmg::geom::Px`).
-pub fn river_width_pt(width_km: f64, mm_per_px: f64, min_pt: f64) -> f64 {
+/// `scale` is the factor of `decor::river_scale`; a factor above 1 can go
+/// past `RIVER_MAX_PT` by the same factor.
+pub fn river_width_pt(width_km: f64, mm_per_px: f64, min_pt: f64, scale: f64) -> f64 {
     let px = 3.0 * libm::pow(width_km.max(0.0), 1.0 / 1.8);
     let w = px * mm_per_px / crate::page::MM_PER_PT;
-    w.clamp(RIVER_MIN_PT, RIVER_MAX_PT).max(min_pt)
+    (w.clamp(RIVER_MIN_PT, RIVER_MAX_PT) * scale)
+        .clamp(RIVER_MIN_PT, RIVER_MAX_PT * scale.max(1.0))
+        .max(min_pt)
 }
 
 fn write_rivers(
@@ -395,7 +432,8 @@ fn write_rivers(
                 Some(k) => format!("river-{}", config.pins.rivers[k].id),
                 None => format!("river-{}", r.id),
             };
-            let mouth = river_width_pt(r.width, mm_per_px, min);
+            let scale = crate::decor::river_scale(world, r, config.render.river_contrast);
+            let mouth = river_width_pt(r.width, mm_per_px, min, scale);
             let pieces = match hand {
                 Some(h) => river_pieces(page, h, &id, &r.points, mouth, min),
                 None => {
@@ -900,6 +938,25 @@ mod tests {
     }
 
     #[test]
+    fn depth_lines_go_around_the_deep_ocean_and_can_be_turned_off() {
+        let (s, w) = svg();
+        assert!(s.contains("<g id=\"depth-lines\""));
+        assert!(s.contains("id=\"depth-line-1-1\""));
+        assert!(s.contains("id=\"depth-line-2-1\""));
+        // A deeper line goes around less ocean.
+        let cells = |d: f64| {
+            (0..w.base.grid.len())
+                .filter(|&c| crate::decor::deep(&w, c, d))
+                .count()
+        };
+        assert!(cells(12.0) < cells(6.0) && cells(12.0) > 0);
+        let mut c = config();
+        c.render.depth_lines = Vec::new();
+        let none = render(&w, &c, &c.variants[0]).svg;
+        assert!(!none.contains("depth-line"));
+    }
+
+    #[test]
     fn output_has_no_grey_and_no_effects() {
         let (s, _) = svg();
         for bad in [
@@ -952,9 +1009,13 @@ mod tests {
                 r.id
             );
         }
-        assert!(river_width_pt(0.0, 0.1, 0.5) >= 0.5);
-        assert!(river_width_pt(1e9, 0.1, 0.5) <= RIVER_MAX_PT);
-        assert!(river_width_pt(4.0, 0.1, 0.5) > river_width_pt(1.0, 0.1, 0.5));
+        assert!(river_width_pt(0.0, 0.1, 0.5, 1.0) >= 0.5);
+        assert!(river_width_pt(1e9, 0.1, 0.5, 1.0) <= RIVER_MAX_PT);
+        assert!(river_width_pt(4.0, 0.1, 0.5, 1.0) > river_width_pt(1.0, 0.1, 0.5, 1.0));
+        // The scale makes a river wider or thinner, never below the minimum.
+        assert!(river_width_pt(4.0, 0.1, 0.5, 2.0) > river_width_pt(4.0, 0.1, 0.5, 1.0));
+        assert!(river_width_pt(1e9, 0.1, 0.5, 2.0) <= 2.0 * RIVER_MAX_PT);
+        assert!(river_width_pt(4.0, 0.1, 0.5, 0.01) >= 0.5);
     }
 
     #[test]

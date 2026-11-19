@@ -343,6 +343,7 @@ pub const REGION_KINDS: &[&str] = &[
     "marsh",
     "forest",
     "desert",
+    "land",
 ];
 
 /// A button of the Tools tab.

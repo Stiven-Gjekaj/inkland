@@ -9,6 +9,7 @@ pub use inkland_core::world::World;
 pub use inkland_edit::{Command, History, PinList, Script};
 pub use inkland_io::azgaar::{Import, ImportSummary};
 pub use inkland_io::config::{Override, config_hash, parse_config};
+pub use inkland_io::heights::load_template_image;
 pub use inkland_io::report::DryRunReport;
 
 use inkland_io::report::{Check, PinCounts, Tool};
@@ -880,6 +881,27 @@ mod tests {
         assert_eq!(pins["points"][0]["land"], true);
         assert_eq!(pins["regions"][0]["in_range"], true);
         assert!(pins["regions"][0]["cells"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn report_holds_an_island_over_a_sea_and_a_rough_sea_in_range() {
+        let c = config(json!({
+            "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 3000, "template": "pangea" },
+            "pins": {
+                "regions": [
+                    { "id": "bay", "kind": "sea", "box": [0, 0, 120, 200], "roughness": 8 },
+                    { "id": "isle", "kind": "hills", "height": [22, 28],
+                      "circle": { "at": [50, 100], "r": 10 }, "priority": 1 }
+                ]
+            }
+        }));
+        let out = generate(&c, None).unwrap();
+        let regions = &out.variants[0].report["pins"]["regions"];
+        for r in regions.as_array().unwrap() {
+            assert_eq!(r["in_range"], true, "{r}");
+            assert!(r["cells"].as_u64().unwrap() > 0, "{r}");
+        }
     }
 
     #[test]

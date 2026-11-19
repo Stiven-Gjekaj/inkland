@@ -478,8 +478,24 @@ mod tests {
         let w2 = World::build(e.config()).unwrap();
         assert_eq!(w2.zones[0].name, "The Red Plague");
         assert_eq!(w2.economy.markets.len(), w.economy.markets.len() - 1);
-        let s = w2.society.states.iter().find(|s| s.id == armed.id).unwrap();
-        assert_eq!(s.military.len(), armed.military.len() + 1);
+        // The other edits can change the military too, so compare with the
+        // same edits without the split.
+        let mut other = Editor::new(c.clone());
+        for (list, id, op, text) in actions.iter().filter(|a| a.2 != "split") {
+            let cmd = command(other.config(), &w, list, id, op, text).unwrap();
+            other.run(cmd).unwrap();
+        }
+        let w3 = World::build(other.config()).unwrap();
+        let count = |w: &World| {
+            w.society
+                .states
+                .iter()
+                .find(|s| s.id == armed.id)
+                .unwrap()
+                .military
+                .len()
+        };
+        assert_eq!(count(&w2), count(&w3) + 1);
         assert_eq!(w2.user_notes[0].name, "The Old Road");
         // The new note can go again.
         let cmd = command(e.config(), &w2, "notes", "custom:1", "remove", "").unwrap();

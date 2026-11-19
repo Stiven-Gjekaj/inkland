@@ -508,6 +508,7 @@ fn burgs(
             at,
             name,
             port: truthy(b.get("port")),
+            island: false,
             capital_of: if capital { state } else { None },
             custom_kind: None,
             coa: None,

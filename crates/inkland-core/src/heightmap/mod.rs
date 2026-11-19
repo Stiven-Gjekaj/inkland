@@ -950,6 +950,128 @@ pub fn apply_brushes(grid: &Grid, heights: &mut [f64], brushes: &[crate::config:
     }
 }
 
+/// Force land or sea in a band along each frame edge of `world.edges`. The
+/// inner side of each band follows fractal noise from `seed`, so it is a
+/// natural coast. Where two bands meet, the band that the cell is deeper in
+/// rules. The result is a whole number from 0 to 100.
+pub fn apply_edges(
+    grid: &Grid,
+    heights: &mut [f64],
+    config: &crate::config::Config,
+    sea_level: f64,
+    seed: u64,
+) {
+    use crate::config::{EdgeKind, YAxis};
+    let edges = &config.world.edges;
+    if edges.is_empty() {
+        return;
+    }
+    let (w, h) = (config.frame.width, config.frame.height);
+    let width = edges.width.unwrap_or(w.min(h) / 10.0);
+    if !(width.is_finite() && width > 0.0) {
+        return;
+    }
+    // The low y edge is north when the y axis points south.
+    let (low_y, high_y) = match config.frame.y_axis {
+        YAxis::South => (edges.north, edges.south),
+        YAxis::North => (edges.south, edges.north),
+    };
+    let noise = crate::noise::Fractal::new(seed, 4, 2.0 * width);
+    for (c, height) in heights.iter_mut().enumerate() {
+        let p = grid.points[c];
+        let band = width * (1.0 + 0.5 * (2.0 * noise.at(p)).clamp(-1.0, 1.0));
+        let sides = [
+            (edges.west, p[0]),
+            (edges.east, w - p[0]),
+            (low_y, p[1]),
+            (high_y, h - p[1]),
+        ];
+        // The side with the smallest part of its band between it and the cell.
+        let Some((kind, t)) = sides
+            .iter()
+            .filter_map(|&(kind, d)| kind.map(|k| (k, d / band)))
+            .filter(|&(_, t)| t < 1.0)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+        else {
+            continue;
+        };
+        *height = match kind {
+            // Deeper toward the edge: half of sea level at the edge.
+            EdgeKind::Sea => {
+                let shallow = sea_level - 1.0;
+                height.min(shallow - shallow * 0.5 * (1.0 - t.max(0.0)))
+            }
+            // Water becomes low land, as with `fill_land`.
+            EdgeKind::Land if *height < sea_level => {
+                sea_level + 1.0 + 2.0 * (sea_level - *height) / sea_level
+            }
+            EdgeKind::Land => *height,
+        }
+        .trunc()
+        .clamp(0.0, 100.0);
+    }
+}
+
+#[cfg(test)]
+mod edge_tests {
+    use crate::config::Config;
+    use serde_json::json;
+
+    fn world(edges: serde_json::Value, template: &str) -> crate::world::World {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 6, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": template, "edges": edges }
+        }))
+        .unwrap();
+        crate::world::World::build(&c).unwrap()
+    }
+
+    #[test]
+    fn a_sea_edge_makes_water_along_the_edge() {
+        let w = world(
+            json!({ "north": "sea", "west": "sea", "width": 30 }),
+            "pangea",
+        );
+        let near: Vec<usize> = (0..w.grid.len())
+            .filter(|&c| w.grid.points[c][1] < 12.0 || w.grid.points[c][0] < 12.0)
+            .collect();
+        assert!(!near.is_empty());
+        assert!(near.iter().all(|&c| w.heights[c] < 20.0));
+    }
+
+    #[test]
+    fn a_land_edge_makes_land_along_the_edge() {
+        let w = world(json!({ "south": "land", "east": "land" }), "atoll");
+        let near: Vec<usize> = (0..w.grid.len())
+            .filter(|&c| w.grid.points[c][1] > 192.0 || w.grid.points[c][0] > 292.0)
+            .collect();
+        assert!(!near.is_empty());
+        assert!(near.iter().all(|&c| w.heights[c] >= 20.0));
+    }
+
+    #[test]
+    fn the_inner_side_of_a_band_is_not_straight() {
+        let w = world(json!({ "north": "sea", "width": 40 }), "pangea");
+        // The deepest water cell of each column strip lies at different y.
+        let mut coast = Vec::new();
+        for strip in 0..10 {
+            let x0 = 30.0 * f64::from(strip);
+            let y = (0..w.grid.len())
+                .filter(|&c| {
+                    let [x, y] = w.grid.points[c];
+                    x >= x0 && x < x0 + 30.0 && y < 80.0 && w.heights[c] < 20.0
+                })
+                .map(|c| w.grid.points[c][1])
+                .fold(0.0f64, f64::max);
+            coast.push(y);
+        }
+        let (lo, hi) = coast.iter().fold((f64::INFINITY, 0.0f64), |(lo, hi), &y| {
+            (lo.min(y), hi.max(y))
+        });
+        assert!(hi - lo > 8.0, "{coast:?}");
+    }
+}
+
 #[cfg(test)]
 mod brush_tests {
     use super::*;

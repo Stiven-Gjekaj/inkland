@@ -1157,7 +1157,14 @@ impl Controller {
     fn open_path(self: &Rc<Self>, path: &Path) {
         let config = std::fs::read_to_string(path)
             .map_err(|e| format!("cannot read {}: {e}", path.display()))
-            .and_then(|text| inkland::parse_config(&text, &[]).map_err(|e| error_text(&e)));
+            .and_then(|text| inkland::parse_config(&text, &[]).map_err(|e| error_text(&e)))
+            .and_then(|mut c| {
+                // The image of an `image` template is relative to the file.
+                let folder = path.parent().unwrap_or(Path::new(""));
+                inkland::load_template_image(&mut c, |image| std::fs::read(folder.join(image)))
+                    .map(|()| c)
+                    .map_err(|e| error_text(&e))
+            });
         match config {
             Ok(c) => {
                 self.load(c, Some(path.to_owned()));

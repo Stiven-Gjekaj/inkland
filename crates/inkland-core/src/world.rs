@@ -122,7 +122,7 @@ pub fn template_steps(config: &Config) -> Result<Vec<crate::heightmap::Step>, St
     match &config.world.template {
         Template::Named(name) => parse_steps(templates::steps(*name).lines()),
         Template::Steps { steps } => parse_steps(steps.iter().map(String::as_str)),
-        Template::Raster { .. } => Ok(Vec::new()),
+        Template::Raster { .. } | Template::Image { .. } => Ok(Vec::new()),
     }
 }
 
@@ -171,7 +171,14 @@ impl World {
             .map_err(|e| Error::new(ErrorCode::TemplateInvalid, "/world/template", e))?;
         let mut height_rng = Rand::new(tree.part_rng(Layer::Terrain, "heightmap"));
         let mut hm = Heightmap::new(&base_grid, sea_level);
-        if let Template::Raster { raster } = &config.world.template {
+        if let Template::Image { heights: None, .. } = &config.world.template {
+            return Err(Error::new(
+                ErrorCode::TemplateInvalid,
+                "/world/template/image",
+                "the image of the template is not read; the program that reads the config file reads it",
+            ));
+        }
+        if let Some(raster) = config.world.template.raster() {
             let size = u64::from(raster.cols) * u64::from(raster.rows);
             if raster.cols < 2 || raster.rows < 2 || raster.values.len() as u64 != size {
                 return Err(Error::new(
@@ -185,6 +192,13 @@ impl World {
         hm.run(&steps, &mut height_rng);
         let mut base_heights = hm.heights;
         crate::heightmap::apply_brushes(&base_grid, &mut base_heights, &config.world.brushes);
+        crate::heightmap::apply_edges(
+            &base_grid,
+            &mut base_heights,
+            config,
+            sea_level,
+            crate::noise::Fractal::seed_of(tree.part_seed(Layer::Terrain, "edges")),
+        );
         if config.world.fill_land {
             // Water becomes low land: a deeper sea gives a little higher
             // land, so the land keeps some form. The sea regions below
@@ -194,7 +208,10 @@ impl World {
             }
         }
 
-        let regions = FitRegion::all(&pins.regions, sea_level);
+        let spacing = (w * h / base_grid.len().max(1) as f64).sqrt();
+        let areas = crate::character::Area::all(config, spacing);
+        crate::character::apply_heights(&base_grid, &mut base_heights, &areas, sea_level);
+        let regions = FitRegion::of_config(config);
         apply_regions(&base_grid, &mut base_heights, &regions, sea_level);
         let points: Vec<FitPoint> = pins
             .points
@@ -206,7 +223,8 @@ impl World {
                 cell: base_pin_cells[index],
             })
             .collect();
-        apply_points(&base_grid, &mut base_heights, &points, &regions, sea_level)?;
+        let base_channels =
+            apply_points(&base_grid, &mut base_heights, &points, &regions, sea_level)?;
 
         // Lakes in deep depressions, then lakes that break into the ocean
         // (FMG `addDeepDepressionLakes` and `openNearSeaLakes`).
@@ -217,7 +235,7 @@ impl World {
         }
         let mut keep_lake = vec![false; base_grid.len()];
         for c in 0..base_grid.len() {
-            for r in regions.iter().filter(|r| r.contains(base_grid.points[c])) {
+            for r in crate::fit::ruling_at(&regions, base_grid.points[c]) {
                 if r.pin.kind.is_water() {
                     keep_lake[c] |= r.pin.kind == RegionKind::Lake;
                 } else {
@@ -227,7 +245,7 @@ impl World {
         }
         // The heights of a raster (for example an imported map) hold their
         // lakes already.
-        if !matches!(config.world.template, Template::Raster { .. }) {
+        if !config.world.template.is_raster() {
             crate::lakes::add_depression_lakes(
                 &base_grid,
                 &mut base_heights,
@@ -299,7 +317,18 @@ impl World {
 
         // The pins hold on the second grid too: a new cell in a region gets
         // a height in its range, and each port keeps water next to it.
-        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level);
+        // The port channels of the first grid stay water on the second.
+        let mut channels: Vec<usize> = (0..grid.len())
+            .filter(|&c| base_channels.contains(&base_cell[c]) && heights[c] < sea_level)
+            .collect();
+        crate::fit::clamp_regions(
+            &grid,
+            &mut heights,
+            &regions,
+            sea_level,
+            &pin_cells,
+            &channels,
+        );
         let points: Vec<FitPoint> = pins
             .points
             .iter()
@@ -310,7 +339,13 @@ impl World {
                 cell: pin_cells[index],
             })
             .collect();
-        apply_points(&grid, &mut heights, &points, &regions, sea_level)?;
+        channels.extend(apply_points(
+            &grid,
+            &mut heights,
+            &points,
+            &regions,
+            sea_level,
+        )?);
 
         let plan = crate::courses::Plan {
             grid: &grid,
@@ -325,11 +360,7 @@ impl World {
         // Each pinned road keeps a land path between its stops. The cells
         // of the water regions stay water.
         let keep_water: Vec<bool> = (0..grid.len())
-            .map(|c| {
-                regions
-                    .iter()
-                    .any(|r| r.pin.kind.is_water() && r.contains(grid.points[c]))
-            })
+            .map(|c| crate::fit::forced_water(&regions, grid.points[c]))
             .collect();
         crate::roads::keep_corridors(
             &grid,
@@ -386,7 +417,14 @@ impl World {
         }
         let mut heights = flow.heights;
         // Pins win: the new heights stay in the ranges of the regions.
-        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level);
+        crate::fit::clamp_regions(
+            &grid,
+            &mut heights,
+            &regions,
+            sea_level,
+            &pin_cells,
+            &channels,
+        );
         let mut features = features;
         features.set_lake_heights(&heights);
         let mut river_cells = vec![false; grid.len()];
@@ -395,7 +433,7 @@ impl World {
                 river_cells[c] = true;
             }
         }
-        let biomes = crate::biomes::biomes(
+        let mut biomes = crate::biomes::biomes(
             &grid,
             &heights,
             sea_level,
@@ -404,6 +442,15 @@ impl World {
             &river_cells,
             &drainage.flux,
             &regions,
+        );
+        crate::character::apply_biomes(
+            &grid,
+            &heights,
+            &mut biomes,
+            &temperature,
+            &areas,
+            &regions,
+            sea_level,
         );
         let groups = crate::geonames::groups(&grid, &features, &lakes, base_grid_len, sea_level);
         let mut society = crate::society::build(&crate::society::Input {
@@ -755,6 +802,38 @@ mod tests {
     }
 
     #[test]
+    fn an_image_template_gives_the_same_world_as_its_raster() {
+        let raster = crate::config::Raster {
+            cols: 4,
+            rows: 3,
+            values: vec![5, 30, 40, 50, 5, 35, 45, 60, 5, 30, 40, 50],
+        };
+        let mut c = config(9, "continents", 2000);
+        c.world.template = Template::Raster {
+            raster: raster.clone(),
+        };
+        let from_raster = World::build(&c).unwrap();
+        c.world.template = Template::Image {
+            image: "heights.png".into(),
+            heights: Some(raster),
+        };
+        let from_image = World::build(&c).unwrap();
+        assert_eq!(from_image.heights, from_raster.heights);
+    }
+
+    #[test]
+    fn an_image_template_that_is_not_read_is_refused() {
+        let mut c = config(9, "continents", 2000);
+        c.world.template = Template::Image {
+            image: "heights.png".into(),
+            heights: None,
+        };
+        let e = World::build(&c).unwrap_err();
+        assert_eq!(e.code, ErrorCode::TemplateInvalid);
+        assert_eq!(e.path, "/world/template/image");
+    }
+
+    #[test]
     fn a_raster_with_the_wrong_size_is_refused() {
         let c: Config = serde_json::from_value(json!({
             "version": 1, "seed": 9,
@@ -778,8 +857,7 @@ mod tests {
 #[cfg(test)]
 mod pin_tests {
     use super::*;
-    use crate::fit::effective_range;
-    use crate::geom::Shape;
+    use crate::fit::{FitRegion, effective_range};
     use proptest::prelude::*;
     use serde_json::json;
 
@@ -839,8 +917,8 @@ mod pin_tests {
             let w = World::build(&c).map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
             let sea = w.sea_level;
 
-            for r in &c.pins.regions {
-                let shape = Shape::of(r).unwrap();
+            let fit = FitRegion::of_config(&c);
+            for (r, shape) in c.pins.regions.iter().zip(&fit) {
                 let [lo, hi] = effective_range(r, sea);
                 for cell in 0..w.grid.len() {
                     if !shape.contains(w.grid.points[cell]) {
@@ -888,8 +966,8 @@ mod pin_tests {
                 assert_eq!(w.grid.find_cell(p.at[0], p.at[1]), cell, "{lattice}");
                 assert!(w.features.is_land(cell), "{lattice}: {} is not land", p.id);
             }
-            for r in &c.pins.regions {
-                let shape = Shape::of(r).unwrap();
+            let fit = FitRegion::of_config(&c);
+            for (r, shape) in c.pins.regions.iter().zip(&fit) {
                 let [lo, hi] = effective_range(r, w.sea_level);
                 for cell in (0..w.grid.len()).filter(|&k| shape.contains(w.grid.points[k])) {
                     let h = w.heights[cell];

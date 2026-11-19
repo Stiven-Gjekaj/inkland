@@ -189,6 +189,26 @@ pub struct World {
     #[serde(default = "default_growth_rate")]
     #[schemars(range(min = 0.1, max = 2.0))]
     pub growth_rate: f64,
+    /// How much the state borders wander. 0 to 1. Fractal noise from the
+    /// seed adds a cost to the growth of the states, so that a border does
+    /// not follow a straight line. 0: the costs of Azgaar's Fantasy Map
+    /// Generator. Default 0.5.
+    #[serde(
+        default = "default_border_noise",
+        skip_serializing_if = "is_default_border_noise"
+    )]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub border_noise: f64,
+    /// How much the state borders follow the terrain. 0 to 1. A river cell
+    /// and a ridge cell cost more to enter, so a state stops at a river or
+    /// at a ridge, and the border goes along it. 0: the costs of Azgaar's
+    /// Fantasy Map Generator. Default 0.5.
+    #[serde(
+        default = "default_border_terrain",
+        skip_serializing_if = "is_default_border_terrain"
+    )]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub border_terrain: f64,
     /// Number of states. A point pin with `capital_of` is the capital of
     /// its state; generation adds the other capitals as cities. 0 and no
     /// `capital_of`: the world has no states and no capitals. With
@@ -224,6 +244,10 @@ pub struct World {
     /// before the pins.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub brushes: Vec<Brush>,
+    /// Land or sea along each frame edge, applied after the brushes and
+    /// before the pins. Default: the template decides.
+    #[serde(default, skip_serializing_if = "FrameEdges::is_empty")]
+    pub edges: FrameEdges,
     /// Changes to the goods catalogue of Azgaar's Fantasy Map Generator, in
     /// order. Empty: the default catalogue of 71 goods.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -751,6 +775,48 @@ pub struct Brush {
     pub delta: f64,
 }
 
+/// Land or sea along the frame edges. The compass sides follow the axes of
+/// the frame.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameEdges {
+    /// The terrain along the north edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub north: Option<EdgeKind>,
+    /// The terrain along the south edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub south: Option<EdgeKind>,
+    /// The terrain along the west edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub west: Option<EdgeKind>,
+    /// The terrain along the east edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub east: Option<EdgeKind>,
+    /// The mean width of the band along an edge, in units. Fractal noise
+    /// makes the inner side of the band a natural coast. More than 0.
+    /// Default: a tenth of the smaller side of the frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub width: Option<f64>,
+}
+
+impl FrameEdges {
+    pub fn is_empty(&self) -> bool {
+        self.north.is_none() && self.south.is_none() && self.west.is_none() && self.east.is_none()
+    }
+}
+
+/// The terrain along a frame edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum EdgeKind {
+    /// Open sea: the band is water, deeper at the edge.
+    Sea,
+    /// Land that goes on past the frame: the water of the band becomes low
+    /// land.
+    Land,
+}
+
 impl Default for World {
     fn default() -> Self {
         Self {
@@ -767,6 +833,8 @@ impl Default for World {
             culture_set: default_culture_set(),
             size_variety: default_size_variety(),
             growth_rate: default_growth_rate(),
+            border_noise: default_border_noise(),
+            border_terrain: default_border_terrain(),
             states: default_states(),
             towns: Towns::default(),
             provinces_ratio: default_provinces_ratio(),
@@ -774,6 +842,7 @@ impl Default for World {
             emblem_shape: default_emblem_shape(),
             places: PlaceOptions::default(),
             brushes: Vec::new(),
+            edges: FrameEdges::default(),
             goods: Vec::new(),
             military_units: Vec::new(),
             transports: Vec::new(),
@@ -832,6 +901,38 @@ pub enum Template {
         /// to its site. The lake stages do not change these heights.
         raster: Raster,
     },
+    /// A PNG image of heights, as a raster. The path is relative to the
+    /// folder of the config file. Black is height 0 and white is height
+    /// 100. A colour image gives the brightness of each pixel. The image
+    /// covers the full frame: its top row is at the low y edge. Like a
+    /// `raster`, the lake stages do not change these heights. A change of
+    /// the image does not change the config hash.
+    Image {
+        /// The path of the PNG file.
+        image: String,
+        /// The decoded heights. The program that reads the config file
+        /// reads the image and sets them.
+        #[serde(skip)]
+        #[schemars(skip)]
+        heights: Option<Raster>,
+    },
+}
+
+impl Template {
+    /// The raster of heights of the template: the `raster`, or the decoded
+    /// heights of an `image`.
+    pub fn raster(&self) -> Option<&Raster> {
+        match self {
+            Template::Raster { raster } => Some(raster),
+            Template::Image { heights, .. } => heights.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// `true` for a template of heights: a `raster` or an `image`.
+    pub fn is_raster(&self) -> bool {
+        matches!(self, Template::Raster { .. } | Template::Image { .. })
+    }
 }
 
 /// A raster of heights that covers the full frame.
@@ -999,6 +1100,61 @@ pub struct Pins {
     /// Roads between pinned places, with an optional target length.
     #[serde(default)]
     pub roads: Vec<RoadPin>,
+    /// Soft areas with a character of the land, such as rough or wooded.
+    /// An area has no fixed height range. It steers the heights, the
+    /// biomes, and so the relief symbols, and fades out at its loose edge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub areas: Vec<AreaPin>,
+}
+
+/// A soft area with a character of the land. Give exactly one of
+/// `polygon`, `box`, and `circle`. The outline is loose: fractal noise moves
+/// it, and the effect fades out over the `edge` outside it. An area changes
+/// only land: the coast stays where it is. A region pin rules over an area.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AreaPin {
+    /// Identifier: lower-case letters and digits, words joined by `-`.
+    /// Unique across all pins.
+    #[schemars(regex(pattern = r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    pub id: String,
+    /// The character of the land in the area.
+    pub character: Character,
+    /// Outline `[[x, y], ...]`, in units. 3 or more points. The outline must
+    /// not cross itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polygon: Option<Vec<Point>>,
+    /// Rectangle `[x0, y0, x1, y1]`, in units.
+    #[serde(default, rename = "box", skip_serializing_if = "Option::is_none")]
+    pub rect: Option<[f64; 4]>,
+    /// Circle, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub circle: Option<Circle>,
+    /// How strong the character is. 0 to 1. Default 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub strength: Option<f64>,
+    /// Width of the soft edge outside the outline, in units. The effect
+    /// fades out over this width. Default: a fifth of the size of the shape
+    /// (the square root of the area of its bounding box).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub edge: Option<f64>,
+}
+
+/// The character of the land in an area.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Character {
+    /// Broken, high land: the heights rise, with sharp ridges. The relief
+    /// shows mountain chains and hills.
+    Rough,
+    /// Forest: the land keeps its heights, and the biome becomes forest.
+    Wooded,
+    /// Rolling land: low, rounded hills.
+    Rolling,
+    /// Flat land: the heights go down to low land, with few hills.
+    Flat,
 }
 
 /// A place at exact coordinates.
@@ -1019,6 +1175,12 @@ pub struct PointPin {
     /// `true`: the cell of the place touches the sea or a lake.
     #[serde(default)]
     pub port: bool,
+    /// `true`: the place can be inside a `sea` or `lake` region. The cell
+    /// of the place becomes a small island of land. Only for `pins.points`.
+    /// For a larger island, put a land region with a higher `priority`
+    /// than the sea around the place.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub island: bool,
     /// Name of a state. The state forms around this place, its capital.
     /// A later pin with the same name is a seat of the state: the state
     /// also grows from it, for example on the other side of a sea.
@@ -1110,6 +1272,38 @@ pub struct RegionPin {
     /// in a lowland. Default 0.
     #[serde(default, skip_serializing_if = "is_zero_i32")]
     pub priority: i32,
+    /// The largest distance, in units, by which fractal noise moves the
+    /// outline in or out. The coast becomes natural, with bays and capes.
+    /// The largest bays are about 4 times this size. A side of the outline
+    /// on a frame edge does not move. 0: the outline is exact. Default: 0
+    /// for `sea` and `lake`; for the other kinds, 3 percent of the size of
+    /// the shape (the square root of the area of its bounding box), at most
+    /// 20, so that a box does not show as a rectangle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub roughness: Option<f64>,
+    /// The number of noise layers of a rough outline. 1 to 8. Each layer
+    /// adds bays and capes of half the size of the layer before it. 1
+    /// gives a smooth, wavy coast. 8 gives a very detailed coast. Has an
+    /// effect only with a `roughness`. Default 4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1, max = 8))]
+    pub coast_detail: Option<u32>,
+    /// Not for `sea` and `lake`. How many small islands lie off a rough
+    /// coast. 0 to 1. Most of them lie off the capes. 0: none. Has an
+    /// effect only with a roughness. Default: 0.3 for `land`, 0 for the
+    /// other kinds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub islets: Option<f64>,
+    /// Only for `sea` and `lake`. The width, in units, of the shallow water
+    /// along the coast. The water is at the top of the height range at the
+    /// coast and goes down to the bottom of the range at this distance from
+    /// it. A side on a frame edge is not coast. More than 0. Default: the
+    /// heights of the template, put into the range.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub shelf: Option<f64>,
     /// Name of the area, for its label.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -1140,6 +1334,11 @@ pub enum RegionKind {
     Marsh,
     Forest,
     Desert,
+    /// Land of any height. Without a `height`, the land of the template
+    /// keeps its height, and the water of the template becomes low land:
+    /// deeper water gives a little higher land. Use it to draw a coast on a
+    /// template with much sea.
+    Land,
 }
 
 impl RegionKind {
@@ -1157,12 +1356,25 @@ impl RegionKind {
             RegionKind::Plains => [21.0, 35.0],
             RegionKind::Hills => [35.0, 60.0],
             RegionKind::Mountains => [70.0, 100.0],
-            RegionKind::Forest | RegionKind::Desert => [20.0, 100.0],
+            RegionKind::Forest | RegionKind::Desert | RegionKind::Land => [20.0, 100.0],
         }
     }
 }
 
 impl RegionPin {
+    /// The roughness of the outline: `roughness`, or the default of the
+    /// kind for a shape with the bounding box `[x0, y0, x1, y1]`.
+    pub fn roughness_for(&self, bbox: [f64; 4]) -> f64 {
+        match self.roughness {
+            Some(r) => r,
+            None if self.kind.is_water() => 0.0,
+            None => {
+                let size = ((bbox[2] - bbox[0]).max(0.0) * (bbox[3] - bbox[1]).max(0.0)).sqrt();
+                (0.03 * size).min(20.0)
+            }
+        }
+    }
+
     /// The height range of the region: `height` if it is given, else the
     /// default range of the kind.
     pub fn height_range(&self) -> [f64; 2] {
@@ -1475,6 +1687,42 @@ pub struct Render {
     /// `relief.options.density` instead.
     #[serde(default, skip_serializing_if = "ReliefOptions::is_default")]
     pub relief: ReliefOptions,
+    /// `print-safe` mode: the depths of the dashed depth lines in the
+    /// ocean, below sea level on the height scale 0 to 100. Each line goes
+    /// around the ocean at least that deep. Empty: no depth lines. Default
+    /// `[6, 12]`. `colour` mode uses the style value
+    /// `ocean.groups.oceanLayers.options.depths` instead.
+    #[serde(
+        default = "default_depth_lines",
+        skip_serializing_if = "is_default_depth_lines"
+    )]
+    pub depth_lines: Vec<f64>,
+    /// How strongly the width of a river follows its water, in both render
+    /// modes. 0 to 2. 0: the widths of Azgaar's Fantasy Map Generator. A
+    /// larger value makes the rivers with the most water wider and the
+    /// small streams thinner. Default 1.
+    #[serde(
+        default = "default_river_contrast",
+        skip_serializing_if = "is_default_river_contrast"
+    )]
+    #[schemars(range(min = 0.0, max = 2.0))]
+    pub river_contrast: f64,
+}
+
+fn default_river_contrast() -> f64 {
+    1.0
+}
+
+fn is_default_river_contrast(v: &f64) -> bool {
+    *v == default_river_contrast()
+}
+
+fn default_depth_lines() -> Vec<f64> {
+    vec![6.0, 12.0]
+}
+
+fn is_default_depth_lines(v: &[f64]) -> bool {
+    v == default_depth_lines().as_slice()
 }
 
 /// Options of the layer `emblems`: the coats of arms of the states, the
@@ -1519,6 +1767,8 @@ impl Default for Render {
             emblems: EmblemOptions::default(),
             labels: LabelRules::default(),
             relief: ReliefOptions::default(),
+            depth_lines: default_depth_lines(),
+            river_contrast: default_river_contrast(),
         }
     }
 }
@@ -1536,6 +1786,13 @@ pub struct ReliefOptions {
     /// forest biomes), `marsh` (wetland), or `dune` (the deserts).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hide: Vec<ReliefSymbol>,
+    /// Both render modes. `true`: the symbols follow the terrain. Mountains
+    /// stand in chains of overlapping peaks along the ridges, larger at the
+    /// crest, with hills at their feet. Trees grow in groups, denser in the
+    /// highland, and the symbols change a little in size. `false`: the
+    /// placement of Azgaar's Fantasy Map Generator. Default `true`.
+    #[serde(skip_serializing_if = "is_true")]
+    pub terrain: bool,
 }
 
 impl Default for ReliefOptions {
@@ -1543,6 +1800,7 @@ impl Default for ReliefOptions {
         Self {
             density: 1.0,
             hide: Vec::new(),
+            terrain: true,
         }
     }
 }
@@ -2047,6 +2305,22 @@ impl LayerName {
 fn default_unit_name() -> String {
     "mile".to_owned()
 }
+fn default_border_terrain() -> f64 {
+    0.5
+}
+
+fn is_default_border_terrain(v: &f64) -> bool {
+    *v == default_border_terrain()
+}
+
+fn default_border_noise() -> f64 {
+    0.5
+}
+
+fn is_default_border_noise(v: &f64) -> bool {
+    *v == default_border_noise()
+}
+
 fn default_cells() -> u32 {
     10_000
 }
@@ -2264,6 +2538,30 @@ mod tests {
         assert_eq!((raster.cols, raster.rows), (2, 2));
         let again: Config = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
         assert_eq!(c, again);
+    }
+
+    #[test]
+    fn template_accepts_an_image_and_writes_only_its_path() {
+        let mut v = minimal();
+        v["world"] = json!({ "template": { "image": "heights.png" } });
+        let mut c: Config = serde_json::from_value(v).unwrap();
+        assert_eq!(
+            c.world.template,
+            Template::Image {
+                image: "heights.png".into(),
+                heights: None
+            }
+        );
+        if let Template::Image { heights, .. } = &mut c.world.template {
+            *heights = Some(Raster {
+                cols: 2,
+                rows: 2,
+                values: vec![0, 1, 2, 3],
+            });
+        }
+        let out = serde_json::to_value(&c).unwrap();
+        assert_eq!(out["world"]["template"], json!({ "image": "heights.png" }));
+        assert!(c.world.template.raster().is_some());
     }
 
     #[test]

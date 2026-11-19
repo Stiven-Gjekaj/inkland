@@ -15,7 +15,17 @@ pub enum Shape {
 impl Shape {
     /// The shape of a region pin, if it has exactly one valid shape field.
     pub fn of(region: &RegionPin) -> Option<Shape> {
-        match (&region.polygon, &region.rect, &region.circle) {
+        Shape::from_fields(&region.polygon, &region.rect, &region.circle)
+    }
+
+    /// The shape of a pin with the fields `polygon`, `box`, and `circle`, if
+    /// it has exactly one of them.
+    pub fn from_fields(
+        polygon: &Option<Vec<Point>>,
+        rect: &Option<[f64; 4]>,
+        circle: &Option<crate::config::Circle>,
+    ) -> Option<Shape> {
+        match (polygon, rect, circle) {
             (Some(p), None, None) => Some(Shape::Polygon(p.clone())),
             (None, Some([x0, y0, x1, y1]), None) => Some(Shape::Polygon(vec![
                 [*x0, *y0],
@@ -241,6 +251,11 @@ fn segments_touch(a: Point, b: Point, c: Point, d: Point) -> bool {
         || on_segment(a, b, d)
         || on_segment(c, d, a)
         || on_segment(c, d, b)
+}
+
+/// The distance from `p` to the segment from `a` to `b`.
+pub fn segment_distance(a: Point, b: Point, p: Point) -> f64 {
+    segment_point_dist2(a, b, p).sqrt()
 }
 
 fn segment_point_dist2(a: Point, b: Point, p: Point) -> f64 {

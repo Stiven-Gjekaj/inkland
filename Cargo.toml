@@ -29,6 +29,7 @@ clap = { version = "4", features = ["derive"] }
 delaunator = "1.1"
 libm = "0.2"
 flate2 = "1"
+png = "0.18"
 proptest = "1"
 roxmltree = "0.21"
 # "raster-images" draws the bitmap glyphs of a color emoji font.

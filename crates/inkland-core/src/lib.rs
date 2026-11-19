@@ -5,8 +5,10 @@
 
 pub mod annotations;
 pub mod biomes;
+pub mod border_cost;
 pub mod borders;
 pub mod burgs;
+pub mod character;
 pub mod climate;
 pub mod colors;
 pub mod config;
@@ -33,6 +35,7 @@ pub mod markers;
 pub mod meander;
 pub mod military;
 pub mod names;
+pub mod noise;
 pub mod num;
 pub mod overlay;
 pub mod pack;

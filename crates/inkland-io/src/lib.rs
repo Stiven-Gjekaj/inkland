@@ -7,6 +7,7 @@
 pub mod azgaar;
 pub mod config;
 pub mod geojson;
+pub mod heights;
 pub mod query;
 pub mod report;
 pub mod schema;

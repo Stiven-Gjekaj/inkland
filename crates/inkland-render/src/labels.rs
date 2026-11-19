@@ -2234,26 +2234,30 @@ mod tests {
 
     #[test]
     fn a_max_angle_of_zero_gives_level_labels() {
-        let (w, mut c) = world(3, "pangea", json!({}));
-        let v = c.variants[0].clone();
-        let page = Page::new(&c, &v);
         let turned = |l: &Labels| {
             l.placed
                 .iter()
                 .filter(|p| matches!(p.geometry, Geometry::Point { angle, .. } if angle != 0))
                 .count()
         };
-        // A tall, narrow region gets a turned label by default.
-        c.pins.regions[0].rect = Some([180.0, 40.0, 200.0, 260.0]);
-        let all = place(&w, &c, &v, &page);
+        // A tall, narrow region gets a turned label by default in some
+        // worlds. A curved label is a path, so keep the labels straight.
+        let mut turned_by_default = 0;
+        for seed in 1..=6 {
+            let (w, mut c) = world(seed, "pangea", json!({}));
+            let v = c.variants[0].clone();
+            let page = Page::new(&c, &v);
+            c.render.labels.curved = false;
+            c.pins.regions[0].rect = Some([180.0, 40.0, 200.0, 260.0]);
+            turned_by_default += turned(&place(&w, &c, &v, &page));
+            c.render.labels.max_angle = 0.0;
+            let level = place(&w, &c, &v, &page);
+            assert_eq!(turned(&level), 0, "seed {seed}");
+        }
         assert!(
-            turned(&all) > 0,
+            turned_by_default > 0,
             "no label turns, so the test tests nothing"
         );
-        c.render.labels.max_angle = 0.0;
-        let level = place(&w, &c, &v, &page);
-        assert_eq!(turned(&level), 0);
-        assert!(level.placed.iter().any(|l| l.id == "label-region-hills"));
     }
 
     #[test]

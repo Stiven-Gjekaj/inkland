@@ -192,6 +192,153 @@ fn city_in_a_forced_sea_is_infeasible() {
 }
 
 #[test]
+fn town_on_a_land_region_with_a_higher_priority_than_the_sea_is_feasible() {
+    let c = with(json!({ "pins": {
+        "points": [{ "id": "portvale", "kind": "town", "at": [10, 150], "port": true }],
+        "regions": [
+            { "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300] },
+            { "id": "isle", "kind": "hills", "circle": { "at": [10, 150], "r": 4 }, "priority": 1 }
+        ]
+    }}));
+    assert_eq!(codes(&c), vec![]);
+}
+
+#[test]
+fn town_on_a_land_region_with_a_lower_priority_than_the_sea_is_infeasible() {
+    let c = with(json!({ "pins": {
+        "points": [{ "id": "portvale", "kind": "town", "at": [10, 150] }],
+        "regions": [
+            { "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300], "priority": 2 },
+            { "id": "isle", "kind": "hills", "circle": { "at": [10, 150], "r": 4 }, "priority": 1 }
+        ]
+    }}));
+    one(&c, ErrorCode::PinInForcedSea, "/pins/points/0/at");
+}
+
+#[test]
+fn island_town_in_a_forced_sea_is_feasible() {
+    let c = with(json!({ "pins": {
+        "points": [{ "id": "portvale", "kind": "town", "at": [10, 150], "island": true }],
+        "regions": [{ "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300] }]
+    }}));
+    assert_eq!(codes(&c), vec![]);
+}
+
+#[test]
+fn negative_roughness_and_coast_detail_out_of_range_are_refused() {
+    let c = with(json!({ "pins": { "regions": [
+        { "id": "sea", "kind": "sea", "box": [0, 0, 50, 300], "roughness": -1 },
+        { "id": "isle", "kind": "land", "box": [100, 0, 150, 50], "roughness": 4, "coast_detail": 9 }
+    ]}}));
+    assert_eq!(
+        codes(&c),
+        vec![
+            (
+                ErrorCode::ValueOutOfRange,
+                "/pins/regions/0/roughness".into()
+            ),
+            (
+                ErrorCode::ValueOutOfRange,
+                "/pins/regions/1/coast_detail".into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn image_template_that_is_not_read_is_refused() {
+    let c = with(json!({ "world": { "template": { "image": "heights.png" } } }));
+    one(&c, ErrorCode::TemplateInvalid, "/world/template/image");
+}
+
+#[test]
+fn shelf_on_land_or_of_zero_is_refused() {
+    let c = with(json!({ "pins": { "regions": [
+        { "id": "sea", "kind": "sea", "box": [0, 0, 50, 300], "shelf": 0 },
+        { "id": "isle", "kind": "hills", "box": [100, 0, 150, 50], "shelf": 10 }
+    ]}}));
+    assert_eq!(
+        codes(&c),
+        vec![
+            (ErrorCode::ValueOutOfRange, "/pins/regions/0/shelf".into()),
+            (ErrorCode::ValueOutOfRange, "/pins/regions/1/shelf".into()),
+        ]
+    );
+}
+
+#[test]
+fn river_contrast_above_2_is_refused() {
+    let c = with(json!({ "render": { "river_contrast": 3 } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/render/river_contrast");
+}
+
+#[test]
+fn border_noise_above_1_is_refused() {
+    let c = with(json!({ "world": { "border_noise": 1.5 } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/world/border_noise");
+}
+
+#[test]
+fn border_terrain_below_0_is_refused() {
+    let c = with(json!({ "world": { "border_terrain": -0.5 } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/world/border_terrain");
+}
+
+#[test]
+fn islets_on_a_sea_or_above_1_are_refused() {
+    let c = with(json!({ "pins": { "regions": [
+        { "id": "sea", "kind": "sea", "box": [0, 0, 50, 300], "islets": 0.5 },
+        { "id": "isle", "kind": "land", "box": [100, 0, 150, 50], "islets": 2 }
+    ]}}));
+    assert_eq!(
+        codes(&c),
+        vec![
+            (ErrorCode::ValueOutOfRange, "/pins/regions/0/islets".into()),
+            (ErrorCode::ValueOutOfRange, "/pins/regions/1/islets".into()),
+        ]
+    );
+}
+
+#[test]
+fn area_with_a_good_shape_is_valid_and_bad_fields_are_refused() {
+    let good = with(json!({ "pins": { "areas": [
+        { "id": "the-wilds", "character": "rough", "box": [10, 10, 100, 100] },
+        { "id": "greenwood", "character": "wooded", "circle": { "at": [200, 150], "r": 40 },
+          "strength": 0.5, "edge": 10 }
+    ]}}));
+    assert_eq!(codes(&good), vec![]);
+    let bad = with(json!({ "pins": {
+        "points": [{ "id": "wolds", "kind": "town", "at": [1, 1] }],
+        "areas": [
+            { "id": "wolds", "character": "rolling", "box": [10, 10, 100, 100] },
+            { "id": "flats", "character": "flat", "box": [10, 10, 100, 100],
+              "circle": { "at": [1, 1], "r": 1 } },
+            { "id": "moor", "character": "rough", "box": [10, 10, 100, 100], "strength": 2 }
+        ]
+    }}));
+    assert_eq!(
+        codes(&bad),
+        vec![
+            (ErrorCode::IdDuplicate, "/pins/areas/0/id".into()),
+            (ErrorCode::ShapeInvalid, "/pins/areas/1".into()),
+            (ErrorCode::ValueOutOfRange, "/pins/areas/2/strength".into()),
+        ]
+    );
+}
+
+#[test]
+fn depth_line_of_zero_is_refused() {
+    let c = with(json!({ "render": { "depth_lines": [6, 0] } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/render/depth_lines/1");
+}
+
+#[test]
+fn edge_width_of_zero_is_refused() {
+    let c = with(json!({ "world": { "edges": { "north": "sea", "width": 0 } } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/world/edges/width");
+}
+
+#[test]
 fn city_next_to_a_forced_sea_is_feasible() {
     let c = with(json!({ "pins": {
         "points": [{ "id": "a", "kind": "city", "at": [21, 150], "port": true }],

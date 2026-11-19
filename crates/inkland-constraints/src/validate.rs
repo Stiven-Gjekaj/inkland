@@ -313,6 +313,20 @@ impl<'a> Validator<'a> {
                 ),
             );
         }
+        if !(0.0..=1.0).contains(&w.border_terrain) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/border_terrain",
+                "border_terrain must be 0 to 1",
+            );
+        }
+        if !(0.0..=1.0).contains(&w.border_noise) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/border_noise",
+                "border_noise must be 0 to 1",
+            );
+        }
         if !(1..=99).contains(&w.sea_level) {
             self.err(
                 ErrorCode::ValueOutOfRange,
@@ -331,8 +345,15 @@ impl<'a> Validator<'a> {
                 );
             }
         }
-        if let inkland_core::config::Template::Raster { raster } = &w.template {
+        if let Some(raster) = w.template.raster() {
             self.raster(raster);
+        }
+        if let inkland_core::config::Template::Image { heights: None, .. } = &w.template {
+            self.err(
+                ErrorCode::TemplateInvalid,
+                "/world/template/image",
+                "the image of the template is not read; the program that reads the config file reads it",
+            );
         }
         let shape = w.emblem_shape.as_str();
         if !["culture", "state", "random"].contains(&shape)
@@ -450,6 +471,17 @@ impl<'a> Validator<'a> {
                 "relief density must be 0 to 1",
             );
         }
+        if c.world
+            .edges
+            .width
+            .is_some_and(|w| !(w.is_finite() && w > 0.0))
+        {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/edges/width",
+                "the edge width must be more than 0",
+            );
+        }
         for (i, r) in c.pins.regions.iter().enumerate() {
             let p = format!("/pins/regions/{i}");
             if let Some([lo, hi]) = r.height
@@ -492,6 +524,50 @@ impl<'a> Validator<'a> {
                     format!("{p}/edge"),
                     "edge must be 0 or more",
                 );
+            }
+            if r.roughness.is_some_and(|v| !(v.is_finite() && v >= 0.0)) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{p}/roughness"),
+                    "roughness must be 0 or more",
+                );
+            }
+            if let Some(i) = r.islets {
+                if !(0.0..=1.0).contains(&i) {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("{p}/islets"),
+                        "islets must be 0 to 1",
+                    );
+                } else if r.kind.is_water() {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("{p}/islets"),
+                        "islets does not apply to regions of kind sea or lake",
+                    );
+                }
+            }
+            if r.coast_detail.is_some_and(|d| !(1..=8).contains(&d)) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{p}/coast_detail"),
+                    "coast_detail must be 1 to 8",
+                );
+            }
+            if let Some(w) = r.shelf {
+                if !(w.is_finite() && w > 0.0) {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("{p}/shelf"),
+                        "shelf must be more than 0",
+                    );
+                } else if !r.kind.is_water() {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("{p}/shelf"),
+                        "shelf applies only to regions of kind sea or lake",
+                    );
+                }
             }
             if r.landlocked && !r.kind.is_water() {
                 self.err(
@@ -646,6 +722,9 @@ impl<'a> Validator<'a> {
         for (i, r) in c.pins.roads.iter().enumerate() {
             base.push((format!("/pins/roads/{i}/id"), &r.id));
         }
+        for (i, a) in c.pins.areas.iter().enumerate() {
+            base.push((format!("/pins/areas/{i}/id"), &a.id));
+        }
         self.unique(&base);
         // Each overlay adds to the base name space, but not to the space of
         // another overlay.
@@ -725,6 +804,24 @@ impl<'a> Validator<'a> {
         for (i, r) in c.pins.regions.iter().enumerate() {
             self.region_shape(r, &format!("/pins/regions/{i}"));
         }
+        for (i, a) in c.pins.areas.iter().enumerate() {
+            let path = format!("/pins/areas/{i}");
+            self.shape_fields(&a.polygon, &a.rect, &a.circle, "an area", &path);
+            if a.strength.is_some_and(|s| !(0.0..=1.0).contains(&s)) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/strength"),
+                    "strength must be 0 to 1",
+                );
+            }
+            if a.edge.is_some_and(|e| !(e.is_finite() && e >= 0.0)) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/edge"),
+                    "edge must be 0 or more",
+                );
+            }
+        }
         for (name, o) in &c.overlays {
             for (i, f) in o.add.features.iter().enumerate() {
                 self.feature_shape(f, &format!("/overlays/{}/add/features/{i}", esc(name)));
@@ -733,18 +830,30 @@ impl<'a> Validator<'a> {
     }
 
     fn region_shape(&mut self, r: &RegionPin, path: &str) {
-        let count = usize::from(r.polygon.is_some())
-            + usize::from(r.rect.is_some())
-            + usize::from(r.circle.is_some());
+        self.shape_fields(&r.polygon, &r.rect, &r.circle, "a region", path);
+    }
+
+    /// The shape fields of a region or an area (`what`).
+    fn shape_fields(
+        &mut self,
+        polygon: &Option<Vec<inkland_core::config::Point>>,
+        rect: &Option<[f64; 4]>,
+        circle: &Option<inkland_core::config::Circle>,
+        what: &str,
+        path: &str,
+    ) {
+        let count = usize::from(polygon.is_some())
+            + usize::from(rect.is_some())
+            + usize::from(circle.is_some());
         if count != 1 {
             self.err(
                 ErrorCode::ShapeInvalid,
                 path,
-                format!("a region needs exactly one of polygon, box, and circle; found {count}"),
+                format!("{what} needs exactly one of polygon, box, and circle; found {count}"),
             );
             return;
         }
-        if let Some(poly) = &r.polygon {
+        if let Some(poly) = polygon {
             if poly.len() < 3 {
                 self.err(
                     ErrorCode::RegionPolygonInvalid,
@@ -759,7 +868,7 @@ impl<'a> Validator<'a> {
                 );
             }
         }
-        if let Some([x0, y0, x1, y1]) = r.rect
+        if let Some([x0, y0, x1, y1]) = *rect
             && !(x0 < x1 && y0 < y1)
         {
             self.err(
@@ -768,7 +877,7 @@ impl<'a> Validator<'a> {
                 "box must be [x0, y0, x1, y1] with x0 < x1 and y0 < y1",
             );
         }
-        if let Some(circle) = &r.circle
+        if let Some(circle) = circle
             && !(circle.r.is_finite() && circle.r > 0.0)
         {
             self.err(
@@ -819,6 +928,22 @@ impl<'a> Validator<'a> {
     /// The style overrides.
     fn render_style(&mut self) {
         let r = &self.c.render;
+        if !(0.0..=2.0).contains(&r.river_contrast) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/render/river_contrast",
+                "river_contrast must be 0 to 2",
+            );
+        }
+        for (i, d) in r.depth_lines.iter().enumerate() {
+            if !(d.is_finite() && *d > 0.0 && *d <= 100.0) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("/render/depth_lines/{i}"),
+                    "a depth must be more than 0 and at most 100",
+                );
+            }
+        }
         for (key, value) in &r.style_overrides {
             let pointer = format!(
                 "/render/style_overrides/{}",
@@ -1140,16 +1265,13 @@ impl<'a> Validator<'a> {
 
     fn places_on_land(&mut self) {
         let c = self.c;
-        let water: Vec<(usize, &RegionPin, Shape)> = self
-            .shaped_regions()
-            .into_iter()
-            .filter(|(_, r, _)| r.kind.is_water())
-            .collect();
+        let shaped = self.shaped_regions();
         let mut places: Vec<(String, &PointPin)> = c
             .pins
             .points
             .iter()
             .enumerate()
+            .filter(|(_, p)| !p.island)
             .map(|(i, p)| (format!("/pins/points/{i}/at"), p))
             .collect();
         for (name, o) in &c.overlays {
@@ -1158,8 +1280,17 @@ impl<'a> Validator<'a> {
             }
         }
         for (path, pin) in places {
-            for (_, region, shape) in &water {
-                if shape.contains(pin.at) {
+            // Of the regions that hold the place, the ones with the highest
+            // priority rule it. A land region with a higher priority than
+            // the sea around it can hold a place.
+            let holding: Vec<&RegionPin> = shaped
+                .iter()
+                .filter(|(_, _, shape)| shape.contains(pin.at))
+                .map(|(_, r, _)| *r)
+                .collect();
+            let top = holding.iter().map(|r| r.priority).max();
+            for region in holding {
+                if region.kind.is_water() && Some(region.priority) == top {
                     self.err(
                         ErrorCode::PinInForcedSea,
                         path.clone(),
@@ -1450,6 +1581,7 @@ fn kind_name(k: RegionKind) -> &'static str {
         RegionKind::Marsh => "marsh",
         RegionKind::Forest => "forest",
         RegionKind::Desert => "desert",
+        RegionKind::Land => "land",
     }
 }
 
