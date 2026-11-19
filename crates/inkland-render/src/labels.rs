@@ -1329,6 +1329,15 @@ pub fn place_with(
         }
     }
 
+    // Keep only the turns that the config lets labels have.
+    let max_angle = config.render.labels.max_angle;
+    for r in &mut requests {
+        r.candidates.retain(|c| match c.geometry {
+            Geometry::Point { angle, .. } => f64::from(angle.unsigned_abs()) <= max_angle,
+            Geometry::Path { .. } => true,
+        });
+    }
+
     // Leave out the labels with a generated name, when the config asks.
     let mut out = Labels::default();
     if !config.render.labels.generated {
@@ -1909,6 +1918,30 @@ mod tests {
         o.labels.get_mut("state:ostrey").unwrap().hide = true;
         let labels = place(&w, &c, &v, &page);
         assert!(labels.placed.iter().all(|l| l.text != "Ostria"));
+    }
+
+    #[test]
+    fn a_max_angle_of_zero_gives_level_labels() {
+        let (w, mut c) = world(3, "pangea", json!({}));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let turned = |l: &Labels| {
+            l.placed
+                .iter()
+                .filter(|p| matches!(p.geometry, Geometry::Point { angle, .. } if angle != 0))
+                .count()
+        };
+        // A tall, narrow region gets a turned label by default.
+        c.pins.regions[0].rect = Some([180.0, 40.0, 200.0, 260.0]);
+        let all = place(&w, &c, &v, &page);
+        assert!(
+            turned(&all) > 0,
+            "no label turns, so the test tests nothing"
+        );
+        c.render.labels.max_angle = 0.0;
+        let level = place(&w, &c, &v, &page);
+        assert_eq!(turned(&level), 0);
+        assert!(level.placed.iter().any(|l| l.id == "label-region-hills"));
     }
 
     #[test]

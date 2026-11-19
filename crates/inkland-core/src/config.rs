@@ -1543,6 +1543,12 @@ pub struct LabelRules {
     /// turns stroked text into a Type 3 font. `colour` mode draws the halo
     /// of its style. Default `true`.
     pub halo: bool,
+    /// The largest turn of an area label (a state, a region, a lake, a sea,
+    /// an island, or an overlay feature), in degrees, in both render modes.
+    /// The placer turns an area label 0 or 90 degrees. `0` gives only level
+    /// labels. A value below 90 also gives only level labels. Default 90.
+    #[schemars(range(min = 0.0, max = 90.0))]
+    pub max_angle: f64,
 }
 
 impl Default for LabelRules {
@@ -1551,6 +1557,7 @@ impl Default for LabelRules {
             generated: true,
             check_generated: false,
             halo: true,
+            max_angle: 90.0,
         }
     }
 }
