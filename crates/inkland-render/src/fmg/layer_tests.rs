@@ -1010,3 +1010,30 @@ fn hill_shading_goes_on_the_land_below_the_rivers() {
     let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
     assert!(!svg.contains("hill-shading"));
 }
+
+#[test]
+fn coast_echo_lines_follow_the_coast_in_the_sea() {
+    let svg = render_with(&[LayerName::Ocean, LayerName::Landmass], StyleName::Default);
+    let echo = svg
+        .find("id=\"coast-echo\"")
+        .expect("the sea has echo lines");
+    let land = svg.find("<g id=\"landmass\"").expect("the map has land");
+    assert!(echo < land, "the land covers the inner side of the lines");
+    let doc = roxmltree::Document::parse(&svg).unwrap();
+    let mask = doc
+        .descendants()
+        .find(|e| e.attribute("id") == Some("coastal-echo"))
+        .expect("the mask of the lines is in the defs");
+    // Two strokes for each line, and each stroke uses a feature path.
+    let strokes = mask
+        .descendants()
+        .filter(|e| e.has_tag_name("g") && e.attribute("stroke").is_some());
+    assert_eq!(strokes.count(), 2 * super::layers::shading::ECHO.len());
+    assert!(svg.contains("<path id=\"feature-"));
+    parse_and_draw(&svg);
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Ocean, LayerName::Landmass];
+    c.render.coast_echo = false;
+    let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert!(!svg.contains("coast-echo") && !svg.contains("coastal-echo"));
+}

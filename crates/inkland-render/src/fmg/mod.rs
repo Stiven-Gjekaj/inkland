@@ -328,6 +328,9 @@ pub fn render(
             shaded = true;
         }
         layers::write(&mut body, &ctx, *layer);
+        if *layer == LayerName::Ocean {
+            layers::shading::echo(&mut body, &ctx);
+        }
     }
     if !shaded {
         layers::shading::hills(&mut body, &ctx);

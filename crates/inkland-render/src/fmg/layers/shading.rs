@@ -3,6 +3,7 @@
 //! coast (`render.coast_echo`). The original program does not have them.
 
 use super::super::Ctx;
+use super::super::color::Rgb;
 use super::super::geom::{self, n};
 use std::fmt::Write as _;
 
@@ -133,6 +134,76 @@ pub fn hills(s: &mut String, ctx: &Ctx) {
     s.push_str("</g></g>\n");
 }
 
+/// The coast echo lines: the distance of each line from the coast, its
+/// width, both in millimetres on the page, and its strength from 0 to 1.
+pub const ECHO: [(f64, f64, f64); 4] = [
+    (0.7, 0.2, 1.0),
+    (1.65, 0.17, 0.72),
+    (2.85, 0.14, 0.48),
+    (4.3, 0.12, 0.28),
+];
+
+/// The colour of the echo lines: the colour of the sea, darker. A sea
+/// without a plain colour gets a blue.
+fn echo_colour(sea: Option<String>) -> String {
+    sea.as_deref()
+        .and_then(Rgb::parse)
+        .unwrap_or(Rgb(70.0, 110.0, 171.0))
+        .darker(1.6)
+        .hex()
+}
+
+/// Coast echo lines: thin lines in the sea that follow the coast of each
+/// island, each further from the coast and fainter. A mask holds the
+/// lines: for each line, from the outer line in, a stroke of the coast as
+/// wide as the far edge of the line, then a black stroke as wide as its
+/// near edge. Lines of two islands that are near join as one line.
+pub fn echo(s: &mut String, ctx: &Ctx) {
+    if !ctx.config.render.coast_echo {
+        return;
+    }
+    let coasts: Vec<u32> = ctx
+        .outlines
+        .iter()
+        .filter(|o| !o.lake && !o.in_lake)
+        .map(|o| o.feature)
+        .collect();
+    if coasts.is_empty() {
+        return;
+    }
+    let mm = ctx.px.mm;
+    let uses = |stroke: &str, width: f64| -> String {
+        let mut g = format!("<g stroke=\"{stroke}\" stroke-width=\"{}\">", n(width / mm));
+        for f in &coasts {
+            let _ = write!(g, "<use href=\"#feature-{f}\"/>");
+        }
+        g.push_str("</g>");
+        g
+    };
+    let mut lines = String::new();
+    for &(at, width, strength) in ECHO.iter().rev() {
+        let grey = libm::round(255.0 * strength) as u8;
+        lines.push_str(&uses(
+            &format!("#{grey:02x}{grey:02x}{grey:02x}"),
+            2.0 * (at + width / 2.0),
+        ));
+        lines.push_str(&uses("#000000", 2.0 * (at - width / 2.0)));
+    }
+    let rect = ctx.map_rect_attrs(10.0);
+    ctx.def(
+        "coastal-echo",
+        format!(
+            "<mask id=\"coastal-echo\" maskUnits=\"userSpaceOnUse\" {rect}><g fill=\"none\" stroke-linejoin=\"round\" stroke-linecap=\"round\">{lines}</g></mask>"
+        ),
+    );
+    let colour = echo_colour(ctx.style.attr(&["ocean", "base"], "fill"));
+    let _ = writeln!(
+        s,
+        "<g id=\"coast-echo\"><rect {} fill=\"{colour}\" mask=\"url(#coastal-echo)\"/></g>",
+        ctx.map_rect_attrs(0.0)
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,5 +228,25 @@ mod tests {
         assert!(l[0] < 0.0 && l[1] < 0.0 && l[2] > 0.0);
         let len = (l[0] * l[0] + l[1] * l[1] + l[2] * l[2]).sqrt();
         assert!((len - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_echo_colour_is_darker_than_the_sea() {
+        let echo = echo_colour(Some("#c7ecff".into()));
+        assert_eq!(echo, Rgb(199.0, 236.0, 255.0).darker(1.6).hex());
+        assert_eq!(echo_colour(None), echo_colour(Some("url(#x)".into())));
+    }
+
+    #[test]
+    fn each_echo_line_is_further_out_and_fainter() {
+        for w in ECHO.windows(2) {
+            // The far edge of a line is nearer than the near edge of the next.
+            assert!(w[0].0 + w[0].1 / 2.0 < w[1].0 - w[1].1 / 2.0);
+            // The next line is fainter.
+            assert!(w[1].2 < w[0].2);
+        }
+        // The gaps grow.
+        let gaps: Vec<f64> = ECHO.windows(2).map(|w| w[1].0 - w[0].0).collect();
+        assert!(gaps.windows(2).all(|g| g[0] < g[1]));
     }
 }
