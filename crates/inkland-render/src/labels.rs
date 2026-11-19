@@ -1623,14 +1623,17 @@ pub fn place_with(
         }
     }
 
-    // Keep only the turns that the config lets labels have.
+    // Keep only the turns and the curves that the config lets labels have.
     let max_angle = config.render.labels.max_angle;
+    let curves = config.render.labels.curved;
     for r in &mut requests {
         r.candidates.retain(|c| match &c.geometry {
             Geometry::Point { angle, .. } => f64::from(angle.unsigned_abs()) <= max_angle,
             // A curved area label has no river. A river label follows its
             // river.
-            Geometry::Path { points, .. } => c.river.is_some() || max_tilt(points) <= max_angle,
+            Geometry::Path { points, .. } => {
+                c.river.is_some() || (curves && max_tilt(points) <= max_angle)
+            }
         });
     }
 
@@ -2328,6 +2331,18 @@ mod tests {
             assert!(*offset < 0.0, "{}", l.id);
             assert!(l.spacing > 0.0, "{}", l.id);
         }
+    }
+
+    #[test]
+    fn curved_false_gives_straight_area_labels() {
+        let (w, mut c) = world(3, "pangea", json!({}));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        assert!(!curved(&place(&w, &c, &v, &page)).is_empty());
+        c.render.labels.curved = false;
+        let straight = place(&w, &c, &v, &page);
+        assert!(curved(&straight).is_empty());
+        assert!(straight.placed.iter().any(|l| l.kind == Kind::State));
     }
 
     #[test]

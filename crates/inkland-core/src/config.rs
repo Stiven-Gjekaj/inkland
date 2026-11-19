@@ -1546,10 +1546,15 @@ pub struct LabelRules {
     pub halo: bool,
     /// The largest turn of an area label (a state, a region, a lake, a sea,
     /// an island, or an overlay feature), in degrees, in both render modes.
-    /// The placer turns an area label 0 or 90 degrees. `0` gives only level
-    /// labels. A value below 90 also gives only level labels. Default 90.
+    /// A straight label turns 0 or 90 degrees. A curved label has no part
+    /// at a larger angle to the level than this. `0` gives only level,
+    /// straight labels. Default 90.
     #[schemars(range(min = 0.0, max = 90.0))]
     pub max_angle: f64,
+    /// `true`: an area label can follow a smooth curve along the middle of
+    /// its area, with its letters spaced to fill part of the curve.
+    /// `false`: only straight area labels. Default `true`.
+    pub curved: bool,
     /// `false`: a place whose label the config leaves out has no symbol
     /// either. The config leaves out a label with a generated name when
     /// `generated` is `false`, and a label with `hide` in the label options
@@ -1565,6 +1570,7 @@ impl Default for LabelRules {
             check_generated: false,
             halo: true,
             max_angle: 90.0,
+            curved: true,
             unlabelled_symbols: true,
         }
     }

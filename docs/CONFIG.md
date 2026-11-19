@@ -325,9 +325,10 @@ Rules for the labels. A name is "generated" when the config does not write it: t
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `check_generated` | boolean |  | `false` | `true`: the report of each variant has the check `no_generated_labels`. It fails when the variant shows a label with a generated name. Default `false`. |
+| `curved` | boolean |  | `true` | `true`: an area label can follow a smooth curve along the middle of its area, with its letters spaced to fill part of the curve. `false`: only straight area labels. Default `true`. |
 | `generated` | boolean |  | `true` | `false`: show no label with a generated name. Default `true`. |
 | `halo` | boolean |  | `true` | `print-safe` mode: `true` draws a white box behind each label that does not follow a river or a line, so that the lines under it do not cross the text. A curved area label gets boxes along its curve. `false`: no box. The text never has a stroke, because a PDF printer turns stroked text into a Type 3 font. `colour` mode draws the halo of its style. Default `true`. |
-| `max_angle` | number |  | `90.0` | The largest turn of an area label (a state, a region, a lake, a sea, an island, or an overlay feature), in degrees, in both render modes. The placer turns an area label 0 or 90 degrees. `0` gives only level labels. A value below 90 also gives only level labels. Default 90. |
+| `max_angle` | number |  | `90.0` | The largest turn of an area label (a state, a region, a lake, a sea, an island, or an overlay feature), in degrees, in both render modes. A straight label turns 0 or 90 degrees. A curved label has no part at a larger angle to the level than this. `0` gives only level, straight labels. Default 90. |
 | `unlabelled_symbols` | boolean |  | `true` | `false`: a place whose label the config leaves out has no symbol either. The config leaves out a label with a generated name when `generated` is `false`, and a label with `hide` in the label options of an overlay. A label that has no free place keeps its symbol. Default `true`. |
 
 ### Lattice
