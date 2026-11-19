@@ -154,6 +154,15 @@ The division of the field.
 | `line` | string |  |  | The line of partition, for example `straight`, `wavy`, or `embattled`. Default: `straight`. |
 | `t` | string | yes |  | The tincture of the second part. |
 
+### EdgeKind
+
+The terrain along a frame edge.
+
+One of:
+
+- `"sea"`: Open sea: the band is water, deeper at the edge.
+- `"land"`: Land that goes on past the frame: the water of the band becomes low land.
+
 ### EmblemOptions
 
 Options of the layer `emblems`: the coats of arms of the states, the provinces, and the places.
@@ -253,6 +262,18 @@ The frame of the world: its size and the direction of its axes.
 | `width` | number | yes |  | Width of the world, in units. Must be more than 0. |
 | `x_axis` | [`XAxis`](#xaxis) |  | `"east"` | The direction in which x increases. Only `east`. |
 | `y_axis` | [`YAxis`](#yaxis) |  | `"south"` | The direction in which y increases: `south` with origin `top-left`, `north` with origin `bottom-left`. |
+
+### FrameEdges
+
+Land or sea along the frame edges. The compass sides follow the axes of the frame.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `east` | [`EdgeKind`](#edgekind) |  |  | The terrain along the east edge. |
+| `north` | [`EdgeKind`](#edgekind) |  |  | The terrain along the north edge. |
+| `south` | [`EdgeKind`](#edgekind) |  |  | The terrain along the south edge. |
+| `west` | [`EdgeKind`](#edgekind) |  |  | The terrain along the west edge. |
+| `width` | number |  |  | The mean width of the band along an edge, in units. Fractal noise makes the inner side of the band a natural coast. More than 0. Default: a tenth of the smaller side of the frame. |
 
 ### Geography
 
@@ -528,6 +549,7 @@ A place at exact coordinates.
 | `coa` | [`Coa`](#coa) |  |  | The coat of arms of this place, in the JSON shape of Azgaar's Fantasy Map Generator. It replaces the generated arms, and the generated arms of a province with this place as its seat take from it. Without `shield`, the arms get the generated shield shape. An overlay place does not use it. Default: generated arms. |
 | `custom_kind` | string |  |  | Name of the kind. Required when `kind` is `custom`. |
 | `id` | string | yes |  | Identifier: lower-case letters and digits, words joined by `-`. Unique across all pins. |
+| `island` | boolean |  |  | `true`: the place can be inside a `sea` or `lake` region. The cell of the place becomes a small island of land. Only for `pins.points`. For a larger island, put a land region with a higher `priority` than the sea around the place. |
 | `kind` | [`PlaceKind`](#placekind) | yes |  | Kind of place. |
 | `name` | string |  |  | Name of the place. Default: a generated name. |
 | `port` | boolean |  | `false` | `true`: the cell of the place touches the sea or a lake. |
@@ -562,7 +584,10 @@ A change to the regiments. With `add`, the entry adds a regiment of the state th
 
 Kinds of forced terrain.
 
-Type: `"sea"`, `"lake"`, `"mountains"`, `"hills"`, `"plains"`, `"marsh"`, `"forest"`, `"desert"`
+One of:
+
+- `"sea"`, `"lake"`, `"mountains"`, `"hills"`, `"plains"`, `"marsh"`, `"forest"`, `"desert"`
+- `"land"`: Land of any height. Without a `height`, the land of the template keeps its height, and the water of the template becomes low land: deeper water gives a little higher land. Use it to draw a coast on a template with much sea.
 
 ### RegionPin
 
@@ -572,6 +597,7 @@ An area with a forced kind of terrain. Give exactly one of `polygon`, `box`, and
 |---|---|---|---|---|
 | `box` | array of 4 number |  |  | Rectangle `[x0, y0, x1, y1]`, in units. |
 | `circle` | [`Circle`](#circle) |  |  | Circle, in units. |
+| `coast_detail` | integer |  |  | The number of noise layers of a rough outline. 1 to 8. Each layer adds bays and capes of half the size of the layer before it. 1 gives a smooth, wavy coast. 8 gives a very detailed coast. Has an effect only with a `roughness`. Default 4. |
 | `edge` | number |  | `0.0` | Width of the soft edge outside the shape, in units. Heights blend from the forced range to the free terrain over this width. Inside the shape, the heights are always in the range. |
 | `height` | array of 2 number |  |  | Height range `[min, max]` on the height scale 0 to 100 (sea level 20). Default: the range of the kind. |
 | `id` | string | yes |  | Identifier: lower-case letters and digits, words joined by `-`. Unique across all pins. |
@@ -580,6 +606,8 @@ An area with a forced kind of terrain. Give exactly one of `polygon`, `box`, and
 | `name` | string |  |  | Name of the area, for its label. |
 | `polygon` | array of array of 2 number |  |  | Outline `[[x, y], ...]`, in units. 3 or more points. The outline must not cross itself. |
 | `priority` | integer |  |  | Where regions overlap, only the regions with the highest priority set the height range of a cell. Regions with the same priority share it: the cell gets a height in all of their ranges. Give an inner region a higher priority than the region around it, for example hills in a lowland. Default 0. |
+| `roughness` | number |  |  | The largest distance, in units, by which fractal noise moves the outline in or out. The coast becomes natural, with bays and capes. The largest bays are about 4 times this size. A side of the outline on a frame edge does not move. 0: the outline is exact. Default 0. |
+| `shelf` | number |  |  | Only for `sea` and `lake`. The width, in units, of the shallow water along the coast. The water is at the top of the height range at the coast and goes down to the bottom of the range at this distance from it. A side on a frame edge is not coast. More than 0. Default: the heights of the template, put into the range. |
 
 ### RegionRef
 
@@ -709,6 +737,7 @@ One of:
 - [`TemplateName`](#templatename): A named template.
 - an object with `steps`: A list of template steps, one step in each string, for example `"Hill 1 90-99 60-80 45-55"`.
 - an object with `raster`: A raster of heights, for example from an imported map.
+- an object with `image`: A PNG image of heights, as a raster. The path is relative to the folder of the config file. Black is height 0 and white is height 100. A colour image gives the brightness of each pixel. The image covers the full frame: its top row is at the low y edge. Like a `raster`, the lake stages do not change these heights. A change of the image does not change the config hash.
 
 ### TemplateName
 
@@ -808,6 +837,7 @@ Generation options.
 | `culture_set` | string |  | `"european"` | Name of the culture set: `world`, `european`, `oriental`, `english`, `antique`, `high-fantasy`, `dark-fantasy`, or `random`. |
 | `cultures` | integer |  | `6` | Number of cultures. |
 | `default_ruler` | boolean |  |  | `false`: no default ruler across the largest landmass. |
+| `edges` | [`FrameEdges`](#frameedges) |  |  | Land or sea along each frame edge, applied after the brushes and before the pins. Default: the template decides. |
 | `emblem_shape` | string |  |  | The shield shape of the coats of arms: `culture` (the shield of the culture of each item, as Azgaar's Fantasy Map Generator does), `state` (the shield of the state), `random` (a random shield for each culture), or one shield name for all, for example `heater`, `spanish`, `round`, or `banner`. |
 | `fill_land` | boolean |  |  | `true`: all water of the template and the brushes becomes low land, 1 to 3 above sea level. Only the pinned `sea` and `lake` regions, and the lakes that rivers make, are water. Use it to keep the whole frame as land except the pinned seas. Default `false`. |
 | `finance` | array of [`FinanceEntry`](#financeentry) |  |  | Changes to the finance of the states: taxes, the market fee, the budget that sets the state orders, and the tariffs. |
