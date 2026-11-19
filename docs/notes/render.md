@@ -51,6 +51,22 @@ These notes describe `render.mode: "colour"`. The code is in
 | scale bar, vignette, legend | `draw-scalebar.ts`, `draw-vignette.ts`, `draw-legend.ts` | The legend lists the states, cultures, religions, or biomes. |
 | labels | `labels-renderer.ts`, `label-groups.ts` | The inkland placer, with the fonts, colours, and case of the label groups. |
 
+## Effects of inkland
+
+FMG does not have these effects. The code is in
+`crates/inkland-render/src/fmg/layers/shading.rs`.
+
+- `render.hill_shading` (default `true`): the land is darker on the
+  slopes that turn away from a light in the north-west, and lighter on
+  the slopes that turn to it. Each cell of the second grid gets the
+  gradient of a least-squares plane through its neighbours. The shade has
+  6 dark steps and 3 light steps, blurred, through the land mask. It goes
+  above the land colours and below the rivers.
+- `render.coast_echo` (default `true`): 4 thin lines in the sea follow
+  the coast at 0.7, 1.65, 2.85, and 4.3 mm, each fainter than the last.
+  The colour is the colour of the sea, darker. A mask of strokes of the
+  coast holds the lines, so the lines of two near islands join.
+
 ## What differs from FMG
 
 - Labels keep the placer and the font sizes of inkland. A CSS
@@ -96,3 +112,8 @@ These notes describe `render.mode: "colour"`. The code is in
   - No line is thinner than `min_line_width_pt`, and the print checks
     pass. The code is in `crates/inkland-render/src/hand.rs`.
   - Set it to `false` for exact lines.
+- The water lines follow the coast at 0.7, 1.5, 2.6, and 4.0 mm, so the
+  gaps grow out to sea. They come from the distance to the land on a
+  raster of the map (at least 0.2 mm a pixel), with marching squares. The
+  lines of two near islands join. The code is in
+  `crates/inkland-render/src/water.rs`.
