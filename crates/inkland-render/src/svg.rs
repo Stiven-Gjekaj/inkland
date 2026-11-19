@@ -332,14 +332,14 @@ fn write_relief(
     // A symbol under a label is left out, so that the text stays clear.
     let symbols: Vec<_> = crate::decor::relief(world, page, config.seed, &config.render.relief)
         .into_iter()
-        .filter(|(_, p)| !labels.covers(*p, 1.0))
+        .filter(|(_, p, _)| !labels.covers(*p, 1.0))
         .collect();
     let _ = writeln!(
         s,
         "<g id=\"relief\" clip-path=\"url(#clip-map)\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">",
         n(line_mm(0.5f64.max(min)))
     );
-    for (sym, [x, y]) in symbols {
+    for (sym, [x, y], k) in symbols {
         let fill = match sym {
             Symbol::Mountain | Symbol::Tree => PAPER,
             Symbol::Dune => INK,
@@ -353,7 +353,7 @@ fn write_relief(
         let _ = writeln!(
             s,
             "<path d=\"{}\" fill=\"{fill}\"{stroke}/>",
-            sym.path(x, y)
+            sym.path_scaled(x, y, k)
         );
     }
     s.push_str("</g>\n");

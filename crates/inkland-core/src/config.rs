@@ -1689,6 +1689,13 @@ pub struct ReliefOptions {
     /// forest biomes), `marsh` (wetland), or `dune` (the deserts).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hide: Vec<ReliefSymbol>,
+    /// Both render modes. `true`: the symbols follow the terrain. Mountains
+    /// stand in chains of overlapping peaks along the ridges, larger at the
+    /// crest, with hills at their feet. Trees grow in groups, denser in the
+    /// highland, and the symbols change a little in size. `false`: the
+    /// placement of Azgaar's Fantasy Map Generator. Default `true`.
+    #[serde(skip_serializing_if = "is_true")]
+    pub terrain: bool,
 }
 
 impl Default for ReliefOptions {
@@ -1696,6 +1703,7 @@ impl Default for ReliefOptions {
         Self {
             density: 1.0,
             hide: Vec::new(),
+            terrain: true,
         }
     }
 }

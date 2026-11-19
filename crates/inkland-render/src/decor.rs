@@ -244,37 +244,46 @@ impl Symbol {
 
     /// Path data of the symbol at `(x, y)`, in mm.
     pub fn path(self, x: f64, y: f64) -> String {
+        self.path_scaled(x, y, 1.0)
+    }
+
+    /// Path data of the symbol at `(x, y)`, in mm, `k` times its size. A
+    /// marsh and a dune keep their size.
+    pub fn path_scaled(self, x: f64, y: f64, k: f64) -> String {
         let f = |v: f64| inkland_core::num::fixed(v, 3);
         match self {
             // A peak, with a hatch line on its east side.
             Symbol::Mountain => format!(
                 "M{} {}L{} {}L{} {}M{} {}L{} {}",
-                f(x - 1.6),
-                f(y + 0.9),
+                f(x - 1.6 * k),
+                f(y + 0.9 * k),
                 f(x),
-                f(y - 1.1),
-                f(x + 1.6),
-                f(y + 0.9),
-                f(x + 0.25),
-                f(y - 0.6),
-                f(x + 0.85),
-                f(y + 0.7)
+                f(y - 1.1 * k),
+                f(x + 1.6 * k),
+                f(y + 0.9 * k),
+                f(x + 0.25 * k),
+                f(y - 0.6 * k),
+                f(x + 0.85 * k),
+                f(y + 0.7 * k)
             ),
             Symbol::Hill => format!(
                 "M{} {}Q{} {} {} {}",
-                f(x - 1.1),
-                f(y + 0.4),
+                f(x - 1.1 * k),
+                f(y + 0.4 * k),
                 f(x),
-                f(y - 0.9),
-                f(x + 1.1),
-                f(y + 0.4)
+                f(y - 0.9 * k),
+                f(x + 1.1 * k),
+                f(y + 0.4 * k)
             ),
             Symbol::Tree => format!(
-                "M{} {}a0.45 0.45 0 1 1 0.001 0M{} {}v0.7",
-                f(x - 0.45),
-                f(y - 0.3),
+                "M{} {}a{} {} 0 1 1 0.001 0M{} {}v{}",
+                f(x - 0.45 * k),
+                f(y - 0.3 * k),
+                f(0.45 * k),
+                f(0.45 * k),
                 f(x),
-                f(y + 0.15)
+                f(y + 0.15 * k),
+                f(0.7 * k)
             ),
             Symbol::Marsh => format!(
                 "M{} {}h1.4M{} {}h0.9M{} {}h1.4",
@@ -307,14 +316,20 @@ fn symbol_of(world: &World, c: usize) -> Option<Symbol> {
     }
 }
 
+/// A relief candidate: the symbol, its cell, its point (`None`: the cell
+/// site with jitter), its size factor, and its spacing factor.
+type Candidate = (Symbol, usize, Option<[f64; 2]>, f64, f64);
+
 /// Place relief symbols: cells in a random order from the seed tree, each
-/// at least the spacing of its kind from the symbols before it.
+/// at least the spacing of its kind from the symbols before it. Each symbol
+/// has a size factor. With `terrain`, the ridges come first: mountains in
+/// chains along them, then hills at their feet, then the other symbols.
 pub fn relief(
     world: &World,
     page: &Page,
     seed: u64,
     opts: &inkland_core::config::ReliefOptions,
-) -> Vec<(Symbol, [f64; 2])> {
+) -> Vec<(Symbol, [f64; 2], f64)> {
     use inkland_core::config::ReliefSymbol;
     if opts.density <= 0.0 {
         return Vec::new();
@@ -338,27 +353,85 @@ pub fn relief(
         .map(|c| ((rng.unit() * (1u64 << 52) as f64) as u64, c))
         .collect();
     order.sort();
+    let terrain = opts.terrain.then(|| relief_terrain(world));
+    // Each candidate: the symbol, the world point, the size, and the
+    // spacing factor. `None` for the point: the cell site with jitter.
+    let mut candidates: Vec<Candidate> = Vec::new();
+    if let Some(t) = &terrain {
+        // The ridges, highest first: a peak at each ridge cell and one
+        // between each two ridge cells, so that the peaks overlap.
+        let mut ridges: Vec<usize> = (0..g.len()).filter(|&c| t.ridge[c]).collect();
+        ridges.sort_by(|&a, &b| {
+            world.heights[b]
+                .total_cmp(&world.heights[a])
+                .then(a.cmp(&b))
+        });
+        for &c in &ridges {
+            let k = 0.8 + 0.6 * t.crest[c];
+            candidates.push((Symbol::Mountain, c, Some(g.points[c]), k, 0.5));
+            for m in g.neighbors(c).filter(|&m| t.ridge[m] && m > c) {
+                let (a, b) = (g.points[c], g.points[m]);
+                let km = 0.8 + 0.3 * (t.crest[c] + t.crest[m]);
+                candidates.push((
+                    Symbol::Mountain,
+                    c,
+                    Some([(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]),
+                    km,
+                    0.5,
+                ));
+            }
+        }
+        for &(_, c) in &order {
+            if t.foot[c] {
+                candidates.push((Symbol::Hill, c, None, 0.8 + 0.4 * rng.unit(), 0.9));
+            }
+        }
+    }
+    for &(_, c) in &order {
+        if !world.features.is_land(c) {
+            continue;
+        }
+        if let Some(t) = &terrain {
+            if t.ridge[c] || t.foot[c] {
+                continue;
+            }
+            let Some(sym) = symbol_of(world, c) else {
+                continue;
+            };
+            // Trees grow in groups, and closer in the highland.
+            if sym == Symbol::Tree && t.clump[c] < -0.15 {
+                continue;
+            }
+            let high = ((world.heights[c] - world.sea_level) / 30.0).clamp(0.0, 1.0);
+            let gap = if sym == Symbol::Tree {
+                1.1 - 0.35 * high
+            } else {
+                1.0
+            };
+            candidates.push((sym, c, None, 0.85 + 0.3 * rng.unit(), gap));
+        } else if let Some(sym) = symbol_of(world, c) {
+            candidates.push((sym, c, None, 1.0, 1.0));
+        }
+    }
     let [x0, y0, x1, y1] = page.view;
     let bucket = 4.0 * scale;
     let mut grid: Buckets = BTreeMap::new();
     let mut out = Vec::new();
-    for (_, c) in order {
-        if !world.features.is_land(c) {
+    for (sym, c, at, k, gap_factor) in candidates {
+        if !world.features.is_land(c) || hidden(sym) {
             continue;
         }
-        let p = g.points[c];
+        let p = at.unwrap_or(g.points[c]);
         if p[0] < x0 || p[0] > x1 || p[1] < y0 || p[1] > y1 {
             continue;
         }
-        let Some(sym) = symbol_of(world, c) else {
-            continue;
-        };
-        if hidden(sym) {
-            continue;
-        }
         // Jitter inside the cell, so that the symbols do not form rows.
-        let j = (g.step_x.min(g.step_y)) * 0.3;
-        let w = [p[0] + rng.uniform(-j, j), p[1] + rng.uniform(-j, j)];
+        let w = if at.is_some() {
+            p
+        } else {
+            let j = (g.step_x.min(g.step_y)) * 0.3;
+            [p[0] + rng.uniform(-j, j), p[1] + rng.uniform(-j, j)]
+        };
         let q = page.to_page(w);
         let key = (
             (q[0] / bucket).floor() as i64,
@@ -366,10 +439,10 @@ pub fn relief(
         );
         let near = (-1..=1)
             .flat_map(|dx| (-1..=1).map(move |dy| (key.0 + dx, key.1 + dy)))
-            .any(|k| {
-                grid.get(&k).is_some_and(|v| {
+            .any(|kk| {
+                grid.get(&kk).is_some_and(|v| {
                     v.iter().any(|(s, r)| {
-                        let gap = s.spacing().max(sym.spacing()) * scale;
+                        let gap = s.spacing().max(sym.spacing()) * scale * gap_factor;
                         (r[0] - q[0]).powi(2) + (r[1] - q[1]).powi(2) < gap * gap
                     })
                 })
@@ -378,7 +451,7 @@ pub fn relief(
             continue;
         }
         grid.entry(key).or_default().push((sym, q));
-        out.push((sym, q));
+        out.push((sym, q, k));
     }
     out
 }
@@ -399,11 +472,16 @@ mod tests {
         let w = World::build(&c).unwrap();
         let page = Page::new(&c, &c.variants[0]);
         let run = |o: ReliefOptions| relief(&w, &page, c.seed, &o);
-        let count = |v: &[(Symbol, [f64; 2])], s: Symbol| v.iter().filter(|x| x.0 == s).count();
-        let full = run(ReliefOptions::default());
+        let count =
+            |v: &[(Symbol, [f64; 2], f64)], s: Symbol| v.iter().filter(|x| x.0 == s).count();
+        let full = run(ReliefOptions {
+            terrain: false,
+            ..Default::default()
+        });
         assert!(count(&full, Symbol::Tree) > 50);
         let quarter = run(ReliefOptions {
             density: 0.25,
+            terrain: false,
             ..Default::default()
         });
         let (a, b) = (full.len() as f64, quarter.len() as f64);
@@ -447,6 +525,51 @@ mod tests {
         assert!(river_scale(&w, small, 1.0) < 1.0);
         assert!(river_scale(&w, small, 2.0) < river_scale(&w, small, 1.0));
         assert_eq!(river_scale(&w, small, 0.0), 1.0);
+    }
+
+    #[test]
+    fn terrain_relief_puts_mountains_in_chains_and_trees_in_groups() {
+        use inkland_core::config::{Config, ReliefOptions};
+        let c: Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 6, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 6000, "template": "high-island" },
+            "variants": [{ "name": "m", "page": { "w_mm": 300, "h_mm": 200 } }]
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let page = Page::new(&c, &c.variants[0]);
+        let fmg = relief(
+            &w,
+            &page,
+            c.seed,
+            &ReliefOptions {
+                terrain: false,
+                ..Default::default()
+            },
+        );
+        let new = relief(&w, &page, c.seed, &ReliefOptions::default());
+        let mountains = |v: &[(Symbol, [f64; 2], f64)]| {
+            v.iter()
+                .filter(|x| x.0 == Symbol::Mountain)
+                .map(|x| x.1)
+                .collect::<Vec<_>>()
+        };
+        let (a, b) = (mountains(&fmg), mountains(&new));
+        assert!(b.len() > a.len(), "more mountains: {} {}", a.len(), b.len());
+        // In a chain, peaks overlap: closer than the old spacing of 3.6 mm.
+        let close = b.iter().enumerate().any(|(i, p)| {
+            b[i + 1..]
+                .iter()
+                .any(|q| (p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) < 3.0 * 3.0)
+        });
+        assert!(close);
+        // The sizes change.
+        let sizes: Vec<f64> = new.iter().map(|x| x.2).collect();
+        let (lo, hi) = sizes
+            .iter()
+            .fold((9.0f64, 0.0f64), |(l, h), &k| (l.min(k), h.max(k)));
+        assert!(hi - lo > 0.2);
+        assert!(fmg.iter().all(|x| x.2 == 1.0));
     }
 
     #[test]
