@@ -84,6 +84,10 @@ A place in a `sea` region is an error, with two exceptions:
 - `shelf` on a `sea` or `lake` region: the water is shallow along the
   coast and deep at this distance from it.
 - `height` on a water region sets its depth range, below sea level.
+- `world.deep_sea: true` sinks the seabed of the template: each height
+  below sea level becomes 0.4 of it. Without it, the hills of the seabed
+  of a sea template show as pale shallows in open ocean. Use `shelf` on a
+  sea region for shallow water along its coast.
 - `world.edges` puts open sea or land along a frame edge:
   `{ "north": "sea", "west": "land", "width": 60 }`. Land at an edge goes
   on past the frame.
