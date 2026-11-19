@@ -151,6 +151,30 @@ fn city_in_a_forced_sea_is_infeasible() {
 }
 
 #[test]
+fn town_on_a_land_region_with_a_higher_priority_than_the_sea_is_feasible() {
+    let c = with(json!({ "pins": {
+        "points": [{ "id": "portvale", "kind": "town", "at": [10, 150], "port": true }],
+        "regions": [
+            { "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300] },
+            { "id": "isle", "kind": "hills", "circle": { "at": [10, 150], "r": 4 }, "priority": 1 }
+        ]
+    }}));
+    assert_eq!(codes(&c), vec![]);
+}
+
+#[test]
+fn town_on_a_land_region_with_a_lower_priority_than_the_sea_is_infeasible() {
+    let c = with(json!({ "pins": {
+        "points": [{ "id": "portvale", "kind": "town", "at": [10, 150] }],
+        "regions": [
+            { "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300], "priority": 2 },
+            { "id": "isle", "kind": "hills", "circle": { "at": [10, 150], "r": 4 }, "priority": 1 }
+        ]
+    }}));
+    one(&c, ErrorCode::PinInForcedSea, "/pins/points/0/at");
+}
+
+#[test]
 fn city_next_to_a_forced_sea_is_feasible() {
     let c = with(json!({ "pins": {
         "points": [{ "id": "a", "kind": "city", "at": [21, 150], "port": true }],

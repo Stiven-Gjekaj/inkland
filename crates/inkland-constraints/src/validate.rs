@@ -1078,11 +1078,7 @@ impl<'a> Validator<'a> {
 
     fn places_on_land(&mut self) {
         let c = self.c;
-        let water: Vec<(usize, &RegionPin, Shape)> = self
-            .shaped_regions()
-            .into_iter()
-            .filter(|(_, r, _)| r.kind.is_water())
-            .collect();
+        let shaped = self.shaped_regions();
         let mut places: Vec<(String, &PointPin)> = c
             .pins
             .points
@@ -1096,8 +1092,17 @@ impl<'a> Validator<'a> {
             }
         }
         for (path, pin) in places {
-            for (_, region, shape) in &water {
-                if shape.contains(pin.at) {
+            // Of the regions that hold the place, the ones with the highest
+            // priority rule it. A land region with a higher priority than
+            // the sea around it can hold a place.
+            let holding: Vec<&RegionPin> = shaped
+                .iter()
+                .filter(|(_, _, shape)| shape.contains(pin.at))
+                .map(|(_, r, _)| *r)
+                .collect();
+            let top = holding.iter().map(|r| r.priority).max();
+            for region in holding {
+                if region.kind.is_water() && Some(region.priority) == top {
                     self.err(
                         ErrorCode::PinInForcedSea,
                         path.clone(),

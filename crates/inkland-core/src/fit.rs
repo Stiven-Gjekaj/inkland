@@ -319,6 +319,40 @@ mod tests {
         assert!(wolds > 10 && low > 10);
     }
 
+    #[test]
+    fn a_town_on_an_island_in_a_pinned_sea_is_land() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 3, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": "pangea" },
+            "pins": {
+                "points": [{ "id": "portvale", "kind": "town", "at": [65, 100], "port": true }],
+                "regions": [
+                    { "id": "bay", "kind": "sea", "box": [0, 0, 120, 200] },
+                    { "id": "isle", "kind": "hills", "height": [22, 28],
+                      "circle": { "at": [60, 100], "r": 8 }, "priority": 1 }
+                ]
+            }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        let cell = w.pin_cells[0];
+        assert!(w.heights[cell] >= 20.0, "the town is in water");
+        assert!(
+            w.grid.neighbors(cell).any(|m| w.heights[m] < 20.0),
+            "the port has no water"
+        );
+        // The sea outside the island stays water. The second grid has no
+        // cells in the deep sea, so look at the cells it has.
+        let sea: Vec<f64> = (0..w.grid.len())
+            .filter(|&c| {
+                let [x, y] = w.grid.points[c];
+                x < 110.0 && ((x - 60.0).powi(2) + (y - 100.0).powi(2)).sqrt() > 14.0
+            })
+            .map(|c| w.heights[c])
+            .collect();
+        assert!(!sea.is_empty() && sea.iter().all(|&h| h < 20.0));
+    }
+
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {
         let c: Config = serde_json::from_value(json!({
             "version": 1, "seed": 1, "frame": { "width": 100, "height": 100 },
