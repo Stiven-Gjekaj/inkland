@@ -68,6 +68,9 @@ struct Rough {
     islets: f64,
     /// The noise of the small islands.
     isle: Fractal,
+    /// The ports near the outline. The noise fades out near each of them,
+    /// so that the coast of a port stays where the config draws it.
+    ports: Vec<Point>,
 }
 
 impl Rough {
@@ -100,6 +103,7 @@ impl Rough {
                     .clamp(0.0, 1.0)
             },
             isle: Fractal::new(part("coast-islets"), 2, 1.2 * amount),
+            ports: Vec::new(),
         })
     }
 
@@ -114,7 +118,22 @@ impl Rough {
     }
 
     /// How far the outline moves out at `p`, from `-amount` to `amount`.
+    /// Within 3 times the amount of a port, the shift fades to 0.
     fn shift(&self, p: Point) -> f64 {
+        let reach = 3.0 * self.amount;
+        let calm = self
+            .ports
+            .iter()
+            .map(|&q| (dist(p, q) / reach).min(1.0))
+            .fold(1.0f64, f64::min);
+        if calm <= 0.0 {
+            return 0.0;
+        }
+        calm * self.free_shift(p)
+    }
+
+    /// The shift without the ports.
+    fn free_shift(&self, p: Point) -> f64 {
         let w = 1.5 * self.amount;
         let q = [p[0] + w * self.warp[0].at(p), p[1] + w * self.warp[1].at(p)];
         let v = 0.55 * self.bays.at(p) + 0.45 * self.noise.at(q);
@@ -141,6 +160,41 @@ fn coast_sides(shape: &Shape, [w, h]: [f64; 2]) -> Vec<(Point, Point)> {
 }
 
 impl<'a> FitRegion<'a> {
+    /// The regions of a config, as the terrain uses them. The noise of a
+    /// rough outline fades near each port.
+    pub fn of_config(config: &'a crate::config::Config) -> Vec<FitRegion<'a>> {
+        let mut regions = FitRegion::all(
+            &config.pins.regions,
+            f64::from(config.world.sea_level),
+            [config.frame.width, config.frame.height],
+            &SeedTree::new(config.seed),
+        );
+        let ports: Vec<Point> = config
+            .pins
+            .points
+            .iter()
+            .filter(|p| p.port)
+            .map(|p| p.at)
+            .collect();
+        for r in &mut regions {
+            if let Some(rough) = &mut r.rough {
+                let reach = 3.0 * rough.amount;
+                let [x0, y0, x1, y1] = r.bbox;
+                rough.ports = ports
+                    .iter()
+                    .copied()
+                    .filter(|q| {
+                        q[0] >= x0 - reach
+                            && q[0] <= x1 + reach
+                            && q[1] >= y0 - reach
+                            && q[1] <= y1 + reach
+                    })
+                    .collect();
+            }
+        }
+        regions
+    }
+
     /// The regions of a config. `frame` is the width and the height of the
     /// frame. The noise of a rough outline comes from `tree`.
     pub fn all(
@@ -846,6 +900,27 @@ mod tests {
         assert_eq!(count(0.0), 0);
         let (some, many) = (count(0.3), count(1.0));
         assert!(some > 0 && many > some, "{some} {many}");
+    }
+
+    #[test]
+    fn the_coast_noise_fades_near_a_port() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 1, "frame": { "width": 400, "height": 400 },
+            "pins": {
+                "points": [{ "id": "haven", "kind": "town", "at": [100, 200], "port": true }],
+                "regions": [{ "id": "land", "kind": "land", "box": [100, 0, 400, 400], "roughness": 10 }]
+            }
+        }))
+        .unwrap();
+        let fit = FitRegion::of_config(&c);
+        let rough = fit[0].rough.as_ref().unwrap();
+        assert_eq!(rough.shift([100.0, 200.0]), 0.0);
+        assert!(rough.shift([100.0, 215.0]).abs() <= rough.free_shift([100.0, 215.0]).abs());
+        // Far from the port, the noise is whole.
+        assert_eq!(
+            rough.shift([100.0, 330.0]),
+            rough.free_shift([100.0, 330.0])
+        );
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {

@@ -208,7 +208,7 @@ impl World {
             }
         }
 
-        let regions = FitRegion::all(&pins.regions, sea_level, [w, h], &tree);
+        let regions = FitRegion::of_config(config);
         apply_regions(&base_grid, &mut base_heights, &regions, sea_level);
         let points: Vec<FitPoint> = pins
             .points
@@ -887,7 +887,7 @@ mod pin_tests {
             let w = World::build(&c).map_err(|e| TestCaseError::fail(format!("{e:?}")))?;
             let sea = w.sea_level;
 
-            let fit = FitRegion::all(&c.pins.regions, sea, [w.width, w.height], &SeedTree::new(c.seed));
+            let fit = FitRegion::of_config(&c);
             for (r, shape) in c.pins.regions.iter().zip(&fit) {
                 let [lo, hi] = effective_range(r, sea);
                 for cell in 0..w.grid.len() {
@@ -936,12 +936,7 @@ mod pin_tests {
                 assert_eq!(w.grid.find_cell(p.at[0], p.at[1]), cell, "{lattice}");
                 assert!(w.features.is_land(cell), "{lattice}: {} is not land", p.id);
             }
-            let fit = FitRegion::all(
-                &c.pins.regions,
-                w.sea_level,
-                [w.width, w.height],
-                &SeedTree::new(c.seed),
-            );
+            let fit = FitRegion::of_config(&c);
             for (r, shape) in c.pins.regions.iter().zip(&fit) {
                 let [lo, hi] = effective_range(r, w.sea_level);
                 for cell in (0..w.grid.len()).filter(|&k| shape.contains(w.grid.points[k])) {

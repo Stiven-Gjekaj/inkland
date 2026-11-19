@@ -208,15 +208,9 @@ fn point_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_
 /// The report of each region pin: its cells and their height range.
 fn region_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
     use inkland_core::fit::{FitRegion, effective_range, ruling_at};
-    use inkland_core::seed::SeedTree;
     // The cells of a region are the cells that it rules, inside its outline
     // as the terrain uses it (with the noise of a rough outline).
-    let fit = FitRegion::all(
-        &config.pins.regions,
-        world.sea_level,
-        [config.frame.width, config.frame.height],
-        &SeedTree::new(config.seed),
-    );
+    let fit = FitRegion::of_config(config);
     let rulers: Vec<Vec<usize>> = world
         .grid
         .points
