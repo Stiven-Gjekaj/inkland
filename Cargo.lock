@@ -2649,6 +2649,7 @@ dependencies = [
  "flate2",
  "inkland-core",
  "libm",
+ "png",
  "schemars",
  "serde",
  "serde_json",
