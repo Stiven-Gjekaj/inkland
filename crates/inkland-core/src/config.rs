@@ -1548,6 +1548,24 @@ pub struct Render {
     /// `relief.options.density` instead.
     #[serde(default, skip_serializing_if = "ReliefOptions::is_default")]
     pub relief: ReliefOptions,
+    /// `print-safe` mode: the depths of the dashed depth lines in the
+    /// ocean, below sea level on the height scale 0 to 100. Each line goes
+    /// around the ocean at least that deep. Empty: no depth lines. Default
+    /// `[6, 12]`. `colour` mode uses the style value
+    /// `ocean.groups.oceanLayers.options.depths` instead.
+    #[serde(
+        default = "default_depth_lines",
+        skip_serializing_if = "is_default_depth_lines"
+    )]
+    pub depth_lines: Vec<f64>,
+}
+
+fn default_depth_lines() -> Vec<f64> {
+    vec![6.0, 12.0]
+}
+
+fn is_default_depth_lines(v: &[f64]) -> bool {
+    v == default_depth_lines().as_slice()
 }
 
 /// Options of the layer `emblems`: the coats of arms of the states, the
@@ -1589,6 +1607,7 @@ impl Default for Render {
             emblems: EmblemOptions::default(),
             labels: LabelRules::default(),
             relief: ReliefOptions::default(),
+            depth_lines: default_depth_lines(),
         }
     }
 }

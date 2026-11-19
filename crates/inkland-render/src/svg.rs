@@ -79,8 +79,8 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
     for layer in &config.render.layers {
         use inkland_core::config::LayerName;
         let parts: &[&str] = match layer {
-            LayerName::Coast => &["water-lines", "coast"],
-            LayerName::Ocean => &["water-lines"],
+            LayerName::Coast => &["depth-lines", "water-lines", "coast"],
+            LayerName::Ocean => &["depth-lines", "water-lines"],
             LayerName::Coastline => &["coast"],
             LayerName::Regions | LayerName::Borders => &["borders"],
             LayerName::Roads | LayerName::Routes => &["roads"],
@@ -100,6 +100,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
                 continue;
             }
             match *part {
+                "depth-lines" => write_depth_lines(&mut s, world, config, &page, min),
                 "water-lines" => write_water_lines(&mut s, world, &page, min),
                 "coast" => write_coast(&mut s, world, config, &page, coast_w),
                 "relief" => write_relief(&mut s, world, config, &page, min, &labels),
@@ -226,6 +227,38 @@ fn write_labels(s: &mut String, labels: &crate::labels::Labels, halo: bool) {
                     l.id,
                     xml(&l.text)
                 );
+            }
+        }
+    }
+    s.push_str("</g>\n");
+}
+
+/// Depth lines: thin dashed lines around the deep ocean, one for each depth
+/// of `render.depth_lines`.
+fn write_depth_lines(s: &mut String, world: &World, config: &Config, page: &Page, min: f64) {
+    let depths = &config.render.depth_lines;
+    if depths.is_empty() {
+        return;
+    }
+    let width = 0.35f64.max(min);
+    let _ = writeln!(
+        s,
+        "<g id=\"depth-lines\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-dasharray=\"{} {}\" stroke-linejoin=\"round\">",
+        n(line_mm(width)),
+        n(line_mm(width * 4.0)),
+        n(line_mm(width * 3.0))
+    );
+    for (k, &depth) in depths.iter().enumerate() {
+        for (i, line) in crate::decor::depth_lines(world, depth).iter().enumerate() {
+            let pts: Vec<[f64; 2]> = line
+                .iter()
+                .map(|&v| world.base.grid.vertices[v as usize])
+                .collect();
+            let closed = line.len() > 2 && line.first() == line.last();
+            let smooth = crate::decor::chaikin(&pts, closed, 3);
+            let d = path_data(page, &smooth, closed);
+            if !d.is_empty() {
+                let _ = writeln!(s, "<path id=\"depth-line-{}-{}\" d=\"{d}\"/>", k + 1, i + 1);
             }
         }
     }
@@ -736,6 +769,25 @@ mod tests {
             );
         }
         assert!(s.contains("<g id=\"coast\""));
+    }
+
+    #[test]
+    fn depth_lines_go_around_the_deep_ocean_and_can_be_turned_off() {
+        let (s, w) = svg();
+        assert!(s.contains("<g id=\"depth-lines\""));
+        assert!(s.contains("id=\"depth-line-1-1\""));
+        assert!(s.contains("id=\"depth-line-2-1\""));
+        // A deeper line goes around less ocean.
+        let cells = |d: f64| {
+            (0..w.base.grid.len())
+                .filter(|&c| crate::decor::deep(&w, c, d))
+                .count()
+        };
+        assert!(cells(12.0) < cells(6.0) && cells(12.0) > 0);
+        let mut c = config();
+        c.render.depth_lines = Vec::new();
+        let none = render(&w, &c, &c.variants[0]).svg;
+        assert!(!none.contains("depth-line"));
     }
 
     #[test]

@@ -832,6 +832,15 @@ impl<'a> Validator<'a> {
     /// The style overrides.
     fn render_style(&mut self) {
         let r = &self.c.render;
+        for (i, d) in r.depth_lines.iter().enumerate() {
+            if !(d.is_finite() && *d > 0.0 && *d <= 100.0) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("/render/depth_lines/{i}"),
+                    "a depth must be more than 0 and at most 100",
+                );
+            }
+        }
         for (key, value) in &r.style_overrides {
             let pointer = format!(
                 "/render/style_overrides/{}",

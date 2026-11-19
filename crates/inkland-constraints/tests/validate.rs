@@ -226,6 +226,12 @@ fn shelf_on_land_or_of_zero_is_refused() {
 }
 
 #[test]
+fn depth_line_of_zero_is_refused() {
+    let c = with(json!({ "render": { "depth_lines": [6, 0] } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/render/depth_lines/1");
+}
+
+#[test]
 fn edge_width_of_zero_is_refused() {
     let c = with(json!({ "world": { "edges": { "north": "sea", "width": 0 } } }));
     one(&c, ErrorCode::ValueOutOfRange, "/world/edges/width");
