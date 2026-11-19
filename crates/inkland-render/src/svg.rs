@@ -420,7 +420,10 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
 
 fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
     use inkland_core::config::RoadKind;
+    use inkland_core::curves::road_line;
     use std::collections::BTreeSet;
+    // Each road is a smooth curve with a seeded wander, as in colour mode.
+    let seed = inkland_core::curves::wander_seed(config.seed);
     let min = config.render.min_line_width_pt;
     let style = |kind: RoadKind| match kind {
         RoadKind::Road => (n(line_mm(ROAD_PT.max(min))), "1.6 0.5"),
@@ -443,7 +446,7 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
         for w in r.cells.windows(2) {
             pinned_edges.insert((w[0].min(w[1]), w[0].max(w[1])));
         }
-        let d = path_data(page, &r.points, false);
+        let d = path_data(page, &road_line(seed, &r.points), false);
         if !d.is_empty() {
             items.push((format!("road-{id}"), d, r.kind));
         }
@@ -494,7 +497,7 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
                 .iter()
                 .map(|&c| world.grid.points[c as usize])
                 .collect();
-            let d = path_data(page, &pts, false);
+            let d = path_data(page, &road_line(seed, &pts), false);
             if !d.is_empty() {
                 let _ = writeln!(
                     s,
@@ -838,5 +841,35 @@ mod tests {
     #[test]
     fn same_world_gives_the_same_bytes() {
         assert_eq!(svg().0, svg().0);
+    }
+
+    #[test]
+    fn a_road_is_drawn_as_the_curve_of_the_core() {
+        let c = config();
+        let mut w = World::build(&c).unwrap();
+        w.roads.push(inkland_core::roads::Road {
+            id: 99,
+            pin: None,
+            overlay: Some("bend".into()),
+            kind: inkland_core::config::RoadKind::Road,
+            group: "roads",
+            name: None,
+            feature: 0,
+            cells: vec![0, 1, 2],
+            points: vec![[150.0, 150.0], [200.0, 120.0], [250.0, 150.0]],
+            length: 0.0,
+            stops: Vec::new(),
+            crossings: Vec::new(),
+        });
+        let svg = render(&w, &c, &c.variants[0]).svg;
+        let doc = roxmltree::Document::parse(&svg).unwrap();
+        let d = doc
+            .descendants()
+            .find(|e| e.attribute("id") == Some("road-bend"))
+            .and_then(|e| e.attribute("d"))
+            .expect("the road has a path");
+        // One point on each sample of the curve: no corner at the middle.
+        let points = d.matches(['M', 'L']).count();
+        assert_eq!(points, 2 * inkland_core::curves::SAMPLES + 1);
     }
 }
