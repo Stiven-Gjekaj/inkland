@@ -524,9 +524,11 @@ A place at exact coordinates.
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `at` | array of 2 number | yes |  | Position `[x, y]`, in units. The place is put here exactly. |
-| `capital_of` | string |  |  | Name of a state. The state forms around this place, its capital. |
+| `capital_of` | string |  |  | Name of a state. The state forms around this place, its capital. A later pin with the same name is a seat of the state: the state also grows from it, for example on the other side of a sea. |
+| `claim` | array of array of 2 number |  |  | A soft claim of the state of this capital (`capital_of`): a polygon of 3 or more points `[x, y]`, in units. The state grows into it first, and the other states take its cells only at a high cost. The claims of a capital and its seats add together. Default: no claim. |
 | `coa` | [`Coa`](#coa) |  |  | The coat of arms of this place, in the JSON shape of Azgaar's Fantasy Map Generator. It replaces the generated arms, and the generated arms of a province with this place as its seat take from it. Without `shield`, the arms get the generated shield shape. An overlay place does not use it. Default: generated arms. |
 | `custom_kind` | string |  |  | Name of the kind. Required when `kind` is `custom`. |
+| `expansionism` | number |  |  | How far the state of this capital (`capital_of`) grows, 0.1 to 10. It divides the cost of each cell that the state takes, so a bigger value gives a bigger state. It replaces the random expansionism of `world.size_variety`. On a seat, it counts only when the capital gives none. Default: random. |
 | `id` | string | yes |  | Identifier: lower-case letters and digits, words joined by `-`. Unique across all pins. |
 | `kind` | [`PlaceKind`](#placekind) | yes |  | Kind of place. |
 | `name` | string |  |  | Name of the place. Default: a generated name. |
@@ -612,6 +614,7 @@ A name or arms for a generated area. The entry finds its area by a point: the ar
 |---|---|---|---|---|
 | `at` | array of 2 number |  |  | A point `[x, y]` in the area, in units. |
 | `coa` | [`Coa`](#coa) |  |  | The coat of arms of a state or a province, in the JSON shape of Azgaar's Fantasy Map Generator. Without `shield`, the arms keep the generated shield shape. |
+| `color` | string |  |  | The color of a state, as `#rrggbb`. It replaces the generated color in the colour SVG and in `world.json`. Only for a state. |
 | `full_name` | string |  |  | The new full name of a state or a province, for example `Kingdom of Ostrey`. Default: the full name with the old name changed to the new name. |
 | `kind` | [`AreaKind`](#areakind) | yes |  | The kind of the area. |
 | `name` | string |  |  | The new name. Not empty. |
