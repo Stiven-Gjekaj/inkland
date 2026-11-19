@@ -952,3 +952,37 @@ fn the_new_layers_draw_nothing_in_print_safe_mode() {
     let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
     assert_eq!(svg, base);
 }
+
+/// A road of an overlay with three points and a corner at the middle.
+fn bent_road() -> inkland_core::roads::Road {
+    inkland_core::roads::Road {
+        id: 99,
+        pin: None,
+        overlay: Some("bend".into()),
+        kind: inkland_core::config::RoadKind::Road,
+        group: "roads",
+        name: None,
+        feature: 0,
+        cells: vec![0, 1, 2],
+        points: vec![[150.0, 150.0], [200.0, 120.0], [250.0, 150.0]],
+        length: 0.0,
+        stops: Vec::new(),
+        crossings: Vec::new(),
+    }
+}
+
+#[test]
+fn routes_draw_the_curve_of_the_core() {
+    let w = world_with(|w| w.roads.push(bent_road()));
+    let svg = render_world(&w, &[LayerName::Routes]);
+    let doc = roxmltree::Document::parse(&svg).unwrap();
+    let path = doc
+        .descendants()
+        .find(|e| e.attribute("id") == Some("route-bend"))
+        .expect("the road has a path");
+    let d = path.attribute("d").unwrap();
+    // One point on each sample of the curve: no corner at the middle.
+    let points = d.matches(['M', 'L']).count();
+    assert_eq!(points, 2 * inkland_core::curves::SAMPLES + 1);
+    assert!(!d.contains('C'));
+}
