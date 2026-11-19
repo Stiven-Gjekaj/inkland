@@ -129,7 +129,8 @@ pub fn generate(
             state_names.push(s);
         }
     }
-    let pinned_capitals = places.iter().filter(|p| p.capital).count();
+    // A second pin with the same `capital_of` is a seat, not a capital.
+    let pinned_capitals = state_names.len();
     let mut number = (config.world.states as usize).max(state_names.len());
     if populated.len() < number * 10 {
         number = (populated.len() / 10).max(state_names.len());
@@ -741,5 +742,29 @@ fn river_bank(input: &Input, cell: usize) -> [f64; 2] {
                 y + (tx / len) * shift * side,
             ])
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::Config;
+    use crate::world::World;
+    use serde_json::json;
+
+    #[test]
+    fn two_pins_with_one_state_name_count_as_one_capital() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 4000, "template": "pangea", "states": 4 },
+            "pins": { "points": [
+                { "id": "home", "kind": "city", "at": [110, 150], "capital_of": "Realm" },
+                { "id": "far", "kind": "city", "at": [300, 140], "capital_of": "Realm" }
+            ] }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        assert_eq!(w.society.states.len(), 4);
+        let capitals = w.society.places.iter().filter(|p| p.capital).count();
+        assert_eq!(capitals, 4);
     }
 }

@@ -568,6 +568,11 @@ pub struct RenameEntry {
     /// generated shield shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coa: Option<crate::emblems::Coa>,
+    /// The color of a state, as `#rrggbb`. It replaces the generated color
+    /// in the colour SVG and in `world.json`. Only for a state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(regex(pattern = r"^#[0-9a-fA-F]{6}$"))]
+    pub color: Option<String>,
 }
 
 fn is_false(v: &bool) -> bool {
@@ -1015,6 +1020,8 @@ pub struct PointPin {
     #[serde(default)]
     pub port: bool,
     /// Name of a state. The state forms around this place, its capital.
+    /// A later pin with the same name is a seat of the state: the state
+    /// also grows from it, for example on the other side of a sea.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capital_of: Option<String>,
     /// Name of the kind. Required when `kind` is `custom`.
@@ -1033,6 +1040,20 @@ pub struct PointPin {
     /// arms.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_coa: Option<crate::emblems::Coa>,
+    /// How far the state of this capital (`capital_of`) grows, 0.1 to 10.
+    /// It divides the cost of each cell that the state takes, so a bigger
+    /// value gives a bigger state. It replaces the random expansionism of
+    /// `world.size_variety`. On a seat, it counts only when the capital
+    /// gives none. Default: random.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.1, max = 10.0))]
+    pub expansionism: Option<f64>,
+    /// A soft claim of the state of this capital (`capital_of`): a polygon
+    /// of 3 or more points `[x, y]`, in units. The state grows into it
+    /// first, and the other states take its cells only at a high cost. The
+    /// claims of a capital and its seats add together. Default: no claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim: Option<Vec<Point>>,
 }
 
 /// Kinds of places.

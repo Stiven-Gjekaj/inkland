@@ -2,10 +2,15 @@
 //! `normalize`, `findNeighbors`, and `assignColors`.
 //!
 //! - Each capital founds a state. A pinned capital gives its state the name
-//!   in `capital_of`.
+//!   in `capital_of`. A later pin with the same `capital_of` is a seat of
+//!   that state (inkland): the state grows from its capital and its seats,
+//!   so it can hold land on two sides of a sea.
 //! - States grow by least cost from their capitals with the costs of FMG:
 //!   culture, population, biome, height, river, and coast, divided by the
-//!   expansionism of the state. The growth stops at a total budget.
+//!   expansionism of the state. The growth stops at a total budget. A
+//!   capital pin can give the expansionism (inkland); else it is random.
+//! - inkland: a capital pin can give a soft claim, a polygon. The state
+//!   grows into it first; the other states pay more for its cells.
 //! - `normalize` gives a lone cell to the state around it.
 //! - inkland: each land cell must be in a state. A land cell that no state
 //!   reaches takes the state of the nearest cell with a state.
@@ -34,6 +39,10 @@ pub struct Input<'a> {
     pub chains: &'a [Chain],
 }
 
+/// The extra cost of a cell in the claim of another state (inkland). It is
+/// the cost of a sea cell for most states.
+const CLAIM_COST: f64 = 1000.0;
+
 /// One state for each capital (`createStates`).
 pub fn create(
     input: &Input,
@@ -50,13 +59,28 @@ pub fn create(
             .as_ref()
             .and_then(|id| config.pins.points.iter().find(|q| &q.id == id))
             .and_then(|q| q.capital_of.clone());
-        let expansionism = rn(rng.unit() * config.world.size_variety + 1.0, 1);
+        // inkland: the random value is always drawn, so that a given
+        // expansionism does not change the other states.
+        let random = rn(rng.unit() * config.world.size_variety + 1.0, 1);
+        let given = pinned.as_ref().and_then(|s| {
+            config
+                .pins
+                .points
+                .iter()
+                .filter(|q| q.capital_of.as_ref() == Some(s))
+                .find_map(|q| q.expansionism)
+        });
+        let expansionism = given.unwrap_or(random);
         let chain = &input.chains[p.culture as usize];
         let name = match pinned {
             Some(s) if !states.iter().any(|x| x.name == s) => s,
-            Some(_) => {
-                // A second pin with the same state name is not a capital.
+            Some(s) => {
+                // A second pin with the same state name is not a capital. It
+                // is a seat of the state.
                 p.capital = false;
+                if let Some(st) = states.iter_mut().find(|x| x.name == s) {
+                    st.seats.push(p.id);
+                }
                 continue;
             }
             None => {
@@ -108,16 +132,49 @@ pub fn expand(input: &Input, states: &[State], places: &[Place]) -> Vec<u32> {
     let mut heap = BinaryHeap::new();
     let mut seq = 0u64;
     let mut is_center = vec![false; n];
+    let seat_cell = |id: u32| places.iter().find(|p| p.id == id).map(|p| p.cell);
     for s in states {
-        state[s.center] = s.id;
-        is_center[s.center] = true;
         let native = cultures
             .get((s.culture as usize).wrapping_sub(1))
             .map_or(biomes[s.center], |c| biomes[c.center]);
-        heap.push(Reverse((Key(0.0, seq), s.center, s.id, native)));
-        seq += 1;
-        cost[s.center] = 1.0;
+        let seats = s.seats.iter().filter_map(|&id| seat_cell(id));
+        for c in std::iter::once(s.center).chain(seats) {
+            state[c] = s.id;
+            is_center[c] = true;
+            heap.push(Reverse((Key(0.0, seq), c, s.id, native)));
+            seq += 1;
+            cost[c] = 1.0;
+        }
     }
+    // inkland: the soft claims. A cell in the claim of its own state costs
+    // nothing more than the step; a cell in the claim of another state
+    // costs `CLAIM_COST` more. The first state with a claim on a cell wins.
+    let claims: Vec<(u32, crate::geom::Shape)> = states
+        .iter()
+        .flat_map(|s| {
+            config
+                .pins
+                .points
+                .iter()
+                .filter(move |q| q.capital_of.as_ref() == Some(&s.name))
+                .filter_map(move |q| {
+                    let poly = q.claim.as_ref().filter(|p| p.len() >= 3)?;
+                    Some((s.id, crate::geom::Shape::Polygon(poly.clone())))
+                })
+        })
+        .collect();
+    let claim_of: Vec<u32> = if claims.is_empty() {
+        Vec::new()
+    } else {
+        (0..n)
+            .map(|c| {
+                claims
+                    .iter()
+                    .find(|(_, shape)| shape.contains(grid.points[c]))
+                    .map_or(NONE, |(id, _)| *id)
+            })
+            .collect()
+    };
     let is_lake = |c: usize| features.get(features.of_cell[c]).kind == FeatureKind::Lake;
     while let Some(Reverse((Key(p, _), e, s, native))) = heap.pop() {
         let st = &states[s as usize - 1];
@@ -174,6 +231,11 @@ pub fn expand(input: &Input, states: &[State], places: &[Place]) -> Vec<u32> {
                 + river_cost
                 + type_cost(cells.t[m], kind))
             .max(0.0);
+            let cell_cost = match claim_of.get(m) {
+                Some(&c) if c == s => 0.0,
+                Some(&c) if c != NONE => cell_cost + CLAIM_COST,
+                _ => cell_cost,
+            };
             let total = p + 10.0 + cell_cost / st.expansionism;
             if total > budget {
                 continue;
@@ -191,7 +253,7 @@ pub fn expand(input: &Input, states: &[State], places: &[Place]) -> Vec<u32> {
 
     // normalize.
     let mut burg = vec![false; n];
-    let mut capital_cell = vec![false; n];
+    let mut capital_cell = is_center.clone();
     for p in places {
         burg[p.cell] = true;
         if p.capital {
@@ -904,6 +966,141 @@ mod tests {
         if s.states.len() > 1 {
             assert!(s.states.iter().any(|st| !st.neighbors.is_empty()));
         }
+    }
+
+    #[test]
+    fn a_second_pin_with_the_same_state_is_a_seat_that_the_state_grows_from() {
+        let config = |second: &str| -> Config {
+            serde_json::from_value(json!({
+                "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea", "states": 4,
+                           "growth_rate": 0.3 },
+                "pins": { "points": [
+                    { "id": "home", "kind": "city", "at": [110, 150], "capital_of": "Realm" },
+                    { "id": "far", "kind": "city", "at": [300, 140], "capital_of": second }
+                ] }
+            }))
+            .unwrap()
+        };
+        let w = World::build(&config("Realm")).unwrap();
+        let s = &w.society;
+        let realm: Vec<_> = s.states.iter().filter(|x| x.name == "Realm").collect();
+        assert_eq!(realm.len(), 1, "one state for the two pins");
+        let realm = realm[0];
+        let home = s
+            .places
+            .iter()
+            .find(|p| p.pin.as_deref() == Some("home"))
+            .unwrap();
+        let far = s
+            .places
+            .iter()
+            .find(|p| p.pin.as_deref() == Some("far"))
+            .unwrap();
+        assert_eq!(realm.capital, home.id, "the first pin is the capital");
+        assert_eq!(realm.seats, vec![far.id]);
+        assert!(home.capital && !far.capital);
+        assert_eq!(s.cell_state[far.cell], realm.id);
+        assert_eq!(far.state, realm.id);
+        // The state grows from the seat: the land around it is in the state.
+        for c in w.grid.neighbors(far.cell) {
+            if s.cells.land(c) {
+                assert_eq!(s.cell_state[c], realm.id, "cell {c}");
+            }
+        }
+        // A seat does not take the place of a generated capital.
+        assert_eq!(s.states.len(), 4);
+        let two = World::build(&config("Other")).unwrap();
+        assert_eq!(two.society.states.len(), 4);
+        // The same config gives the same states.
+        assert_eq!(
+            World::build(&config("Realm")).unwrap().society.cell_state,
+            s.cell_state
+        );
+    }
+
+    #[test]
+    fn a_capital_pin_gives_the_expansionism_of_its_state() {
+        let config = |a: Option<f64>, b: Option<f64>| -> Config {
+            let mut c: Config = serde_json::from_value(json!({
+                "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea", "states": 4 },
+                "pins": { "points": [
+                    { "id": "west", "kind": "city", "at": [140, 150], "capital_of": "West" },
+                    { "id": "east", "kind": "city", "at": [260, 150], "capital_of": "East" }
+                ] }
+            }))
+            .unwrap();
+            c.pins.points[0].expansionism = a;
+            c.pins.points[1].expansionism = b;
+            c
+        };
+        let size = |w: &World, name: &str| {
+            let id = w.society.states.iter().find(|s| s.name == name).unwrap().id;
+            w.society.cell_state.iter().filter(|&&s| s == id).count()
+        };
+        let base = World::build(&config(None, None)).unwrap();
+        let big_west = World::build(&config(Some(6.0), Some(0.5))).unwrap();
+        let big_east = World::build(&config(Some(0.5), Some(6.0))).unwrap();
+        let exp =
+            |w: &World| -> Vec<f64> { w.society.states.iter().map(|s| s.expansionism).collect() };
+        assert_eq!(&exp(&big_west)[..2], &[6.0, 0.5]);
+        // The generated states keep their random expansionism.
+        assert_eq!(&exp(&big_west)[2..], &exp(&base)[2..]);
+        assert!(size(&big_west, "West") > size(&big_west, "East"));
+        assert!(size(&big_east, "East") > size(&big_east, "West"));
+        assert!(size(&big_west, "West") > size(&big_east, "West"));
+    }
+
+    #[test]
+    fn a_state_grows_into_its_claim_first() {
+        let config = |claim: Option<serde_json::Value>| -> Config {
+            let mut east = json!({ "id": "east", "kind": "city", "at": [260, 150],
+                                   "capital_of": "East" });
+            if let Some(c) = claim {
+                east["claim"] = c;
+            }
+            serde_json::from_value(json!({
+                "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea", "states": 4 },
+                "pins": { "points": [
+                    { "id": "west", "kind": "city", "at": [140, 150], "capital_of": "West" },
+                    east
+                ] }
+            }))
+            .unwrap()
+        };
+        // A claim of East, around its capital, that reaches near the
+        // capital of West.
+        let poly = [
+            [165.0, 110.0],
+            [275.0, 110.0],
+            [275.0, 190.0],
+            [165.0, 190.0],
+        ];
+        let shape = crate::geom::Shape::Polygon(poly.to_vec());
+        let share = |w: &World| {
+            let s = &w.society;
+            let east = s.states.iter().find(|x| x.name == "East").unwrap().id;
+            let cells: Vec<usize> = (0..w.grid.len())
+                .filter(|&c| s.cells.land(c) && shape.contains(w.grid.points[c]))
+                .collect();
+            assert!(cells.len() > 20);
+            let held = cells.iter().filter(|&&c| s.cell_state[c] == east).count();
+            held as f64 / cells.len() as f64
+        };
+        let without = share(&World::build(&config(None)).unwrap());
+        let claimed = World::build(&config(Some(json!(poly)))).unwrap();
+        let with = share(&claimed);
+        assert!(with > 0.9, "{with} {without}");
+        assert!(with > without, "{with} {without}");
+        assert_eq!(
+            World::build(&config(Some(json!(poly))))
+                .unwrap()
+                .society
+                .cell_state,
+            claimed.society.cell_state
+        );
     }
 
     fn state(id: u32, form: &str) -> crate::society::State {
