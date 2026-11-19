@@ -274,3 +274,35 @@ the other sea labels. The other labels stay level.
 
 The scale bar of a `print-safe` map has paper behind it, so no symbol or
 line of the map goes through its labels.
+
+## Hills without peaks
+
+A `hills` region shows hill symbols and no ridge peaks, whatever the rest
+of the map is. Its default range is 42 to 62. The default range of
+`plains` is 21 to 42, so the two kinds still share a height where they
+meet. `"peaks": true` on a region lets its ridges show peaks.
+
+## The relief of a variant
+
+A variant `relief` changes only the fields that it gives. The other fields
+come from `render.relief`:
+
+```json
+"variants": [{ "name": "ostrey-then", "relief": { "hide_in": ["low-fen"] } }]
+```
+
+## A symbol kind in chosen places only
+
+```json
+"render": { "relief": { "only_in": { "marsh": ["low-fen"] } } }
+```
+
+The marsh symbols then stand only in the fen. The kinds are `mountain`,
+`hill`, `tree`, `marsh`, `dune`, and `field`. Each takes the ids of
+region pins and area pins.
+
+## The build in the report
+
+`report.tool.version` gives the build: `1.3.2` at a release, and for
+example `1.3.2+2-gb12d578` for a build after it. A map then records which
+build drew it.

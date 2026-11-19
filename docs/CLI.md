@@ -61,7 +61,9 @@ Files in the output directory:
   map. `relief.hidden` gives, for each id in `hide_in`, the number of
   symbols of each kind that it leaves out. Two variants that share one
   terrain show their symbols and hide their own, so the reports show what
-  each age hides. The counts are before the labels clear their places.
+  each age hides. `relief.pins` gives, for each region pin and area pin,
+  the number of shown symbols of each kind inside it. The counts are before
+  the labels clear their places.
 
 The summary on stdout gives the files and `checks_failed`. When a check
 fails, the files are written and the exit code is 1.
@@ -261,6 +263,12 @@ maps the view box to that width. In another root, one user unit is 1 mm.
 ## `inkland version`
 
 Print the version, the license, and the notice of the original program.
+
+A build at a release tag gives the version of the release, for example
+`1.3.2`. A build after it gives the number of commits after the tag and
+the commit, for example `1.3.2+2-gb12d578`. A build without git gives the
+version of the package. `--version`, `report.tool`, and `world.json` give
+the same value.
 
 | Flag | Meaning |
 |---|---|

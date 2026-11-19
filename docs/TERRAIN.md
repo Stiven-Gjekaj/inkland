@@ -183,6 +183,10 @@ highest 15 percent of the land of the map. Each ridge cell gets a
 mountain, and each cell next to a ridge gets a hill. So a small upland
 of heights 36 to 46 shows peaks, and land below 35 shows no mountain.
 
-To get hills and no peaks, keep the land below 35, or below the highest
-15 percent of the map. To get peaks, give the region a range that goes
-above 35, with a top above the rest of the land.
+A `hills` region has no ridges, so it shows hills and no peaks. Its
+default range is 42 to 62, where the hill symbols start. Give the region
+`"peaks": true` to let its ridges show peaks. Give another region
+`"peaks": false` to keep its ridges out.
+
+To get peaks elsewhere, give the region a range that goes above 35, with
+a top above the rest of the land.
