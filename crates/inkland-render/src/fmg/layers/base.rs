@@ -129,11 +129,75 @@ pub fn ocean(s: &mut String, ctx: &Ctx) {
             }
         }
     }
+    depth_layers(s, ctx, limits.is_empty());
     s.push_str("</g>\n");
     ocean_pattern(s, ctx);
     waves(s, ctx);
     bands(s, ctx);
     s.push_str("</g>\n");
+}
+
+/// The depths of the depth layers: the style option
+/// `ocean.groups.oceanLayers.options.depths`, a list of depths below sea
+/// level on the height scale, for example `4,8,12`, or `none`. Without the
+/// option, a style with no distance layers (`outline` is `none`) gets
+/// `4,8,12`, and another style gets none.
+pub fn depth_levels(ctx: &Ctx, no_outline: bool) -> Vec<f64> {
+    let text = ctx
+        .style
+        .option_str(&["ocean", "oceanLayers"], "depths")
+        .unwrap_or_else(|| {
+            if no_outline {
+                "4,8,12".into()
+            } else {
+                "none".into()
+            }
+        });
+    let mut v: Vec<f64> = text
+        .split(',')
+        .filter_map(|t| t.trim().parse::<f64>().ok())
+        .filter(|d| d.is_finite() && *d > 0.0)
+        .collect();
+    v.sort_by(f64::total_cmp);
+    v.dedup();
+    v
+}
+
+/// The depth layers: for each depth, the ocean at least that deep below sea
+/// level, in the band colour of the style with a low opacity. The layers
+/// add up, so deep water is darker. The heights come from the first grid.
+fn depth_layers(s: &mut String, ctx: &Ctx, no_outline: bool) {
+    let depths = depth_levels(ctx, no_outline);
+    if depths.is_empty() {
+        return;
+    }
+    let color = ctx
+        .style
+        .option_str(&["ocean", "oceanLayers"], "depth_color")
+        .or_else(|| ctx.style.option_str(&["ocean"], "bands.color"))
+        .unwrap_or_else(|| "#0b4f8a".into());
+    let opacity = ctx
+        .style
+        .option_f64(&["ocean", "oceanLayers"], "depth_opacity")
+        .unwrap_or(0.12);
+    let g = &ctx.world.base.grid;
+    for depth in depths {
+        let rings = geom::rings_on(g, &|c| u32::from(crate::decor::deep(ctx.world, c, depth)));
+        let mut d = String::new();
+        for ring in rings.get(&1).into_iter().flatten() {
+            let pts = relax(ctx, g, ring, 2);
+            if pts.len() >= 4 {
+                d.push_str(&basis_closed(&pts));
+            }
+        }
+        if !d.is_empty() {
+            let _ = writeln!(
+                s,
+                "<path class=\"depth\" d=\"{d}\" fill=\"{color}\" fill-opacity=\"{}\"/>",
+                inkland_core::num::fixed(opacity, 3)
+            );
+        }
+    }
 }
 
 /// The page pixels in one map pixel of the original program.

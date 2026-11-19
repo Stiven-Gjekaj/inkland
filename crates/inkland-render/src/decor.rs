@@ -47,6 +47,56 @@ pub fn chaikin(points: &[[f64; 2]], closed: bool, rounds: usize) -> Vec<[f64; 2]
     pts
 }
 
+/// `true` for a cell of the first grid in the ocean at least `depth` below
+/// sea level, on the height scale.
+pub fn deep(world: &World, c: usize, depth: f64) -> bool {
+    let b = &world.base;
+    !b.features.is_land(c)
+        && b.features.get(b.features.of_cell[c]).kind == inkland_core::features::FeatureKind::Ocean
+        && b.heights[c] <= world.sea_level - depth
+}
+
+/// The depth contours of the ocean: the lines around the ocean cells at
+/// least `depth` below sea level, on the height scale. Each line is a list
+/// of vertex indices of the first grid. A line ends at the frame, so it is
+/// open there; else it is closed (its last vertex is its first).
+pub fn depth_lines(world: &World, depth: f64) -> Vec<Vec<u32>> {
+    let g = &world.base.grid;
+    let rings = crate::fmg::geom::rings_on(g, &|c| u32::from(deep(world, c, depth)));
+    let mut out = Vec::new();
+    for ring in rings.get(&1).into_iter().flatten() {
+        // Start after an edge on the frame, so that each piece is whole.
+        let start = ring
+            .iter()
+            .position(|e| e.other == OUTSIDE)
+            .map_or(0, |i| (i + 1) % ring.len());
+        let closed = ring.iter().all(|e| e.other != OUTSIDE);
+        let mut line: Vec<u32> = Vec::new();
+        for k in 0..ring.len() {
+            let e = ring[(start + k) % ring.len()];
+            if e.other == OUTSIDE {
+                if line.len() > 1 {
+                    out.push(std::mem::take(&mut line));
+                }
+                line.clear();
+                continue;
+            }
+            if line.is_empty() {
+                line.push(e.from);
+            }
+            line.push(e.to);
+        }
+        if line.len() > 1 {
+            if closed && line.first() != line.last() {
+                let first = line[0];
+                line.push(first);
+            }
+            out.push(line);
+        }
+    }
+    out
+}
+
 /// The water lines: lines between water cells at distance `k` and `k + 1`
 /// from land, for `k` in 1 and 2. Each line is a list of vertex indices of
 /// the first grid, which keeps the deep water (as the ocean bands of FMG).

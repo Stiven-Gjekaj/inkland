@@ -952,3 +952,40 @@ fn the_new_layers_draw_nothing_in_print_safe_mode() {
     let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
     assert_eq!(svg, base);
 }
+
+fn render_ocean(style: StyleName, overrides: serde_json::Value) -> String {
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Ocean];
+    c.render.style = style;
+    c.render.style_overrides = serde_json::from_value(overrides).unwrap();
+    crate::svg::render(world(), &c, &c.variants[0]).svg
+}
+
+#[test]
+fn a_style_without_distance_layers_draws_depth_layers_from_the_heights() {
+    let svg = render_ocean(StyleName::Atlas, json!({}));
+    assert_eq!(
+        svg.matches("class=\"depth\"").count(),
+        3,
+        "atlas has 3 depth layers"
+    );
+    parse_and_draw(&svg);
+    // The default style has the distance layers of FMG, and no depth layers.
+    assert!(!render_ocean(StyleName::Default, json!({})).contains("class=\"depth\""));
+}
+
+#[test]
+fn the_depths_option_sets_or_removes_the_depth_layers() {
+    let none = render_ocean(
+        StyleName::Atlas,
+        json!({ "ocean.groups.oceanLayers.options.depths": "none" }),
+    );
+    assert!(!none.contains("class=\"depth\""));
+    let one = render_ocean(
+        StyleName::Default,
+        json!({ "ocean.groups.oceanLayers.options.depths": "6",
+                "ocean.groups.oceanLayers.options.depth_color": "#123456" }),
+    );
+    assert_eq!(one.matches("class=\"depth\"").count(), 1);
+    assert!(one.contains("fill=\"#123456\""));
+}
