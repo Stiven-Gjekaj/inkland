@@ -241,6 +241,8 @@ pub enum Symbol {
     Tree,
     Marsh,
     Dune,
+    /// A field with furrows, on open farmland near the places.
+    Field,
 }
 
 impl Symbol {
@@ -252,6 +254,7 @@ impl Symbol {
             Symbol::Tree => 2.0,
             Symbol::Marsh => 2.6,
             Symbol::Dune => 1.6,
+            Symbol::Field => 3.2,
         }
     }
 
@@ -308,6 +311,26 @@ impl Symbol {
                 f(y + 0.4)
             ),
             Symbol::Dune => format!("M{} {}a0.12 0.12 0 1 1 0.001 0", f(x - 0.12), f(y)),
+            // A field: a low, slanted outline with two furrows in it.
+            Symbol::Field => format!(
+                "M{} {}L{} {}L{} {}L{} {}ZM{} {}L{} {}M{} {}L{} {}",
+                f(x - 1.2 * k),
+                f(y + 0.5 * k),
+                f(x - 0.8 * k),
+                f(y - 0.5 * k),
+                f(x + 1.2 * k),
+                f(y - 0.5 * k),
+                f(x + 0.8 * k),
+                f(y + 0.5 * k),
+                f(x - 0.7 * k),
+                f(y + 0.17 * k),
+                f(x + 0.85 * k),
+                f(y + 0.17 * k),
+                f(x - 0.55 * k),
+                f(y - 0.17 * k),
+                f(x + 1.0 * k),
+                f(y - 0.17 * k)
+            ),
         }
     }
 }
@@ -357,6 +380,7 @@ pub fn relief(
             Symbol::Tree => ReliefSymbol::Tree,
             Symbol::Marsh => ReliefSymbol::Marsh,
             Symbol::Dune => ReliefSymbol::Dune,
+            Symbol::Field => ReliefSymbol::Field,
         };
         opts.hide.contains(&kind)
     };
@@ -426,6 +450,32 @@ pub fn relief(
             candidates.push((sym, c, None, 1.0, 1.0));
         }
     }
+    // Fields: open grassland and savanna in the lowland near a place, where
+    // no other symbol stands. They come last, so the other symbols keep
+    // their places.
+    let near = 6.0 * g.step_x.max(g.step_y);
+    let places: Vec<[f64; 2]> = world.society.places.iter().map(|p| p.at).collect();
+    for &(_, c) in &order {
+        let open = matches!(world.biomes[c], 3 | 4);
+        let low = world.heights[c] - world.sea_level < 22.0;
+        if !(open && low && world.features.is_land(c) && symbol_of(world, c).is_none()) {
+            continue;
+        }
+        let p = g.points[c];
+        if places
+            .iter()
+            .any(|q| (q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2) <= near * near)
+        {
+            // As the other symbols: a size that changes a little only with
+            // the terrain placement.
+            let k = if terrain.is_some() {
+                0.85 + 0.3 * rng.unit()
+            } else {
+                1.0
+            };
+            candidates.push((Symbol::Field, c, None, k, 1.0));
+        }
+    }
     let [x0, y0, x1, y1] = page.view;
     let bucket = 4.0 * scale;
     let mut grid: Buckets = BTreeMap::new();
@@ -472,6 +522,51 @@ pub fn relief(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fields_lie_on_open_lowland_near_the_places() {
+        use inkland_core::config::{Config, ReliefOptions, ReliefSymbol};
+        let c: Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 6, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 6000, "template": "pangea" },
+            "variants": [{ "name": "m", "page": { "w_mm": 300, "h_mm": 200 } }]
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let page = Page::new(&c, &c.variants[0]);
+        let g = &w.grid;
+        let near = 6.0 * g.step_x.max(g.step_y);
+        let fields: Vec<[f64; 2]> = relief(&w, &page, c.seed, &ReliefOptions::default())
+            .into_iter()
+            .filter(|s| s.0 == Symbol::Field)
+            .map(|s| page.to_world(s.1))
+            .collect();
+        assert!(fields.len() > 5, "{} fields", fields.len());
+        for p in &fields {
+            // The jitter moves a symbol up to a third of a cell, so a field
+            // at the coast can stand in a water cell next to its land cell.
+            let cell = g.find_cell(p[0], p[1]);
+            assert!(w.features.is_land(cell) || g.neighbors(cell).any(|m| w.features.is_land(m)));
+            let reach = near + g.step_x.max(g.step_y);
+            assert!(
+                w.society
+                    .places
+                    .iter()
+                    .any(|q| (q.at[0] - p[0]).powi(2) + (q.at[1] - p[1]).powi(2) <= reach * reach),
+                "a field far from the places at {p:?}"
+            );
+        }
+        let none = relief(
+            &w,
+            &page,
+            c.seed,
+            &ReliefOptions {
+                hide: vec![ReliefSymbol::Field],
+                ..Default::default()
+            },
+        );
+        assert!(none.iter().all(|s| s.0 != Symbol::Field));
+    }
 
     #[test]
     fn the_relief_options_thin_out_and_hide_the_symbols() {

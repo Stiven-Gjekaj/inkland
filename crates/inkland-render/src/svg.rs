@@ -381,7 +381,7 @@ fn write_relief(
         let fill = match sym {
             Symbol::Mountain | Symbol::Tree => PAPER,
             Symbol::Dune => INK,
-            Symbol::Hill | Symbol::Marsh => "none",
+            Symbol::Hill | Symbol::Marsh | Symbol::Field => "none",
         };
         let stroke = if sym == Symbol::Dune {
             " stroke=\"none\""

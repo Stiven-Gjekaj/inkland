@@ -1795,7 +1795,9 @@ pub struct ReliefOptions {
     #[schemars(range(min = 0.0, max = 1.0))]
     pub density: f64,
     /// The symbol kinds to leave out: `mountain`, `hill`, `tree` (the
-    /// forest biomes), `marsh` (wetland), or `dune` (the deserts).
+    /// forest biomes), `marsh` (wetland), `dune` (the deserts), or `field`
+    /// (the farmland of `print-safe` mode: small fields on open lowland
+    /// near the places).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hide: Vec<ReliefSymbol>,
     /// Both render modes. `true`: the symbols follow the terrain. Mountains
@@ -1838,6 +1840,7 @@ pub enum ReliefSymbol {
     Tree,
     Marsh,
     Dune,
+    Field,
 }
 
 /// Rules for the labels. A name is "generated" when the config does not
