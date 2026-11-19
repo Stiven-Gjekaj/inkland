@@ -235,22 +235,21 @@ fn write_labels(s: &mut String, labels: &crate::labels::Labels, halo: bool) {
     s.push_str("</g>\n");
 }
 
-/// Water lines: two thin lines in the water along each coast.
+/// Water lines: thin lines in the water along each coast, further apart
+/// out to sea (`water::lines`).
 fn write_water_lines(s: &mut String, world: &World, page: &Page, min: f64, hand: Option<&Hand>) {
     let _ = writeln!(
         s,
         "<g id=\"water-lines\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\">",
         n(line_mm(0.5f64.max(min)))
     );
-    for (i, line) in crate::decor::water_lines(world).iter().enumerate() {
-        let pts: Vec<[f64; 2]> = line
-            .iter()
-            .map(|&v| world.base.grid.vertices[v as usize])
-            .collect();
-        let closed = line.len() > 2 && line.first() == line.last();
-        let smooth = crate::decor::chaikin(&pts, closed, 2);
+    for (i, line) in crate::water::lines(world, page).iter().enumerate() {
         let id = format!("water-line-{}", i + 1);
-        let d = hand_path(page, hand, &id, &smooth, closed);
+        let pts = match hand {
+            Some(h) => h.wobble(&id, &line.points, line.closed),
+            None => line.points.clone(),
+        };
+        let d = mm_path_data(&pts, line.closed);
         if !d.is_empty() {
             let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\"/>");
         }
@@ -1118,5 +1117,21 @@ mod tests {
         assert!(widths.windows(2).all(|p| p[0] <= p[1]), "{widths:?}");
         assert!(widths[0] < *widths.last().unwrap());
         assert!(widths[0] >= line_mm(c.render.min_line_width_pt) - 0.001);
+    }
+
+    #[test]
+    fn the_water_lines_follow_each_coast_at_each_level() {
+        let c = config();
+        let w = World::build(&c).unwrap();
+        let page = Page::new(&c, &c.variants[0]);
+        let lines = crate::water::lines(&w, &page);
+        let levels: std::collections::BTreeSet<usize> = lines.iter().map(|l| l.level).collect();
+        assert_eq!(levels.len(), crate::water::LEVELS_MM.len());
+        // A closed line is a loop.
+        for l in lines.iter().filter(|l| l.closed) {
+            assert_eq!(l.points.first(), l.points.last());
+        }
+        let svg = render(&w, &c, &c.variants[0]).svg;
+        assert_eq!(svg.matches("id=\"water-line-").count(), lines.len());
     }
 }
