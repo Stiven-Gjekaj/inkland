@@ -1095,6 +1095,61 @@ pub struct Pins {
     /// Roads between pinned places, with an optional target length.
     #[serde(default)]
     pub roads: Vec<RoadPin>,
+    /// Soft areas with a character of the land, such as rough or wooded.
+    /// An area has no fixed height range. It steers the heights, the
+    /// biomes, and so the relief symbols, and fades out at its loose edge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub areas: Vec<AreaPin>,
+}
+
+/// A soft area with a character of the land. Give exactly one of
+/// `polygon`, `box`, and `circle`. The outline is loose: fractal noise moves
+/// it, and the effect fades out over the `edge` outside it. An area changes
+/// only land: the coast stays where it is. A region pin rules over an area.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AreaPin {
+    /// Identifier: lower-case letters and digits, words joined by `-`.
+    /// Unique across all pins.
+    #[schemars(regex(pattern = r"^[a-z0-9]+(-[a-z0-9]+)*$"))]
+    pub id: String,
+    /// The character of the land in the area.
+    pub character: Character,
+    /// Outline `[[x, y], ...]`, in units. 3 or more points. The outline must
+    /// not cross itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polygon: Option<Vec<Point>>,
+    /// Rectangle `[x0, y0, x1, y1]`, in units.
+    #[serde(default, rename = "box", skip_serializing_if = "Option::is_none")]
+    pub rect: Option<[f64; 4]>,
+    /// Circle, in units.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub circle: Option<Circle>,
+    /// How strong the character is. 0 to 1. Default 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub strength: Option<f64>,
+    /// Width of the soft edge outside the outline, in units. The effect
+    /// fades out over this width. Default: a fifth of the size of the shape
+    /// (the square root of the area of its bounding box).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub edge: Option<f64>,
+}
+
+/// The character of the land in an area.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Character {
+    /// Broken, high land: the heights rise, with sharp ridges. The relief
+    /// shows mountain chains and hills.
+    Rough,
+    /// Forest: the land keeps its heights, and the biome becomes forest.
+    Wooded,
+    /// Rolling land: low, rounded hills.
+    Rolling,
+    /// Flat land: the heights go down to low land, with few hills.
+    Flat,
 }
 
 /// A place at exact coordinates.

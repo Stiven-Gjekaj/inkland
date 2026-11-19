@@ -259,6 +259,33 @@ fn islets_on_a_sea_or_above_1_are_refused() {
 }
 
 #[test]
+fn area_with_a_good_shape_is_valid_and_bad_fields_are_refused() {
+    let good = with(json!({ "pins": { "areas": [
+        { "id": "the-wilds", "character": "rough", "box": [10, 10, 100, 100] },
+        { "id": "greenwood", "character": "wooded", "circle": { "at": [200, 150], "r": 40 },
+          "strength": 0.5, "edge": 10 }
+    ]}}));
+    assert_eq!(codes(&good), vec![]);
+    let bad = with(json!({ "pins": {
+        "points": [{ "id": "wolds", "kind": "town", "at": [1, 1] }],
+        "areas": [
+            { "id": "wolds", "character": "rolling", "box": [10, 10, 100, 100] },
+            { "id": "flats", "character": "flat", "box": [10, 10, 100, 100],
+              "circle": { "at": [1, 1], "r": 1 } },
+            { "id": "moor", "character": "rough", "box": [10, 10, 100, 100], "strength": 2 }
+        ]
+    }}));
+    assert_eq!(
+        codes(&bad),
+        vec![
+            (ErrorCode::IdDuplicate, "/pins/areas/0/id".into()),
+            (ErrorCode::ShapeInvalid, "/pins/areas/1".into()),
+            (ErrorCode::ValueOutOfRange, "/pins/areas/2/strength".into()),
+        ]
+    );
+}
+
+#[test]
 fn depth_line_of_zero_is_refused() {
     let c = with(json!({ "render": { "depth_lines": [6, 0] } }));
     one(&c, ErrorCode::ValueOutOfRange, "/render/depth_lines/1");

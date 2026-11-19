@@ -688,6 +688,9 @@ impl<'a> Validator<'a> {
         for (i, r) in c.pins.roads.iter().enumerate() {
             base.push((format!("/pins/roads/{i}/id"), &r.id));
         }
+        for (i, a) in c.pins.areas.iter().enumerate() {
+            base.push((format!("/pins/areas/{i}/id"), &a.id));
+        }
         self.unique(&base);
         // Each overlay adds to the base name space, but not to the space of
         // another overlay.
@@ -767,6 +770,24 @@ impl<'a> Validator<'a> {
         for (i, r) in c.pins.regions.iter().enumerate() {
             self.region_shape(r, &format!("/pins/regions/{i}"));
         }
+        for (i, a) in c.pins.areas.iter().enumerate() {
+            let path = format!("/pins/areas/{i}");
+            self.shape_fields(&a.polygon, &a.rect, &a.circle, "an area", &path);
+            if a.strength.is_some_and(|s| !(0.0..=1.0).contains(&s)) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/strength"),
+                    "strength must be 0 to 1",
+                );
+            }
+            if a.edge.is_some_and(|e| !(e.is_finite() && e >= 0.0)) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/edge"),
+                    "edge must be 0 or more",
+                );
+            }
+        }
         for (name, o) in &c.overlays {
             for (i, f) in o.add.features.iter().enumerate() {
                 self.feature_shape(f, &format!("/overlays/{}/add/features/{i}", esc(name)));
@@ -775,18 +796,30 @@ impl<'a> Validator<'a> {
     }
 
     fn region_shape(&mut self, r: &RegionPin, path: &str) {
-        let count = usize::from(r.polygon.is_some())
-            + usize::from(r.rect.is_some())
-            + usize::from(r.circle.is_some());
+        self.shape_fields(&r.polygon, &r.rect, &r.circle, "a region", path);
+    }
+
+    /// The shape fields of a region or an area (`what`).
+    fn shape_fields(
+        &mut self,
+        polygon: &Option<Vec<inkland_core::config::Point>>,
+        rect: &Option<[f64; 4]>,
+        circle: &Option<inkland_core::config::Circle>,
+        what: &str,
+        path: &str,
+    ) {
+        let count = usize::from(polygon.is_some())
+            + usize::from(rect.is_some())
+            + usize::from(circle.is_some());
         if count != 1 {
             self.err(
                 ErrorCode::ShapeInvalid,
                 path,
-                format!("a region needs exactly one of polygon, box, and circle; found {count}"),
+                format!("{what} needs exactly one of polygon, box, and circle; found {count}"),
             );
             return;
         }
-        if let Some(poly) = &r.polygon {
+        if let Some(poly) = polygon {
             if poly.len() < 3 {
                 self.err(
                     ErrorCode::RegionPolygonInvalid,
@@ -801,7 +834,7 @@ impl<'a> Validator<'a> {
                 );
             }
         }
-        if let Some([x0, y0, x1, y1]) = r.rect
+        if let Some([x0, y0, x1, y1]) = *rect
             && !(x0 < x1 && y0 < y1)
         {
             self.err(
@@ -810,7 +843,7 @@ impl<'a> Validator<'a> {
                 "box must be [x0, y0, x1, y1] with x0 < x1 and y0 < y1",
             );
         }
-        if let Some(circle) = &r.circle
+        if let Some(circle) = circle
             && !(circle.r.is_finite() && circle.r > 0.0)
         {
             self.err(
