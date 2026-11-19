@@ -1363,11 +1363,16 @@ pub fn place_with(
         let Some(at) = opts(kind, key).and_then(|o| o.at) else {
             continue;
         };
-        // The size of the first candidate, or, for an item with no
-        // candidate in the view, the size of its kind and its options.
-        let size = match r.candidates.first() {
-            Some(first) => first.size,
-            None => {
+        // The size of the options, else the size of the first candidate,
+        // or, for an item with no candidate in the view, the size of its
+        // kind.
+        let size = match (
+            opts(kind, key).and_then(|o| o.size_pt),
+            r.candidates.first(),
+        ) {
+            (Some(s), _) => pt(s),
+            (None, Some(first)) => first.size,
+            (None, None) => {
                 let default_pt = match r.group {
                     "state" => sizes.state,
                     "region" | "ocean" => sizes.region,
@@ -1880,7 +1885,7 @@ mod tests {
                                  "capital_of": "Ostria" }]
                 },
                 "overlays": { "today": { "labels": {
-                    "state:ostrey": { "at": [120, 60] }
+                    "state:ostrey": { "at": [120, 60], "size_pt": 9 }
                 } } },
                 "variants": [{ "name": "full", "overlay": "today",
                                "page": { "w_mm": 167, "h_mm": 250, "margin_mm": 5 } }]
@@ -1891,6 +1896,7 @@ mod tests {
         let labels = place(&w, &c, &v, &page);
         let l = labels.placed.iter().find(|l| l.text == "Ostria").unwrap();
         assert_eq!(l.kind, Kind::State);
+        assert!((l.size - pt(9.0)).abs() < 1e-9, "{}", l.size);
         let Geometry::Point { x, angle, .. } = l.geometry else {
             panic!("the label is not at a point");
         };
