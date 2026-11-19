@@ -1677,15 +1677,17 @@ pub fn place_with(
         let Some(at) = opts(kind, key).and_then(|o| o.at) else {
             continue;
         };
-        // The size of the options, else the size of the first candidate,
-        // or, for an item with no candidate in the view, the size of its
-        // kind.
-        let size = match (
-            opts(kind, key).and_then(|o| o.size_pt),
-            r.candidates.first(),
-        ) {
+        // The size of its options, else the size that the placer gives it
+        // without `at`: the size of its best candidate (the lowest tier,
+        // then the lowest cost), as an area label fits its area. An item
+        // with no candidate in the view gets the size of its kind.
+        let best = r
+            .candidates
+            .iter()
+            .min_by(|a, b| a.tier.cmp(&b.tier).then(a.cost.total_cmp(&b.cost)));
+        let size = match (opts(kind, key).and_then(|o| o.size_pt), best) {
             (Some(s), _) => pt(s),
-            (None, Some(first)) => first.size,
+            (None, Some(best)) => best.size,
             (None, None) => {
                 let default_pt = match r.group {
                     "state" => sizes.state,
@@ -2056,6 +2058,7 @@ mod tests {
             };
             let q = page.to_page(at);
             assert_eq!((anchor, angle), ("middle", 0));
+
             assert!((x - q[0]).abs() < 1e-9 && y > q[1], "{id}");
         }
         // The other labels keep clear of them.
@@ -2365,6 +2368,50 @@ mod tests {
         c.render.labels.max_angle = 0.0;
         let level = place(&w, &c, &v, &page);
         assert!(curved(&level).is_empty());
+    }
+
+    #[test]
+    fn a_sea_label_with_a_position_keeps_the_size_that_fits_its_sea() {
+        // A long, narrow sea: without `at`, its label is smaller than the
+        // full size of a region, to fit. With `at`, it keeps that size.
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({
+                "world": { "cells": 2500, "template": "pangea", "fill_land": true },
+                "pins": { "regions": [
+                    { "id": "strait", "kind": "sea", "name": "The Sea of Serenity",
+                      "box": [170, 0, 230, 300] }
+                ] }
+            }),
+        );
+        // Level, straight labels only, so the label must get smaller to fit.
+        let mut c = c;
+        c.render.labels.max_angle = 0.0;
+        c.render.labels.curved = false;
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let size_of_label = |c: &Config| {
+            let v = &c.variants[0];
+            place(&w, c, v, &page)
+                .placed
+                .iter()
+                .find(|l| l.id == "label-region-strait")
+                .map(|l| l.size)
+                .unwrap()
+        };
+        let free = size_of_label(&c);
+        assert!(
+            free < pt(c.render.font_sizes_pt.region),
+            "the label fits its sea"
+        );
+        let mut at = c.clone();
+        at.overlays = serde_json::from_value(json!({ "o": { "labels": {
+            "region:strait": { "at": [200, 150] }
+        } } }))
+        .unwrap();
+        at.variants[0].overlay = Some("o".into());
+        assert!((size_of_label(&at) - free).abs() < 1e-9);
     }
 
     #[test]
