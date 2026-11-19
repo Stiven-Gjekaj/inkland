@@ -399,6 +399,10 @@ const MAX_ANCHORS: usize = 40;
 /// Smaller sizes and tighter letters are candidates of tier 1, for a label
 /// that finds no free place. `halo` is the reach of the halo, as a part of
 /// the font size. `inside` tells if a world point is in the area.
+///
+/// An area with no grid cell on the map, for example a sea far from a
+/// coast, gets its anchors on a lattice of points in `bounds`, a world
+/// rectangle round the area.
 #[allow(clippy::too_many_arguments)]
 fn area_candidates(
     world: &World,
@@ -407,6 +411,7 @@ fn area_candidates(
     area: &[bool],
     members: &[usize],
     inside: &dyn Fn([f64; 2]) -> bool,
+    bounds: Option<[f64; 4]>,
     text: &str,
     f: &FontMetrics,
     size: f64,
@@ -415,23 +420,32 @@ fn area_candidates(
 ) -> Vec<Candidate> {
     let g = &world.grid;
     let depth = depths(world, area, members);
-    let max_depth = depth.iter().copied().max().unwrap_or(0).max(1);
+    let mut max_depth = depth.iter().copied().max().unwrap_or(0).max(1);
     let in_area = |q: [f64; 2]| {
         let w = page.to_world(q);
         let [x0, y0, x1, y1] = page.view;
         w[0] >= x0 && w[0] <= x1 && w[1] >= y0 && w[1] <= y1 && inside(w)
     };
+    let on_map =
+        |q: [f64; 2]| q[0] >= inner[0] && q[0] <= inner[2] && q[1] >= inner[1] && q[1] <= inner[3];
     let mut cells: Vec<(u32, usize)> = members
         .iter()
         .copied()
         .filter(|&c| depth[c] > 0)
-        .filter(|&c| {
-            let q = page.to_page(g.points[c]);
-            q[0] >= inner[0] && q[0] <= inner[2] && q[1] >= inner[1] && q[1] <= inner[3]
-        })
+        .filter(|&c| on_map(page.to_page(g.points[c])))
         .map(|c| (depth[c], c))
         .collect();
     cells.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut cells: Vec<(u32, [f64; 2])> = cells
+        .into_iter()
+        .map(|(d, c)| (d, page.to_page(g.points[c])))
+        .collect();
+    if cells.is_empty()
+        && let Some(b) = bounds
+    {
+        cells = lattice_spots(page, b, &|q| on_map(q) && in_area(q));
+        max_depth = cells.first().map_or(1, |s| s.0.max(1));
+    }
     let n = text.chars().count();
     let least = pt(MIN_LABEL_PT).min(size);
     let mut sizes: Vec<f64> = Vec::new();
@@ -444,8 +458,7 @@ fn area_candidates(
     // Anchor cells: the deepest cells first, each at least `ANCHOR_GAP` from
     // the anchors before it, so the candidates spread over the area.
     let mut anchors: Vec<(u32, [f64; 2])> = Vec::new();
-    for &(d, c) in &cells {
-        let q = page.to_page(g.points[c]);
+    for &(d, q) in &cells {
         if anchors
             .iter()
             .all(|(_, a)| (a[0] - q[0]).powi(2) + (a[1] - q[1]).powi(2) >= ANCHOR_GAP * ANCHOR_GAP)
@@ -587,6 +600,65 @@ fn area_candidates(
         }
     }
     out
+}
+
+/// The points of a square lattice in the part of the world rectangle `b`
+/// in the view, on the page, with their depth in the area, deepest first.
+/// `keep` tells if a page point is in the area. The depth is 1 for a point
+/// next to a point outside the area or on the edge of the lattice, and
+/// more inside, as `depths` gives it for cells.
+fn lattice_spots(
+    page: &Page,
+    b: [f64; 4],
+    keep: &dyn Fn([f64; 2]) -> bool,
+) -> Vec<(u32, [f64; 2])> {
+    const STEPS: usize = 24;
+    let [vx0, vy0, vx1, vy1] = page.view;
+    let (x0, y0, x1, y1) = (b[0].max(vx0), b[1].max(vy0), b[2].min(vx1), b[3].min(vy1));
+    if x1 <= x0 || y1 <= y0 {
+        return Vec::new();
+    }
+    let step = (x1 - x0).max(y1 - y0) / STEPS as f64;
+    let nx = ((x1 - x0) / step).floor() as usize + 1;
+    let ny = ((y1 - y0) / step).floor() as usize + 1;
+    // The lattice is centred in the rectangle.
+    let ox = x0 + ((x1 - x0) - step * (nx - 1) as f64) / 2.0;
+    let oy = y0 + ((y1 - y0) - step * (ny - 1) as f64) / 2.0;
+    let at = |i: usize, j: usize| page.to_page([ox + step * i as f64, oy + step * j as f64]);
+    let ins: Vec<bool> = (0..nx * ny).map(|k| keep(at(k % nx, k / nx))).collect();
+    let mut depth = vec![0u32; nx * ny];
+    let mut queue = VecDeque::new();
+    let around = |k: usize| {
+        let (i, j) = (k % nx, k / nx);
+        [
+            (i > 0).then(|| k - 1),
+            (i + 1 < nx).then(|| k + 1),
+            (j > 0).then(|| k - nx),
+            (j + 1 < ny).then(|| k + nx),
+        ]
+    };
+    for k in 0..nx * ny {
+        if ins[k] && around(k).iter().any(|m| m.is_none_or(|m| !ins[m])) {
+            depth[k] = 1;
+            queue.push_back(k);
+        }
+    }
+    while let Some(k) = queue.pop_front() {
+        for m in around(k).into_iter().flatten() {
+            if ins[m] && depth[m] == 0 {
+                depth[m] = depth[k] + 1;
+                queue.push_back(m);
+            }
+        }
+    }
+    let mut out: Vec<(u32, usize)> = (0..nx * ny)
+        .filter(|&k| depth[k] > 0)
+        .map(|k| (depth[k], k))
+        .collect();
+    out.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    out.into_iter()
+        .map(|(d, k)| (d, at(k % nx, k / nx)))
+        .collect()
 }
 
 /// The point at length `s` along a line with cumulative lengths `acc`.
@@ -1045,6 +1117,7 @@ pub fn place_with(
             &feature_mask,
             members,
             &|p: [f64; 2]| feature_mask[world.grid.find_cell(p[0], p[1])],
+            None,
             &name,
             f,
             size,
@@ -1100,6 +1173,7 @@ pub fn place_with(
                 &area,
                 &members_of(&area),
                 &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
+                None,
                 &name,
                 f,
                 size,
@@ -1129,7 +1203,10 @@ pub fn place_with(
             continue;
         };
         let area: Vec<bool> = (0..g.len()).map(|c| shape.contains(g.points[c])).collect();
-        if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
+        // The grid has no cells in deep water, so a sea far from a coast can
+        // have no cell. The shape, not its cells, tells if it is in the view.
+        let bounds = shape.bbox();
+        if bounds[0] > vx1 || bounds[2] < vx0 || bounds[1] > vy1 || bounds[3] < vy0 {
             continue;
         }
         let look = style("region");
@@ -1144,7 +1221,8 @@ pub fn place_with(
                 inner,
                 &area,
                 &members_of(&area),
-                &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
+                &|p: [f64; 2]| shape.contains(p),
+                Some(bounds),
                 &name,
                 f,
                 size,
@@ -1200,6 +1278,7 @@ pub fn place_with(
                     &area,
                     &members_of(&area),
                     &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
+                    None,
                     &name,
                     f,
                     size,
@@ -1641,6 +1720,87 @@ mod tests {
         }
     }
 
+    /// A world with a named sea in deep water, far from the land.
+    fn deep_sea(extra: serde_json::Value) -> (World, Config) {
+        let mut v = json!({
+            "pins": {
+                "points": [{ "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150] }],
+                "regions": [
+                    { "id": "land", "kind": "plains", "circle": { "at": [200, 150], "r": 60 } },
+                    { "id": "cold", "kind": "sea", "name": "The Cold Sea",
+                      "box": [10, 10, 130, 60] }
+                ]
+            }
+        });
+        for (k, val) in extra.as_object().unwrap() {
+            v[k] = val.clone();
+        }
+        let (w, c) = world(5, "atoll", v);
+        let shape = Shape::of(&c.pins.regions[1]).unwrap();
+        assert!(
+            !w.grid.points.iter().any(|&p| shape.contains(p)),
+            "the sea has grid cells, so the test does not test the deep sea"
+        );
+        (w, c)
+    }
+
+    #[test]
+    fn a_sea_with_no_grid_cell_gets_its_label() {
+        let (w, c) = deep_sea(json!({}));
+        let labels = check_no_overlap(&w, &c);
+        let l = labels
+            .placed
+            .iter()
+            .find(|l| l.id == "label-region-cold")
+            .unwrap_or_else(|| panic!("no label; unplaced: {:?}", labels.unplaced));
+        let page = Page::new(&c, &c.variants[0]);
+        let Geometry::Point { x, y, .. } = l.geometry else {
+            panic!("the label is not at a point");
+        };
+        let at = page.to_world([x, y]);
+        assert!(Shape::of(&c.pins.regions[1]).unwrap().contains(at), "{at:?}");
+    }
+
+    #[test]
+    fn a_sea_with_no_grid_cell_goes_to_its_position() {
+        let (w, c) = deep_sea(json!({
+            "overlays": { "today": { "labels": { "region:cold": { "at": [70, 40] } } } },
+            "variants": [{ "name": "full", "overlay": "today",
+                           "page": { "w_mm": 167, "h_mm": 250, "margin_mm": 5 } }]
+        }));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let labels = place(&w, &c, &v, &page);
+        let l = labels
+            .placed
+            .iter()
+            .find(|l| l.id == "label-region-cold")
+            .unwrap();
+        let Geometry::Point { x, .. } = l.geometry else {
+            panic!("the label is not at a point");
+        };
+        assert!((x - page.to_page([70.0, 40.0])[0]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_sea_label_that_cannot_fit_is_listed() {
+        let big = inkland_core::config::FontSizes {
+            region: 400.0,
+            ..Default::default()
+        };
+        let (w, c) = deep_sea(json!({ "render": {
+            "font_sizes_pt": serde_json::to_value(&big).unwrap()
+        }}));
+        let labels = check_no_overlap(&w, &c);
+        let u = labels
+            .unplaced
+            .iter()
+            .find(|u| u.id == "label-region-cold")
+            .unwrap();
+        assert!(u.required);
+        assert_eq!(u.reason, "outside");
+    }
+
     #[test]
     fn generated_names_can_be_left_out() {
         // The capital names the state, so its label is a written name too.
@@ -1732,6 +1892,7 @@ mod tests {
             &area,
             &members_of(&area),
             &|p: [f64; 2]| area[w.grid.find_cell(p[0], p[1])],
+            None,
             "Long Name",
             f,
             size,
