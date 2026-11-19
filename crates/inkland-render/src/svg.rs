@@ -290,6 +290,22 @@ fn write_coast(
     for line in &world.coastlines {
         let smooth = crate::decor::chaikin(&line.points, line.closed, 2);
         let key = format!("coast-{}", line.id);
+        if let Some(h) = hand {
+            // A hand draws the coast in pieces that are wider and thinner.
+            let pts: Vec<[f64; 2]> = smooth.iter().map(|&p| page.to_page(p)).collect();
+            let pieces = Hand::pieces(&h.wobble(&key, &pts, line.closed));
+            let min = config.render.min_line_width_pt;
+            let base = COAST_WIDTH_PT.max(min);
+            let widths = h.coast_widths(&key, pieces.len(), base, min);
+            let out: Vec<(String, f64)> = pieces
+                .iter()
+                .zip(widths)
+                .map(|((p, _), w)| (mm_path_data(p, false), line_mm(w)))
+                .filter(|(d, _)| !d.is_empty())
+                .collect();
+            write_pieces(s, &key, &out);
+            continue;
+        }
         let d = hand_path(page, hand, &key, &smooth, line.closed);
         if d.is_empty() {
             continue;
@@ -360,7 +376,7 @@ fn write_rivers(
     let mm_per_px = crate::fmg::geom::Px::new(page, config.frame.width, config.frame.height).mm;
     let min = config.render.min_line_width_pt;
     let overlay = crate::labels::overlay_of(config, variant);
-    let mut items: Vec<(String, String, f64)> = world
+    let mut items: Vec<(String, Vec<(String, f64)>)> = world
         .rivers
         .iter()
         .filter(|r| {
@@ -376,8 +392,19 @@ fn write_rivers(
                 Some(k) => format!("river-{}", config.pins.rivers[k].id),
                 None => format!("river-{}", r.id),
             };
-            let d = river_curve(page, hand, &id, &r.points);
-            (!d.is_empty()).then(|| (id, d, line_mm(river_width_pt(r.width, mm_per_px, min))))
+            let mouth = river_width_pt(r.width, mm_per_px, min);
+            let pieces = match hand {
+                Some(h) => river_pieces(page, h, &id, &r.points, mouth, min),
+                None => {
+                    let d = river_curve(page, &r.points);
+                    if d.is_empty() {
+                        Vec::new()
+                    } else {
+                        vec![(d, line_mm(mouth))]
+                    }
+                }
+            };
+            (!pieces.is_empty()).then_some((id, pieces))
         })
         .collect();
     items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -385,8 +412,8 @@ fn write_rivers(
         s,
         "<g id=\"rivers\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-linejoin=\"round\" stroke-linecap=\"round\">"
     );
-    for (id, d, w) in items {
-        let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{}\"/>", n(w));
+    for (id, pieces) in items {
+        write_pieces(s, &id, &pieces);
     }
     s.push_str("</g>\n");
 }
@@ -680,7 +707,16 @@ fn write_places(
 /// The smooth curve of a river line on the page: a Catmull-Rom curve with
 /// alpha 0.1, as FMG `getRiverPath` draws it. The curve passes through
 /// each point of the meandered line.
-fn river_curve(page: &Page, hand: Option<&Hand>, key: &str, points: &[[f64; 2]]) -> String {
+fn river_curve(page: &Page, points: &[[f64; 2]]) -> String {
+    let pts = river_page_points(page, points);
+    if pts.len() < 2 {
+        return String::new();
+    }
+    crate::fmg::geom::catmull_rom(&pts, 0.1)
+}
+
+/// The points of a river on the page, without repeats of one point.
+fn river_page_points(page: &Page, points: &[[f64; 2]]) -> Vec<[f64; 2]> {
     let mut pts: Vec<[f64; 2]> = Vec::with_capacity(points.len());
     for &p in points {
         let q = page.to_page(p);
@@ -688,13 +724,59 @@ fn river_curve(page: &Page, hand: Option<&Hand>, key: &str, points: &[[f64; 2]])
             pts.push(q);
         }
     }
+    pts
+}
+
+/// A river that a hand draws: the curve of each piece of the wobbled
+/// line, with its width in millimetres. The river becomes wider from its
+/// source to its mouth, where it is `mouth_pt` wide.
+fn river_pieces(
+    page: &Page,
+    hand: &Hand,
+    key: &str,
+    points: &[[f64; 2]],
+    mouth_pt: f64,
+    min_pt: f64,
+) -> Vec<(String, f64)> {
+    let pts = river_page_points(page, points);
     if pts.len() < 2 {
-        return String::new();
+        return Vec::new();
     }
-    if let Some(h) = hand {
-        pts = h.wobble(key, &pts, false);
+    Hand::pieces(&hand.wobble(key, &pts, false))
+        .into_iter()
+        .map(|(piece, t)| {
+            let w = line_mm(Hand::river_width(mouth_pt, t, min_pt));
+            (crate::fmg::geom::catmull_rom(&piece, 0.1), w)
+        })
+        .collect()
+}
+
+/// Write a line in one or more pieces, each with its stroke width in
+/// millimetres. One piece is one path with the id. More pieces are a
+/// group with the id, and each piece has the id and its number.
+fn write_pieces(s: &mut String, id: &str, pieces: &[(String, f64)]) {
+    match pieces {
+        [] => {}
+        [(d, w)] => {
+            let _ = writeln!(
+                s,
+                "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{}\"/>",
+                n(*w)
+            );
+        }
+        _ => {
+            let _ = writeln!(s, "<g id=\"{id}\">");
+            for (i, (d, w)) in pieces.iter().enumerate() {
+                let _ = writeln!(
+                    s,
+                    "<path id=\"{id}-{}\" d=\"{d}\" stroke-width=\"{}\"/>",
+                    i + 1,
+                    n(*w)
+                );
+            }
+            s.push_str("</g>\n");
+        }
     }
-    crate::fmg::geom::catmull_rom(&pts, 0.1)
 }
 
 fn path_data(page: &Page, points: &[[f64; 2]], closed: bool) -> String {
@@ -819,10 +901,10 @@ mod tests {
         let c = config();
         let page = Page::new(&c, &c.variants[0]);
         let pts = [[10.0, 10.0], [10.0, 10.0], [30.0, 20.0], [50.0, 15.0]];
-        let d = river_curve(&page, None, "r", &pts);
+        let d = river_curve(&page, &pts);
         assert!(d.starts_with('M') && d.contains('C'), "{d}");
         assert_eq!(d.matches('C').count(), 2, "{d}");
-        assert!(river_curve(&page, None, "r", &pts[..2]).is_empty());
+        assert!(river_curve(&page, &pts[..2]).is_empty());
     }
 
     #[test]
@@ -939,10 +1021,32 @@ mod tests {
         c.render.hand_drawn = false;
         let off = render(&w, &c, &c.variants[0]).svg;
         let id = format!("coast-{}", w.coastlines[0].id);
-        assert_ne!(path_of(&on, &id), path_of(&off, &id));
+        let first = |svg: &str| {
+            let piece = format!("{id}-1");
+            if svg.contains(&format!("id=\"{piece}\"")) {
+                path_of(svg, &piece)
+            } else {
+                path_of(svg, &id)
+            }
+        };
+        assert_ne!(first(&on), first(&off));
         assert_ne!(path_of(&on, "water-line-1"), path_of(&off, "water-line-1"));
         // The wobble adds points between the points of the exact line.
         assert!(on.matches('L').count() > off.matches('L').count());
+        // The coasts taper: the pieces of a coast have more than one width,
+        // and no width is less than the minimum.
+        let doc = roxmltree::Document::parse(&on).unwrap();
+        let widths: std::collections::BTreeSet<String> = doc
+            .descendants()
+            .filter(|e| e.attribute("id").is_some_and(|i| i.starts_with("coast-")))
+            .filter_map(|e| e.attribute("stroke-width"))
+            .map(str::to_string)
+            .collect();
+        assert!(widths.len() > 2, "{widths:?}");
+        let min_mm = line_mm(c.render.min_line_width_pt);
+        for w in &widths {
+            assert!(w.parse::<f64>().unwrap() >= min_mm - 0.001, "{w}");
+        }
         // Both pass the print checks.
         for svg in [&on, &off] {
             let opts = crate::checks::CheckOptions {
@@ -953,5 +1057,31 @@ mod tests {
                 assert!(r.pass, "{}: {}", r.name, r.details);
             }
         }
+    }
+
+    #[test]
+    fn a_hand_drawn_river_becomes_wider_to_its_mouth() {
+        let c = config();
+        let mut w = World::build(&c).unwrap();
+        let k = (0..w.rivers.len())
+            .max_by_key(|&k| w.rivers[k].points.len())
+            .unwrap();
+        w.rivers[k].width = 60.0;
+        let id = format!("river-{}", w.rivers[k].id);
+        let svg = render(&w, &c, &c.variants[0]).svg;
+        let doc = roxmltree::Document::parse(&svg).unwrap();
+        let group = doc
+            .descendants()
+            .find(|e| e.attribute("id") == Some(id.as_str()))
+            .unwrap();
+        let widths: Vec<f64> = group
+            .children()
+            .filter_map(|e| e.attribute("stroke-width"))
+            .map(|v| v.parse().unwrap())
+            .collect();
+        assert!(widths.len() > 1, "{id} has no pieces");
+        assert!(widths.windows(2).all(|p| p[0] <= p[1]), "{widths:?}");
+        assert!(widths[0] < *widths.last().unwrap());
+        assert!(widths[0] >= line_mm(c.render.min_line_width_pt) - 0.001);
     }
 }
