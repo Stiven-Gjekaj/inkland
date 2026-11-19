@@ -525,6 +525,21 @@ impl<'a> Validator<'a> {
                     "coast_detail must be 1 to 8",
                 );
             }
+            if let Some(w) = r.shelf {
+                if !(w.is_finite() && w > 0.0) {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("{p}/shelf"),
+                        "shelf must be more than 0",
+                    );
+                } else if !r.kind.is_water() {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("{p}/shelf"),
+                        "shelf applies only to regions of kind sea or lake",
+                    );
+                }
+            }
             if r.landlocked && !r.kind.is_water() {
                 self.err(
                     ErrorCode::ValueOutOfRange,

@@ -43,9 +43,11 @@ pub struct FitRegion<'a> {
     lift: bool,
     /// The noise of a rough outline.
     rough: Option<Rough>,
+    /// The width of the shallow water along the coast.
+    shelf: Option<f64>,
     /// The sides of a polygon that are coast: the sides of the part of the
     /// polygon in the frame, without the sides on a frame edge. Only for a
-    /// rough region.
+    /// rough region or a region with a `shelf`.
     coast: Vec<(Point, Point)>,
 }
 
@@ -109,7 +111,8 @@ impl<'a> FitRegion<'a> {
             .filter_map(|(index, pin)| {
                 let shape = Shape::of(pin)?;
                 let rough = Rough::of(pin, tree);
-                let coast = if rough.is_some() {
+                let shelf = pin.shelf.filter(|w| *w > 0.0 && pin.kind.is_water());
+                let coast = if rough.is_some() || shelf.is_some() {
                     coast_sides(&shape, frame)
                 } else {
                     Vec::new()
@@ -128,6 +131,7 @@ impl<'a> FitRegion<'a> {
                         ),
                     lift: pin.height.is_none() && pin.kind == RegionKind::Land,
                     rough,
+                    shelf,
                     coast,
                     shape,
                     bbox,
@@ -186,8 +190,19 @@ impl<'a> FitRegion<'a> {
         (d > 0.0 && d < e).then_some(d)
     }
 
+    /// The height of a water cell at `p` in a region with a `shelf`: the top
+    /// of the range at the coast, the bottom at the shelf width from it.
+    fn shelf_height(&self, p: Point, width: f64) -> f64 {
+        let t = (-self.signed(p) / width).clamp(0.0, 1.0);
+        let [lo, hi] = self.range;
+        put(hi - (hi - lo) * t * t * (3.0 - 2.0 * t), self.range)
+    }
+
     /// The forced height for a template height `h`.
     fn target(&self, h: f64, sea_level: f64) -> f64 {
+        if self.shelf.is_some() {
+            return put(self.range[1], self.range);
+        }
         if self.land_only {
             return put(land_height(h, sea_level, self.lift), self.range);
         }
@@ -267,7 +282,13 @@ pub fn apply_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], se
             });
             let land_only = inside.iter().all(|r| r.land_only);
             let lift = inside.iter().any(|r| r.lift);
-            heights[c] = if land_only {
+            let shelf = match inside.as_slice() {
+                [only] => only.shelf.map(|w| only.shelf_height(p, w)),
+                _ => None,
+            };
+            heights[c] = if let Some(h) = shelf {
+                h
+            } else if land_only {
                 put(land_height(heights[c], sea_level, lift), range)
             } else {
                 let [lo, hi] = range;
@@ -639,6 +660,31 @@ mod tests {
         }
         let port = w.pin_cells[1];
         assert!(w.grid.neighbors(port).any(|m| !w.features.is_land(m)));
+    }
+
+    #[test]
+    fn a_shelf_makes_the_water_shallow_at_the_coast_and_deep_away_from_it() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 2, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": "pangea" },
+            "pins": { "regions": [
+                { "id": "west", "kind": "sea", "box": [0, 0, 90, 200],
+                  "height": [2, 18], "shelf": 40 }
+            ] }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        // The second grid drops cells in deep water, so look at the first.
+        let (g, heights) = (&w.base.grid, &w.base.heights);
+        for (cell, &[x, _]) in g.points.iter().enumerate() {
+            let h = heights[cell];
+            if x > 86.0 && x <= 90.0 {
+                assert!(h >= 17.0, "shallow {h} at {x}");
+            } else if x < 45.0 {
+                // The frame edge at x = 0 is not coast.
+                assert_eq!(h, 2.0, "deep {h} at {x}");
+            }
+        }
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {

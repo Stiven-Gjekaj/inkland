@@ -211,6 +211,21 @@ fn image_template_that_is_not_read_is_refused() {
 }
 
 #[test]
+fn shelf_on_land_or_of_zero_is_refused() {
+    let c = with(json!({ "pins": { "regions": [
+        { "id": "sea", "kind": "sea", "box": [0, 0, 50, 300], "shelf": 0 },
+        { "id": "isle", "kind": "hills", "box": [100, 0, 150, 50], "shelf": 10 }
+    ]}}));
+    assert_eq!(
+        codes(&c),
+        vec![
+            (ErrorCode::ValueOutOfRange, "/pins/regions/0/shelf".into()),
+            (ErrorCode::ValueOutOfRange, "/pins/regions/1/shelf".into()),
+        ]
+    );
+}
+
+#[test]
 fn edge_width_of_zero_is_refused() {
     let c = with(json!({ "world": { "edges": { "north": "sea", "width": 0 } } }));
     one(&c, ErrorCode::ValueOutOfRange, "/world/edges/width");

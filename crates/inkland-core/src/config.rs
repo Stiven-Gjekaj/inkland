@@ -1188,6 +1188,14 @@ pub struct RegionPin {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1, max = 8))]
     pub coast_detail: Option<u32>,
+    /// Only for `sea` and `lake`. The width, in units, of the shallow water
+    /// along the coast. The water is at the top of the height range at the
+    /// coast and goes down to the bottom of the range at this distance from
+    /// it. A side on a frame edge is not coast. More than 0. Default: the
+    /// heights of the template, put into the range.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub shelf: Option<f64>,
     /// Name of the area, for its label.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
