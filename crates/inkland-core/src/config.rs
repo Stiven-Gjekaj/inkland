@@ -568,6 +568,11 @@ pub struct RenameEntry {
     /// generated shield shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coa: Option<crate::emblems::Coa>,
+    /// The color of a state, as `#rrggbb`. It replaces the generated color
+    /// in the colour SVG and in `world.json`. Only for a state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(regex(pattern = r"^#[0-9a-fA-F]{6}$"))]
+    pub color: Option<String>,
 }
 
 fn is_false(v: &bool) -> bool {

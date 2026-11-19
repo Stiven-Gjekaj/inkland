@@ -52,7 +52,25 @@ pub fn check(config: &Config, i: usize, e: &RenameEntry) -> Vec<Error> {
             }
         }
     }
+    if let Some(c) = &e.color {
+        if e.kind != AreaKind::State {
+            out.push(invalid(
+                format!("{path}/color"),
+                format!("a {} has no color", e.kind.name()),
+            ));
+        } else if !is_hex_color(c) {
+            out.push(invalid(
+                format!("{path}/color"),
+                format!("the color \"{c}\" is not #rrggbb"),
+            ));
+        }
+    }
     out
+}
+
+/// `true` for a color `#rrggbb`. The case of the digits is free.
+fn is_hex_color(c: &str) -> bool {
+    c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|d| d.is_ascii_hexdigit())
 }
 
 /// The point of an entry.
@@ -113,6 +131,9 @@ pub fn apply(
                 s.name = new;
                 if let Some(coa) = &e.coa {
                     s.coa = Some(with_shield(coa, s.coa.as_ref()));
+                }
+                if let Some(c) = &e.color {
+                    s.color = c.to_ascii_lowercase();
                 }
             }
             AreaKind::Province => {
@@ -245,6 +266,38 @@ mod tests {
     }
 
     #[test]
+    fn a_state_color_replaces_the_generated_color() {
+        let base = World::build(&config(json!([]))).unwrap();
+        let cell = base.grid.find_cell(200.0, 150.0);
+        let id = base.society.cell_state[cell];
+        let old = &base
+            .society
+            .states
+            .iter()
+            .find(|s| s.id == id)
+            .unwrap()
+            .color;
+        let new = if old == "#8da0cb" {
+            "#ebb275"
+        } else {
+            "#8da0cb"
+        };
+        let upper = new.to_ascii_uppercase();
+        let w = World::build(&config(json!([
+            { "kind": "state", "pin": "home", "color": upper }
+        ])))
+        .unwrap();
+        for (a, b) in base.society.states.iter().zip(&w.society.states) {
+            if a.id == id {
+                assert_eq!(b.color, new);
+                assert_eq!(b.name, a.name, "a color alone keeps the name");
+            } else {
+                assert_eq!(a.color, b.color);
+            }
+        }
+    }
+
+    #[test]
     fn a_bad_entry_stops_the_build_with_its_path() {
         let cases = [
             (
@@ -266,6 +319,22 @@ mod tests {
             (
                 json!([{ "kind": "state", "at": [1, 1], "name": "X" }]),
                 "/world/renames/0",
+            ),
+            (
+                json!([{ "kind": "state", "at": [200, 150], "color": "#12345" }]),
+                "/world/renames/0/color",
+            ),
+            (
+                json!([{ "kind": "state", "at": [200, 150], "color": "8da0cb" }]),
+                "/world/renames/0/color",
+            ),
+            (
+                json!([{ "kind": "state", "at": [200, 150], "color": "#8da0cg" }]),
+                "/world/renames/0/color",
+            ),
+            (
+                json!([{ "kind": "province", "at": [200, 150], "color": "#8da0cb" }]),
+                "/world/renames/0/color",
             ),
         ];
         for (renames, path) in cases {
