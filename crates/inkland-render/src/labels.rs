@@ -1142,11 +1142,21 @@ pub fn place_with(
         });
     }
 
-    // States.
+    // States. The label options of a state have the key of its capital pin,
+    // for example `state:solmere`.
     let g = &world.grid;
+    let mut state_keys: BTreeMap<String, String> = BTreeMap::new();
     for st in &world.society.states {
         if st.name.trim().is_empty() {
             continue;
+        }
+        let capital = world.society.places.iter().find(|p| p.id == st.capital);
+        let key = capital.and_then(|p| p.pin.clone());
+        if let Some(k) = &key {
+            if !shown("state", k) {
+                continue;
+            }
+            state_keys.insert(st.id.to_string(), k.clone());
         }
         let area: Vec<bool> = (0..g.len())
             .map(|c| world.society.cell_state[c] == st.id && world.features.is_land(c))
@@ -1155,17 +1165,15 @@ pub fn place_with(
             continue;
         }
         let look = style("state");
-        let size = look.size.unwrap_or_else(|| pt(sizes.state));
+        let size = match &key {
+            Some(k) => size_of("state", k, &look, sizes.state),
+            None => look.size.unwrap_or_else(|| pt(sizes.state)),
+        };
         let name = look.text(&st.name);
         let f = FontMetrics::of(&look.family);
         // A state whose capital is outside the view can show only a small
         // part in the view. Its label is optional.
-        let capital_in_view = world
-            .society
-            .places
-            .iter()
-            .find(|p| p.id == st.capital)
-            .is_some_and(|p| in_view(p.at));
+        let capital_in_view = capital.is_some_and(|p| in_view(p.at));
         requests.push(Request {
             place: None,
             candidates: area_candidates(
@@ -1344,6 +1352,13 @@ pub fn place_with(
     for r in &mut requests {
         let Some((kind, key)) = r.id.strip_prefix("label-").and_then(|k| k.split_once('-')) else {
             continue;
+        };
+        let key = match kind {
+            "state" => match state_keys.get(key) {
+                Some(k) => k.as_str(),
+                None => continue,
+            },
+            _ => key,
         };
         let Some(at) = opts(kind, key).and_then(|o| o.at) else {
             continue;
@@ -1852,6 +1867,42 @@ mod tests {
                 assert!(!w.features.is_land(cell), "the label is on land at {p:?}");
             }
         }
+    }
+
+    #[test]
+    fn a_state_label_takes_the_options_of_its_capital_pin() {
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({
+                "pins": {
+                    "points": [{ "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150],
+                                 "capital_of": "Ostria" }]
+                },
+                "overlays": { "today": { "labels": {
+                    "state:ostrey": { "at": [120, 60] }
+                } } },
+                "variants": [{ "name": "full", "overlay": "today",
+                               "page": { "w_mm": 167, "h_mm": 250, "margin_mm": 5 } }]
+            }),
+        );
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let labels = place(&w, &c, &v, &page);
+        let l = labels.placed.iter().find(|l| l.text == "Ostria").unwrap();
+        assert_eq!(l.kind, Kind::State);
+        let Geometry::Point { x, angle, .. } = l.geometry else {
+            panic!("the label is not at a point");
+        };
+        assert_eq!(angle, 0);
+        assert!((x - page.to_page([120.0, 60.0])[0]).abs() < 1e-9);
+
+        // `hide` leaves the label out.
+        let mut c = c;
+        let o = c.overlays.get_mut("today").unwrap();
+        o.labels.get_mut("state:ostrey").unwrap().hide = true;
+        let labels = place(&w, &c, &v, &page);
+        assert!(labels.placed.iter().all(|l| l.text != "Ostria"));
     }
 
     #[test]
