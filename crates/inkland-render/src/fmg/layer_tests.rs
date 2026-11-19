@@ -1175,8 +1175,8 @@ fn a_variant_can_leave_out_the_relief_of_a_region_in_both_modes() {
     };
     assert!(colour_in(&c) > 0, "the area has relief");
     let mut hidden = c.clone();
-    hidden.variants[0].relief = Some(inkland_core::config::ReliefOptions {
-        hide_in: vec!["fen".into()],
+    hidden.variants[0].relief = Some(inkland_core::config::ReliefPatch {
+        hide_in: Some(vec!["fen".into()]),
         ..Default::default()
     });
     assert_eq!(colour_in(&hidden), 0);

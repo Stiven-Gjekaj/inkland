@@ -1116,15 +1116,15 @@ impl<'a> Validator<'a> {
             .map(|r| r.id.as_str())
             .chain(c.pins.areas.iter().map(|a| a.id.as_str()))
             .collect();
-        let reliefs = std::iter::once(("/render/relief".to_owned(), &c.render.relief)).chain(
-            c.variants.iter().enumerate().filter_map(|(i, v)| {
+        let reliefs = std::iter::once(("/render/relief".to_owned(), &c.render.relief.hide_in))
+            .chain(c.variants.iter().enumerate().filter_map(|(i, v)| {
                 v.relief
                     .as_ref()
-                    .map(|r| (format!("/variants/{i}/relief"), r))
-            }),
-        );
-        for (path, relief) in reliefs {
-            for (k, id) in relief.hide_in.iter().enumerate() {
+                    .and_then(|r| r.hide_in.as_ref())
+                    .map(|h| (format!("/variants/{i}/relief"), h))
+            }));
+        for (path, hide_in) in reliefs {
+            for (k, id) in hide_in.iter().enumerate() {
                 if !regions.contains(&id.as_str()) {
                     self.err(
                         ErrorCode::RefUnknown,

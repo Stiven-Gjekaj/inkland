@@ -677,6 +677,17 @@ The relief symbols of `print-safe` mode.
 | `hide_in` | array of string |  |  | Both render modes. The ids of region pins and area pins. The relief symbols inside these shapes are left out, for example the marsh of a fen or the trees of a wood that a map of an older age does not show. |
 | `terrain` | boolean |  |  | Both render modes. `true`: the symbols follow the terrain. Mountains stand in chains of overlapping peaks along the ridges, larger at the crest, with hills at their feet. Trees grow in groups, denser in the highland, and the symbols change a little in size. `false`: the placement of Azgaar's Fantasy Map Generator. Default `true`. |
 
+### ReliefPatch
+
+The relief options of a variant: each field that it gives replaces the field of `render.relief`.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `density` | number |  |  | See `render.relief.density`. |
+| `hide` | array of [`ReliefSymbol`](#reliefsymbol) |  |  | See `render.relief.hide`. |
+| `hide_in` | array of string |  |  | See `render.relief.hide_in`. |
+| `terrain` | boolean |  |  | See `render.relief.terrain`. |
+
 ### ReliefSymbol
 
 A kind of relief symbol of `print-safe` mode.
@@ -873,7 +884,7 @@ One map to render.
 | `name` | string | yes |  | Name of the variant: lower-case letters and digits, words joined by `-`. It is also the stem of the output file names. |
 | `overlay` | string |  |  | Name of the overlay to show. Default: no overlay. |
 | `page` | [`Page`](#page) | yes |  | Page size. |
-| `relief` | [`ReliefOptions`](#reliefoptions) |  |  | The relief symbols of this variant. A value here replaces `render.relief` for this variant, for example to leave out a forest or a marsh on the map of another age. |
+| `relief` | [`ReliefPatch`](#reliefpatch) |  |  | The relief symbols of this variant. Each field here replaces that field of `render.relief` for this variant, for example `hide_in` to leave out a forest or a marsh on the map of another age. The other fields come from `render.relief`. |
 
 ### Waypoint
 

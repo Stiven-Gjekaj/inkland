@@ -368,7 +368,7 @@ fn write_relief(
         world,
         page,
         config.seed,
-        config.relief_of(variant),
+        &config.relief_of(variant),
         &config.peakless_shapes(),
     )
     .into_iter()

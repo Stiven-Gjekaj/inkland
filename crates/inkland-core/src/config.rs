@@ -1693,11 +1693,12 @@ pub struct Variant {
     /// `render.extras`.
     #[serde(default)]
     pub extras: Extras,
-    /// The relief symbols of this variant. A value here replaces
-    /// `render.relief` for this variant, for example to leave out a forest
-    /// or a marsh on the map of another age.
+    /// The relief symbols of this variant. Each field here replaces that
+    /// field of `render.relief` for this variant, for example `hide_in` to
+    /// leave out a forest or a marsh on the map of another age. The other
+    /// fields come from `render.relief`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub relief: Option<ReliefOptions>,
+    pub relief: Option<ReliefPatch>,
 }
 
 /// A page size.
@@ -1926,6 +1927,46 @@ impl ReliefOptions {
     }
 }
 
+/// The relief options of a variant: each field that it gives replaces the
+/// field of `render.relief`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReliefPatch {
+    /// See `render.relief.density`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub density: Option<f64>,
+    /// See `render.relief.hide`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hide: Option<Vec<ReliefSymbol>>,
+    /// See `render.relief.terrain`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terrain: Option<bool>,
+    /// See `render.relief.hide_in`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hide_in: Option<Vec<String>>,
+}
+
+impl ReliefPatch {
+    /// `base` with the fields of this patch.
+    pub fn apply(&self, base: &ReliefOptions) -> ReliefOptions {
+        let mut out = base.clone();
+        if let Some(v) = self.density {
+            out.density = v;
+        }
+        if let Some(v) = &self.hide {
+            out.hide = v.clone();
+        }
+        if let Some(v) = self.terrain {
+            out.terrain = v;
+        }
+        if let Some(v) = &self.hide_in {
+            out.hide_in = v.clone();
+        }
+        out
+    }
+}
+
 /// A kind of relief symbol of `print-safe` mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -1997,9 +2038,13 @@ impl LabelRules {
 }
 
 impl Config {
-    /// The relief options of a variant: its own, or `render.relief`.
-    pub fn relief_of<'a>(&'a self, variant: &'a Variant) -> &'a ReliefOptions {
-        variant.relief.as_ref().unwrap_or(&self.render.relief)
+    /// The relief options of a variant: `render.relief` with the fields of
+    /// the variant's own `relief`.
+    pub fn relief_of(&self, variant: &Variant) -> ReliefOptions {
+        match &variant.relief {
+            Some(patch) => patch.apply(&self.render.relief),
+            None => self.render.relief.clone(),
+        }
     }
 
     /// The shapes of the region pins and the area pins in `hide_in` of the
@@ -2025,7 +2070,7 @@ impl Config {
     /// The ids and the shapes of the region pins and the area pins in
     /// `hide_in` of the relief options of a variant, regions first.
     pub fn relief_hidden_shapes(&self, variant: &Variant) -> Vec<(String, crate::geom::Shape)> {
-        let ids = &self.relief_of(variant).hide_in;
+        let ids = self.relief_of(variant).hide_in;
         let regions = self
             .pins
             .regions
@@ -2592,6 +2637,20 @@ mod tests {
 
     fn minimal() -> serde_json::Value {
         json!({ "version": 1, "seed": 7, "frame": { "width": 400, "height": 300 } })
+    }
+
+    #[test]
+    fn the_relief_of_a_variant_changes_only_its_own_fields() {
+        let mut v = minimal();
+        v["render"] = json!({ "relief": { "density": 0.5, "hide": ["field"], "terrain": false } });
+        v["variants"] = json!([{ "name": "old", "page": { "w_mm": 100, "h_mm": 100 },
+                                 "relief": { "hide_in": ["fen"] } }]);
+        let c: Config = serde_json::from_value(v).unwrap();
+        let r = c.relief_of(&c.variants[0]);
+        assert_eq!(r.hide_in, vec!["fen".to_owned()]);
+        assert_eq!(r.density, 0.5);
+        assert_eq!(r.hide, vec![ReliefSymbol::Field]);
+        assert!(!r.terrain);
     }
 
     #[test]

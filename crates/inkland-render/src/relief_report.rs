@@ -26,9 +26,9 @@ pub fn summary(world: &World, config: &Config, variant: &Variant) -> ReliefSumma
     let shapes = config.relief_hidden_shapes(variant);
     // The symbols without `hide_in`, with their world points.
     let mut all = variant.clone();
-    let mut opts = config.relief_of(variant).clone();
-    opts.hide_in.clear();
-    all.relief = Some(opts);
+    let mut patch = variant.relief.clone().unwrap_or_default();
+    patch.hide_in = Some(Vec::new());
+    all.relief = Some(patch);
     let page = Page::new(config, &all);
     let symbols: Vec<(String, [f64; 2])> = if config.render.mode == RenderMode::Colour {
         let labels = crate::labels::Labels::default();
@@ -45,7 +45,7 @@ pub fn summary(world: &World, config: &Config, variant: &Variant) -> ReliefSumma
             .collect()
     } else {
         let opts = config.relief_of(&all);
-        crate::decor::relief(world, &page, config.seed, opts, &config.peakless_shapes())
+        crate::decor::relief(world, &page, config.seed, &opts, &config.peakless_shapes())
             .into_iter()
             .map(|(sym, p, _)| (sym.name().to_owned(), page.to_world(p)))
             .collect()
