@@ -249,3 +249,28 @@ stays on the coast.
 Each `<variant>.report.json` has a `relief` section: the symbols that the
 map shows, and the symbols that each id in `hide_in` leaves out. See
 docs/TERRAIN.md for the heights at which hills and mountains get symbols.
+
+## No province borders
+
+`"world": { "provinces_ratio": 0 }` makes no provinces, as in Azgaar's
+Fantasy Map Generator. The map then has no province borders, in both
+render modes. The state borders stay.
+
+## A sea label in a narrow strait
+
+With `render.labels.max_angle` 0, each label is level. A strait that runs
+north and south is often narrower than the level label of its sea, so the
+label gets smaller. Give the label a turn in the label options of an
+overlay:
+
+```json
+"overlays": { "full": { "labels": { "region:serenity": { "angle": 90 } } } }
+```
+
+The label then reads from the bottom up along the strait, at the size of
+the other sea labels. The other labels stay level.
+
+## The scale bar
+
+The scale bar of a `print-safe` map has paper behind it, so no symbol or
+line of the map goes through its labels.
