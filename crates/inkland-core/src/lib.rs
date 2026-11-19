@@ -14,6 +14,7 @@ pub mod coordinates;
 pub mod courses;
 pub mod culture_sets;
 pub mod cultures;
+pub mod curves;
 pub mod development;
 pub mod diplomacy;
 pub mod economy;
