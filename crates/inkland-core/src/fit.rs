@@ -43,75 +43,55 @@ pub struct FitRegion<'a> {
     lift: bool,
     /// The noise of a rough outline.
     rough: Option<Rough>,
+    /// The sides of a polygon that are coast: the sides of the part of the
+    /// polygon in the frame, without the sides on a frame edge. Only for a
+    /// rough region.
+    coast: Vec<(Point, Point)>,
 }
 
-/// A rough outline: the shape, moved in or out by fractal noise.
+/// The noise of a rough outline: the shape, moved in or out by it.
 struct Rough {
     /// The largest distance that the outline moves, in units.
     amount: f64,
     noise: Fractal,
-    /// The sides of a polygon that are coast: the sides of the part of the
-    /// polygon in the frame, without the sides on a frame edge.
-    coast: Vec<(Point, Point)>,
 }
 
 impl Rough {
-    fn of(pin: &RegionPin, shape: &Shape, frame: [f64; 2], tree: &SeedTree) -> Option<Rough> {
+    fn of(pin: &RegionPin, tree: &SeedTree) -> Option<Rough> {
         let amount = pin.roughness;
         if !(amount.is_finite() && amount > 0.0) {
             return None;
         }
-        let [w, h] = frame;
-        let coast = match shape {
-            Shape::Polygon(poly) => {
-                let inside = clip_polygon(poly, [0.0, 0.0, w, h]);
-                let n = inside.len();
-                let on_frame = |a: Point, b: Point| {
-                    (a[0] == b[0] && (a[0] <= 0.0 || a[0] >= w))
-                        || (a[1] == b[1] && (a[1] <= 0.0 || a[1] >= h))
-                };
-                (0..n)
-                    .map(|i| (inside[i], inside[(i + 1) % n]))
-                    .filter(|&(a, b)| !on_frame(a, b))
-                    .collect()
-            }
-            Shape::Circle { .. } => Vec::new(),
-        };
         let seed = Fractal::seed_of(tree.part_seed(Layer::Terrain, &format!("coast/{}", pin.id)));
         let octaves = pin.coast_detail.unwrap_or(4).clamp(1, 8);
         Some(Rough {
             amount,
             noise: Fractal::new(seed, octaves, 4.0 * amount),
-            coast,
         })
     }
 
-    /// The distance from `p` to the nearest coast side of the region.
-    #[cfg(test)]
-    fn coast_distance(region: &FitRegion, p: Point) -> f64 {
-        let r = region.rough.as_ref().expect("a rough region");
-        r.coast
-            .iter()
-            .map(|&(a, b)| segment_distance(a, b, p))
-            .fold(f64::INFINITY, f64::min)
-    }
-
-    /// The distance from `p` to the rough outline: less than 0 inside, more
-    /// than 0 outside.
-    fn signed(&self, shape: &Shape, p: Point) -> f64 {
-        let d = match shape {
-            Shape::Circle { at, r } => (dist(*at, p) - r).abs(),
-            Shape::Polygon(_) => self
-                .coast
-                .iter()
-                .map(|&(a, b)| segment_distance(a, b, p))
-                .fold(f64::INFINITY, f64::min),
-        };
-        let s = if shape.contains(p) { -d } else { d };
+    /// How far the outline moves out at `p`, from `-amount` to `amount`.
+    fn shift(&self, p: Point) -> f64 {
         // Fractal noise is seldom far from 0. Twice the noise, cut at -1
         // and 1, moves the outline by up to the full amount.
-        s - self.amount * (2.0 * self.noise.at(p)).clamp(-1.0, 1.0)
+        self.amount * (2.0 * self.noise.at(p)).clamp(-1.0, 1.0)
     }
+}
+
+/// The coast sides of a polygon in the frame `[w, h]`.
+fn coast_sides(shape: &Shape, [w, h]: [f64; 2]) -> Vec<(Point, Point)> {
+    let Shape::Polygon(poly) = shape else {
+        return Vec::new();
+    };
+    let inside = clip_polygon(poly, [0.0, 0.0, w, h]);
+    let n = inside.len();
+    let on_frame = |a: Point, b: Point| {
+        (a[0] == b[0] && (a[0] <= 0.0 || a[0] >= w)) || (a[1] == b[1] && (a[1] <= 0.0 || a[1] >= h))
+    };
+    (0..n)
+        .map(|i| (inside[i], inside[(i + 1) % n]))
+        .filter(|&(a, b)| !on_frame(a, b))
+        .collect()
 }
 
 impl<'a> FitRegion<'a> {
@@ -128,7 +108,12 @@ impl<'a> FitRegion<'a> {
             .enumerate()
             .filter_map(|(index, pin)| {
                 let shape = Shape::of(pin)?;
-                let rough = Rough::of(pin, &shape, frame, tree);
+                let rough = Rough::of(pin, tree);
+                let coast = if rough.is_some() {
+                    coast_sides(&shape, frame)
+                } else {
+                    Vec::new()
+                };
                 let grow = rough.as_ref().map_or(0.0, |r| r.amount);
                 let [x0, y0, x1, y1] = shape.bbox();
                 let bbox = [x0 - grow, y0 - grow, x1 + grow, y1 + grow];
@@ -143,6 +128,7 @@ impl<'a> FitRegion<'a> {
                         ),
                     lift: pin.height.is_none() && pin.kind == RegionKind::Land,
                     rough,
+                    coast,
                     shape,
                     bbox,
                 })
@@ -158,9 +144,30 @@ impl<'a> FitRegion<'a> {
             return false;
         }
         match &self.rough {
-            Some(r) => r.signed(&self.shape, p) <= 0.0,
+            Some(_) => self.signed(p) <= 0.0,
             None => self.shape.contains(p),
         }
+    }
+
+    /// The distance from `p` to the nearest coast side of the shape, without
+    /// the noise. A side on a frame edge is not coast.
+    fn coast_distance(&self, p: Point) -> f64 {
+        match &self.shape {
+            Shape::Circle { at, r } => (dist(*at, p) - r).abs(),
+            Shape::Polygon(_) => self
+                .coast
+                .iter()
+                .map(|&(a, b)| segment_distance(a, b, p))
+                .fold(f64::INFINITY, f64::min),
+        }
+    }
+
+    /// The distance from `p` to the outline, with the noise of a rough
+    /// outline: less than 0 inside, more than 0 outside.
+    fn signed(&self, p: Point) -> f64 {
+        let d = self.coast_distance(p);
+        let s = if self.shape.contains(p) { -d } else { d };
+        s - self.rough.as_ref().map_or(0.0, |r| r.shift(p))
     }
 
     fn near(&self, p: [f64; 2]) -> Option<f64> {
@@ -173,7 +180,7 @@ impl<'a> FitRegion<'a> {
             return None;
         }
         let d = match &self.rough {
-            Some(r) => r.signed(&self.shape, p),
+            Some(_) => self.signed(p),
             None => self.shape.distance(p),
         };
         (d > 0.0 && d < e).then_some(d)
@@ -560,7 +567,7 @@ mod tests {
                 if exact != rough {
                     // Only points near the exact outline change.
                     let d = if exact {
-                        Rough::coast_distance(&fit[0], p)
+                        fit[0].coast_distance(p)
                     } else {
                         fit[0].shape.distance(p)
                     };
