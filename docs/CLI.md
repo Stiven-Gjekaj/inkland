@@ -37,7 +37,8 @@ inkland generate --config map.json --out-dir out --preview out/map.png
 |---|---|
 | `--config FILE` | The config file. Required. |
 | `--out-dir DIR` | The output directory. Default `out`. |
-| `--preview FILE` | Also write a PNG preview (1024 px on the longer side). With more than one variant, each preview gets the variant name: `map-<variant>.png`. |
+| `--preview FILE` | Also write a PNG preview. With more than one variant, each preview gets the variant name: `map-<variant>.png`. |
+| `--preview-width N` | The longer side of the PNG preview, in pixels. Default 1024. The permitted range is 64 to 8192. A value out of the range is a `CLI_USAGE` error. |
 | `--variant NAME` | Render only this variant. |
 | `--dry-run` | Check the config and the pins. Generate nothing and write nothing. The output is the dry-run report. |
 | `--seed N` | Replace `seed`. |
