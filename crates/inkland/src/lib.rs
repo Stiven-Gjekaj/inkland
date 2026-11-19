@@ -376,7 +376,34 @@ fn add_labels(report: &mut Value, labels: &inkland_render::labels::Labels, confi
             "required": u.required,
         })).collect::<Vec<_>>(),
     });
+    // The river labels that stand level, as no part of the river is smooth
+    // and long enough, or as the config gives them a position.
+    let level: Vec<&str> = labels
+        .placed
+        .iter()
+        .filter(|l| {
+            l.kind == inkland_render::labels::Kind::River
+                && matches!(l.geometry, inkland_render::labels::Geometry::Point { .. })
+        })
+        .map(|l| l.id.as_str())
+        .collect();
+    report["labels"]["level_rivers"] = serde_json::json!(level);
+    // The path labels whose text does not fit its path.
+    let misfits: Vec<Value> = labels
+        .placed
+        .iter()
+        .filter_map(|l| {
+            inkland_render::labels::path_fit_fault(l)
+                .map(|why| serde_json::json!({ "id": l.id, "reason": why }))
+        })
+        .collect();
     if let Some(list) = report["checks"].as_array_mut() {
+        list.push(serde_json::json!({
+            "name": "path_labels_fit",
+            "pass": misfits.is_empty(),
+            "count": misfits.len(),
+            "labels": misfits,
+        }));
         list.push(serde_json::json!({
             "name": "all_labels_placed",
             "pass": missing == 0,
@@ -868,6 +895,26 @@ mod tests {
             .find(|c| c["name"] == "black_and_white")
             .unwrap();
         assert_eq!(bw["pass"], false);
+    }
+
+    #[test]
+    fn report_checks_that_the_path_labels_fit() {
+        let c = config(json!({
+            "world": { "cells": 2000, "template": "pangea" },
+            "pins": { "rivers": [{ "id": "dunn", "name": "The River Dunn",
+                                   "source": [70, 20], "mouth": [5, 60] }],
+                      "regions": [{ "id": "sea", "kind": "sea", "box": [0, 0, 8, 80] }] }
+        }));
+        let out = generate(&c, None).unwrap();
+        let r = &out.variants[0].report;
+        let check = r["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["name"] == "path_labels_fit")
+            .expect("the check");
+        assert_eq!(check["pass"], true, "{check}");
+        assert!(r["labels"]["level_rivers"].is_array());
     }
 
     #[test]
