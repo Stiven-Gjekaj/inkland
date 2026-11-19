@@ -210,3 +210,42 @@ Georgia and Times New Roman have no free license, so inkland cannot bundle
 them. A style that names one writes a list, for example
 `Georgia, Caladea, serif`: a system with Georgia uses it, and the preview
 uses the bundled Caladea.
+
+## Only the pinned roads
+
+`"world": { "generated_roads": false }` leaves out the roads and trails
+that generation adds between the places. The pinned roads and the roads of
+the overlays stay. The sea routes stay.
+
+## Region heights and areas
+
+- A `forest` region is 21 to 45 high by default, and a `desert` region 21
+  to 50. Give `height` for another range.
+- An area in a land region shapes the land inside the range of the region:
+  `rough` gives ridges up to the top of the range, `rolling` gives low
+  swells, and `flat` keeps the land near the bottom.
+- `hide_in` also takes the id of an area pin, so a wood can be an area and
+  still be left out on the map of another age.
+
+## Climate
+
+`"climate": { "preset": "temperate" }` gives the middle of the map 11 C at
+sea level. The other presets are `warm`, `cool`, `cold`, and `tropical`.
+`"temperature": 9` sets the value in degrees C. Without them, a map at 50
+degrees is near 0 C at sea level, and its plains become taiga.
+
+## A coast that wanders
+
+```json
+{ "id": "western-sea", "kind": "sea", "wander": 40, "roughness": 10, ... }
+```
+
+`wander` bends the coast in and out by up to that distance, in bends of
+about 6 times its size. The bends fade near each pinned place, so a port
+stays on the coast.
+
+## The relief in the report
+
+Each `<variant>.report.json` has a `relief` section: the symbols that the
+map shows, and the symbols that each id in `hide_in` leaves out. See
+docs/TERRAIN.md for the heights at which hills and mountains get symbols.

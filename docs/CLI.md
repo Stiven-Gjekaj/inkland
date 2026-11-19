@@ -56,7 +56,12 @@ Files in the output directory:
   regiments, and stability of each state, `cell_prosperity`, the `zones`,
   the `journeys`, the `measurers`, the `legends`, and the `notes`.
 - `<variant>.svg`: the map, in mm, black and white, with real `<text>`.
-- `<variant>.report.json`: pins, labels, checks, and warnings.
+- `<variant>.report.json`: pins, labels, checks, warnings, and `relief`.
+  `relief.shown` gives the number of relief symbols of each kind on the
+  map. `relief.hidden` gives, for each id in `hide_in`, the number of
+  symbols of each kind that it leaves out. Two variants that share one
+  terrain show their symbols and hide their own, so the reports show what
+  each age hides. The counts are before the labels clear their places.
 
 The summary on stdout gives the files and `checks_failed`. When a check
 fails, the files are written and the exit code is 1.
