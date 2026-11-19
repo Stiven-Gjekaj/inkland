@@ -64,3 +64,11 @@ This file records the choices that the human makes.
   the same.
 - The font check of the book permits only Caladea, Inter and IM Fell English.
   Any other family fails the build.
+
+## 2026-11-19: version numbers
+
+- The work on the issues from the Maeris map (#23 to #45) is release
+  `v1.2.0`. It adds new config options and changes the default look, so it
+  is a minor version.
+- A 3D view, in the desktop app and as an export of the terrain, is release
+  `v2.0.0`. The two parts come in the same major version.
