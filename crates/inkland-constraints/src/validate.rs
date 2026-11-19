@@ -532,6 +532,21 @@ impl<'a> Validator<'a> {
                     "roughness must be 0 or more",
                 );
             }
+            if let Some(i) = r.islets {
+                if !(0.0..=1.0).contains(&i) {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("{p}/islets"),
+                        "islets must be 0 to 1",
+                    );
+                } else if r.kind.is_water() {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("{p}/islets"),
+                        "islets does not apply to regions of kind sea or lake",
+                    );
+                }
+            }
             if r.coast_detail.is_some_and(|d| !(1..=8).contains(&d)) {
                 self.err(
                     ErrorCode::ValueOutOfRange,

@@ -244,6 +244,21 @@ fn border_terrain_below_0_is_refused() {
 }
 
 #[test]
+fn islets_on_a_sea_or_above_1_are_refused() {
+    let c = with(json!({ "pins": { "regions": [
+        { "id": "sea", "kind": "sea", "box": [0, 0, 50, 300], "islets": 0.5 },
+        { "id": "isle", "kind": "land", "box": [100, 0, 150, 50], "islets": 2 }
+    ]}}));
+    assert_eq!(
+        codes(&c),
+        vec![
+            (ErrorCode::ValueOutOfRange, "/pins/regions/0/islets".into()),
+            (ErrorCode::ValueOutOfRange, "/pins/regions/1/islets".into()),
+        ]
+    );
+}
+
+#[test]
 fn depth_line_of_zero_is_refused() {
     let c = with(json!({ "render": { "depth_lines": [6, 0] } }));
     one(&c, ErrorCode::ValueOutOfRange, "/render/depth_lines/1");

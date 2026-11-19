@@ -64,6 +64,10 @@ struct Rough {
     noise: Fractal,
     /// The domain warp, along x and along y.
     warp: [Fractal; 2],
+    /// How many small islands lie off the coast, 0 to 1.
+    islets: f64,
+    /// The noise of the small islands.
+    isle: Fractal,
 }
 
 impl Rough {
@@ -84,7 +88,29 @@ impl Rough {
                 Fractal::new(part("coast-warp-x"), 2, 6.0 * amount),
                 Fractal::new(part("coast-warp-y"), 2, 6.0 * amount),
             ],
+            islets: if pin.kind.is_water() {
+                0.0
+            } else {
+                pin.islets
+                    .unwrap_or(if pin.kind == RegionKind::Land {
+                        0.3
+                    } else {
+                        0.0
+                    })
+                    .clamp(0.0, 1.0)
+            },
+            isle: Fractal::new(part("coast-islets"), 2, 1.2 * amount),
         })
+    }
+
+    /// `true` if a small island covers `p`, at the distance `out` off the
+    /// coast, where the coast moved out by `shift`. Islands are likelier off
+    /// a cape (a large `shift`) and near the coast.
+    fn isle_at(&self, p: Point, shift: f64, out: f64) -> bool {
+        let cape = (shift / self.amount).clamp(0.0, 1.0);
+        let far = out / (2.0 * self.amount);
+        let need = 0.95 - 0.45 * self.islets - 0.3 * cape + 0.4 * far;
+        2.0 * self.isle.at(p) > need
     }
 
     /// How far the outline moves out at `p`, from `-amount` to `amount`.
@@ -189,7 +215,16 @@ impl<'a> FitRegion<'a> {
     fn signed(&self, p: Point) -> f64 {
         let d = self.coast_distance(p);
         let s = if self.shape.contains(p) { -d } else { d };
-        s - self.rough.as_ref().map_or(0.0, |r| r.shift(p))
+        let Some(r) = &self.rough else {
+            return s;
+        };
+        let shift = r.shift(p);
+        let out = s - shift;
+        if r.islets > 0.0 && out > 0.0 && out < 2.0 * r.amount && r.isle_at(p, shift, out) {
+            // A small island off the coast.
+            return -0.01;
+        }
+        out
     }
 
     fn near(&self, p: [f64; 2]) -> Option<f64> {
@@ -787,6 +822,30 @@ mod tests {
         assert!(small > 2.0, "no coves: {small}");
         assert!(hi - lo > 6.0, "no bays: {lo} {hi}");
         assert!(shift.iter().all(|s| s.abs() <= 10.0));
+    }
+
+    #[test]
+    fn islets_lie_off_a_rough_land_coast() {
+        let count = |islets: f64| {
+            let r = regions(json!([
+                { "id": "land", "kind": "land", "box": [100, 100, 900, 900],
+                  "roughness": 12, "islets": islets }
+            ]));
+            let fit = FitRegion::all(&r, 20.0, [1000.0, 1000.0], &SeedTree::new(5));
+            let rough = fit[0].rough.as_ref().unwrap();
+            // Points inside the outline but outside the coast without islets.
+            (0..250_000)
+                .filter(|&k| {
+                    let p = [f64::from(k % 500) * 2.0, f64::from(k / 500) * 2.0];
+                    let d = fit[0].coast_distance(p);
+                    let s = if fit[0].shape.contains(p) { -d } else { d };
+                    s - rough.shift(p) > 0.0 && fit[0].contains(p)
+                })
+                .count()
+        };
+        assert_eq!(count(0.0), 0);
+        let (some, many) = (count(0.3), count(1.0));
+        assert!(some > 0 && many > some, "{some} {many}");
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {

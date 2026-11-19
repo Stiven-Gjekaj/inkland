@@ -1213,6 +1213,13 @@ pub struct RegionPin {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1, max = 8))]
     pub coast_detail: Option<u32>,
+    /// Not for `sea` and `lake`. How many small islands lie off a rough
+    /// coast. 0 to 1. Most of them lie off the capes. 0: none. Has an
+    /// effect only with a roughness. Default: 0.3 for `land`, 0 for the
+    /// other kinds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub islets: Option<f64>,
     /// Only for `sea` and `lake`. The width, in units, of the shallow water
     /// along the coast. The water is at the top of the height range at the
     /// coast and goes down to the bottom of the range at this distance from
