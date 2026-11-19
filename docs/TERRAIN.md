@@ -14,7 +14,8 @@ config. `docs/CONFIG.md` gives each field.
   character, a loose outline, and no height range.
 
 The order is: the template, the brushes, `world.edges`, the character
-areas, then the region pins. A region pin rules over an area.
+areas, then the region pins. A region sets the height range, and an area
+inside it shapes the land in that range.
 
 ## Draw a coast
 
