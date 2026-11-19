@@ -271,6 +271,17 @@ pub fn write_only(
             s,
             "<g id=\"scale-bar\" stroke=\"{INK}\" stroke-width=\"{line}\">"
         );
+        // Paper behind the bar and its labels, so that no map symbol or
+        // line goes through them.
+        let [bx0, by0, bx1, by1] = scale_bar_box(config, page, [x, y]);
+        let _ = writeln!(
+            s,
+            "<rect id=\"scale-bar-back\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{PAPER}\" stroke=\"none\"/>",
+            n(bx0),
+            n(by0),
+            n(bx1 - bx0),
+            n(by1 - by0)
+        );
         for i in 0..4 {
             let fill = if i % 2 == 0 { INK } else { PAPER };
             let _ = writeln!(

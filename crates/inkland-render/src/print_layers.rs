@@ -319,6 +319,22 @@ mod tests {
         let w = World::build(&c).unwrap();
         let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
         assert!(svg.contains("<g id=\"scale-bar\""));
+        // Paper lies behind the bar and its labels, before them.
+        let g = &svg[svg.find("<g id=\"scale-bar\"").unwrap()..];
+        let g = &g[..g.find("</g>").unwrap()];
+        let back = g.find("<rect id=\"scale-bar-back\"").expect("a paper back");
+        assert!(back < g.find("<text").unwrap());
+        let num = |tag: &str, attr: &str| -> f64 {
+            let t = &tag[tag.find(&format!(" {attr}=\"")).unwrap() + attr.len() + 3..];
+            t[..t.find('"').unwrap()].parse().unwrap()
+        };
+        let rect = &g[back..];
+        let (bx, by) = (num(rect, "x"), num(rect, "y"));
+        let (bw, bh) = (num(rect, "width"), num(rect, "height"));
+        for text in g.split("<text").skip(1) {
+            let (tx, ty) = (num(text, "x"), num(text, "y"));
+            assert!(tx > bx && tx < bx + bw && ty > by && ty < by + bh, "{text}");
+        }
         assert!(svg.contains("<g id=\"compass\""));
         assert!(svg.contains("<g id=\"coast\""));
         assert!(!svg.contains("<g id=\"water-lines\""));
