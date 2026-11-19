@@ -36,6 +36,9 @@ pub struct FitRegion<'a> {
     pub range: [f64; 2],
     /// `true` if the region only makes sure of land.
     pub land_only: bool,
+    /// `true` if the region lifts the water of the template to low land
+    /// (a `land` region without a `height`).
+    lift: bool,
 }
 
 impl<'a> FitRegion<'a> {
@@ -51,7 +54,11 @@ impl<'a> FitRegion<'a> {
                     pin,
                     range: effective_range(pin, sea_level),
                     land_only: pin.height.is_none()
-                        && matches!(pin.kind, RegionKind::Forest | RegionKind::Desert),
+                        && matches!(
+                            pin.kind,
+                            RegionKind::Forest | RegionKind::Desert | RegionKind::Land
+                        ),
+                    lift: pin.height.is_none() && pin.kind == RegionKind::Land,
                     shape,
                     bbox,
                 })
@@ -80,7 +87,7 @@ impl<'a> FitRegion<'a> {
     /// The forced height for a template height `h`.
     fn target(&self, h: f64, sea_level: f64) -> f64 {
         if self.land_only {
-            return put(h.max(sea_level), self.range);
+            return put(land_height(h, sea_level, self.lift), self.range);
         }
         let [lo, hi] = self.range;
         put(lo + (hi - lo) * h / 100.0, self.range)
@@ -128,6 +135,20 @@ pub fn forced_land(regions: &[FitRegion], p: [f64; 2]) -> bool {
     !rule.is_empty() && rule.iter().all(|r| !r.pin.kind.is_water())
 }
 
+/// The height of a cell that only needs to be land. With `lift`, water
+/// becomes low land as with `fill_land`: deeper water gives a little higher
+/// land, so the land keeps some form. Without it, water goes up to sea
+/// level.
+fn land_height(h: f64, sea_level: f64, lift: bool) -> f64 {
+    if h >= sea_level {
+        h
+    } else if lift {
+        (sea_level + 1.0 + 2.0 * (sea_level - h) / sea_level).trunc()
+    } else {
+        sea_level
+    }
+}
+
 /// A whole-number height in the range.
 fn put(v: f64, [lo, hi]: [f64; 2]) -> f64 {
     v.trunc().clamp(lo.ceil(), hi.floor().max(lo.ceil()))
@@ -143,8 +164,9 @@ pub fn apply_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], se
                 [lo.max(r.range[0]), hi.min(r.range[1])]
             });
             let land_only = inside.iter().all(|r| r.land_only);
+            let lift = inside.iter().any(|r| r.lift);
             heights[c] = if land_only {
-                put(heights[c].max(sea_level), range)
+                put(land_height(heights[c], sea_level, lift), range)
             } else {
                 let [lo, hi] = range;
                 put(lo + (hi - lo) * heights[c] / 100.0, range)
@@ -192,7 +214,7 @@ pub fn clamp_regions(
             [lo.max(r.range[0]), hi.min(r.range[1])]
         });
         let h = if inside.iter().all(|r| r.land_only) {
-            heights[c].max(sea_level)
+            land_height(heights[c], sea_level, inside.iter().any(|r| r.lift))
         } else {
             heights[c]
         };
@@ -391,6 +413,41 @@ mod tests {
         .unwrap();
         let v = serde_json::to_value(&c.pins.points[0]).unwrap();
         assert!(v.get("island").is_none());
+    }
+
+    #[test]
+    fn a_land_region_draws_a_coast_on_a_template_of_sea() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 4, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": { "steps": [] } },
+            "pins": { "regions": [
+                { "id": "maeris", "kind": "land",
+                  "polygon": [[60, 40], [240, 50], [220, 160], [80, 150]] }
+            ] }
+        }))
+        .unwrap();
+        let fit_regions = c.pins.regions.clone();
+        let fit = FitRegion::all(&fit_regions, 20.0);
+        let w = crate::world::World::build(&c).unwrap();
+        let (mut land, mut sea) = (0, 0);
+        for (cell, &p) in w.grid.points.iter().enumerate() {
+            if fit[0].contains(p) {
+                assert!(w.heights[cell] >= 20.0, "water in the land at {p:?}");
+                land += 1;
+            } else if fit[0].shape.distance(p) > 6.0 {
+                assert!(w.heights[cell] < 20.0, "land in the sea at {p:?}");
+                sea += 1;
+            }
+        }
+        assert!(land > 100 && sea > 10, "{land} {sea}");
+    }
+
+    #[test]
+    fn land_height_lifts_water_only_with_lift() {
+        assert_eq!(land_height(30.0, 20.0, true), 30.0);
+        assert_eq!(land_height(0.0, 20.0, true), 23.0);
+        assert_eq!(land_height(15.0, 20.0, true), 21.0);
+        assert_eq!(land_height(0.0, 20.0, false), 20.0);
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {

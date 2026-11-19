@@ -1394,6 +1394,7 @@ fn kind_name(k: RegionKind) -> &'static str {
         RegionKind::Marsh => "marsh",
         RegionKind::Forest => "forest",
         RegionKind::Desert => "desert",
+        RegionKind::Land => "land",
     }
 }
 

@@ -1125,6 +1125,11 @@ pub enum RegionKind {
     Marsh,
     Forest,
     Desert,
+    /// Land of any height. Without a `height`, the land of the template
+    /// keeps its height, and the water of the template becomes low land:
+    /// deeper water gives a little higher land. Use it to draw a coast on a
+    /// template with much sea.
+    Land,
 }
 
 impl RegionKind {
@@ -1142,7 +1147,7 @@ impl RegionKind {
             RegionKind::Plains => [21.0, 35.0],
             RegionKind::Hills => [35.0, 60.0],
             RegionKind::Mountains => [70.0, 100.0],
-            RegionKind::Forest | RegionKind::Desert => [20.0, 100.0],
+            RegionKind::Forest | RegionKind::Desert | RegionKind::Land => [20.0, 100.0],
         }
     }
 }
