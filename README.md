@@ -327,6 +327,7 @@ edits as a script. [docs/APP.md](docs/APP.md) describes it.
 | [docs/CONFIG.md](docs/CONFIG.md) | The config, made from the JSON Schema |
 | [docs/ERRORS.md](docs/ERRORS.md) | Each error code and exit code |
 | [docs/STYLES.md](docs/STYLES.md) | The style tree of the colour presets |
+| [docs/TERRAIN.md](docs/TERRAIN.md) | How to draw the land and the sea of a book map |
 | [docs/PORT.md](docs/PORT.md) | Each FMG stage and editor, and its place in inkland |
 | [docs/notes/](docs/notes/) | The details of each part, and what differs from FMG |
 | [docs/APP.md](docs/APP.md) | The desktop app |
