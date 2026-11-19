@@ -1272,7 +1272,9 @@ pub struct RegionPin {
     #[schemars(range(min = 0.0))]
     pub edge: f64,
     /// Height range `[min, max]` on the height scale 0 to 100 (sea level 20).
-    /// Default: the range of the kind.
+    /// Default: the range of the kind: `sea` and `lake` 5 to 15, `marsh` 20
+    /// to 23, `plains` 21 to 35, `forest` 21 to 45, `desert` 21 to 50,
+    /// `hills` 35 to 60, `mountains` 70 to 100, `land` 20 to 100.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<[f64; 2]>,
     /// Only for `sea` and `lake`. `false`: a `sea` must connect to the ocean
@@ -1373,7 +1375,9 @@ impl RegionKind {
             RegionKind::Plains => [21.0, 35.0],
             RegionKind::Hills => [35.0, 60.0],
             RegionKind::Mountains => [70.0, 100.0],
-            RegionKind::Forest | RegionKind::Desert | RegionKind::Land => [20.0, 100.0],
+            RegionKind::Forest => [21.0, 45.0],
+            RegionKind::Desert => [21.0, 50.0],
+            RegionKind::Land => [20.0, 100.0],
         }
     }
 }
@@ -2562,6 +2566,16 @@ mod tests {
         let c: Config = serde_json::from_value(v).unwrap();
         assert_eq!(c.pins.regions[0].height_range(), [70.0, 100.0]);
         assert_eq!(c.pins.regions[1].height_range(), [35.0, 50.0]);
+    }
+
+    #[test]
+    fn a_forest_or_desert_region_is_lowland_by_default() {
+        use RegionKind::*;
+        for k in [Forest, Desert, Plains, Marsh] {
+            let [_, hi] = k.default_height();
+            assert!(hi <= Hills.default_height()[0] + 15.0, "{k:?}");
+            assert!(hi < Mountains.default_height()[0], "{k:?}");
+        }
     }
 
     #[test]

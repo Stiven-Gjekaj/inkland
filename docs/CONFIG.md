@@ -630,7 +630,7 @@ An area with a forced kind of terrain. Give exactly one of `polygon`, `box`, and
 | `circle` | [`Circle`](#circle) |  |  | Circle, in units. |
 | `coast_detail` | integer |  |  | The number of noise layers of a rough outline. 1 to 8. Each layer adds bays and capes of half the size of the layer before it. 1 gives a smooth, wavy coast. 8 gives a very detailed coast. Has an effect only with a `roughness`. Default 4. |
 | `edge` | number |  | `0.0` | Width of the soft edge outside the shape, in units. Heights blend from the forced range to the free terrain over this width. Inside the shape, the heights are always in the range. |
-| `height` | array of 2 number |  |  | Height range `[min, max]` on the height scale 0 to 100 (sea level 20). Default: the range of the kind. |
+| `height` | array of 2 number |  |  | Height range `[min, max]` on the height scale 0 to 100 (sea level 20). Default: the range of the kind: `sea` and `lake` 5 to 15, `marsh` 20 to 23, `plains` 21 to 35, `forest` 21 to 45, `desert` 21 to 50, `hills` 35 to 60, `mountains` 70 to 100, `land` 20 to 100. |
 | `id` | string | yes |  | Identifier: lower-case letters and digits, words joined by `-`. Unique across all pins. |
 | `islets` | number |  |  | Not for `sea` and `lake`. How many small islands lie off a rough coast. 0 to 1. Most of them lie off the capes. 0: none. Has an effect only with a roughness. Default: 0.3 for `land`, 0 for the other kinds. |
 | `kind` | [`RegionKind`](#regionkind) | yes |  | Kind of terrain in the area. |
