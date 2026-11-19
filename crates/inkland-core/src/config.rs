@@ -224,6 +224,10 @@ pub struct World {
     /// before the pins.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub brushes: Vec<Brush>,
+    /// Land or sea along each frame edge, applied after the brushes and
+    /// before the pins. Default: the template decides.
+    #[serde(default, skip_serializing_if = "FrameEdges::is_empty")]
+    pub edges: FrameEdges,
     /// Changes to the goods catalogue of Azgaar's Fantasy Map Generator, in
     /// order. Empty: the default catalogue of 71 goods.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -746,6 +750,48 @@ pub struct Brush {
     pub delta: f64,
 }
 
+/// Land or sea along the frame edges. The compass sides follow the axes of
+/// the frame.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameEdges {
+    /// The terrain along the north edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub north: Option<EdgeKind>,
+    /// The terrain along the south edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub south: Option<EdgeKind>,
+    /// The terrain along the west edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub west: Option<EdgeKind>,
+    /// The terrain along the east edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub east: Option<EdgeKind>,
+    /// The mean width of the band along an edge, in units. Fractal noise
+    /// makes the inner side of the band a natural coast. More than 0.
+    /// Default: a tenth of the smaller side of the frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub width: Option<f64>,
+}
+
+impl FrameEdges {
+    pub fn is_empty(&self) -> bool {
+        self.north.is_none() && self.south.is_none() && self.west.is_none() && self.east.is_none()
+    }
+}
+
+/// The terrain along a frame edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum EdgeKind {
+    /// Open sea: the band is water, deeper at the edge.
+    Sea,
+    /// Land that goes on past the frame: the water of the band becomes low
+    /// land.
+    Land,
+}
+
 impl Default for World {
     fn default() -> Self {
         Self {
@@ -769,6 +815,7 @@ impl Default for World {
             emblem_shape: default_emblem_shape(),
             places: PlaceOptions::default(),
             brushes: Vec::new(),
+            edges: FrameEdges::default(),
             goods: Vec::new(),
             military_units: Vec::new(),
             transports: Vec::new(),

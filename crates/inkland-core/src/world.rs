@@ -185,6 +185,13 @@ impl World {
         hm.run(&steps, &mut height_rng);
         let mut base_heights = hm.heights;
         crate::heightmap::apply_brushes(&base_grid, &mut base_heights, &config.world.brushes);
+        crate::heightmap::apply_edges(
+            &base_grid,
+            &mut base_heights,
+            config,
+            sea_level,
+            crate::noise::Fractal::seed_of(tree.part_seed(Layer::Terrain, "edges")),
+        );
         if config.world.fill_land {
             // Water becomes low land: a deeper sea gives a little higher
             // land, so the land keeps some form. The sea regions below

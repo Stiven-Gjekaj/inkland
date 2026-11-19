@@ -205,6 +205,12 @@ fn negative_roughness_and_coast_detail_out_of_range_are_refused() {
 }
 
 #[test]
+fn edge_width_of_zero_is_refused() {
+    let c = with(json!({ "world": { "edges": { "north": "sea", "width": 0 } } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/world/edges/width");
+}
+
+#[test]
 fn city_next_to_a_forced_sea_is_feasible() {
     let c = with(json!({ "pins": {
         "points": [{ "id": "a", "kind": "city", "at": [21, 150], "port": true }],

@@ -450,6 +450,17 @@ impl<'a> Validator<'a> {
                 "relief density must be 0 to 1",
             );
         }
+        if c.world
+            .edges
+            .width
+            .is_some_and(|w| !(w.is_finite() && w > 0.0))
+        {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/edges/width",
+                "the edge width must be more than 0",
+            );
+        }
         for (i, r) in c.pins.regions.iter().enumerate() {
             let p = format!("/pins/regions/{i}");
             if let Some([lo, hi]) = r.height
