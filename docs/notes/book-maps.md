@@ -83,8 +83,50 @@ that water in `details.at`.
 - The label needs no free place. Its item can be outside the view.
 - The key is `<kind>:<id>`, as for `hide` and `size_pt`: `place`, `river`,
   `region`, `feature`, or `state`.
+- The key of a state uses the id of its capital pin, for example
+  `state:solmere`. A key such as `state:1` is a `REF_UNKNOWN` error. A
+  state key is valid only in `labels`, not in `remove` or `rename`.
+- With `at`, `size_pt` sets the size of the label. Without `size_pt`, the
+  label gets the size that the placer finds for it.
 - The options belong to an overlay, so each variant with that overlay
   shows the label at the same position.
+
+## Sea labels
+
+- A `sea` or `lake` region puts its label only on water. The label does
+  not go on the land next to the region, also at the frame edge.
+- A sea far from a coast has no grid cells, because the grid has no cells
+  in deep water. Its label goes on a lattice of points in the region.
+- A region label that has no place is in `unplaced` in the report, with
+  the reason `collision` or `outside`. With `at`, the label always goes
+  to `at`.
+
+## Level labels
+
+```json
+"render": { "labels": { "max_angle": 0 } }
+```
+
+The placer can turn an area label 90 degrees, to read from bottom to top
+in a tall, narrow area. `max_angle` is the largest turn, in degrees. `0`
+gives only level labels. It applies to the labels of states, regions,
+lakes, seas, islands, and overlay features, in both render modes. The
+default is 90.
+
+## No symbol without a label
+
+```json
+"render": { "labels": { "generated": false, "unlabelled_symbols": false } }
+```
+
+`unlabelled_symbols: false` leaves out the symbol of a place whose label
+the config leaves out. The config leaves out a label for two causes:
+
+- the name is generated, and `generated` is `false`. An example is a
+  capital pin with no `name`.
+- the label options of the overlay have `hide: true`.
+
+A label that has no free place keeps its symbol. The default is `true`.
 
 ## Land up to the frame
 
