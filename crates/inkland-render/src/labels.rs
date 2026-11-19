@@ -398,7 +398,7 @@ const MAX_ANCHORS: usize = 40;
 /// fits in the run of the area, as the original program fits state labels.
 /// Smaller sizes and tighter letters are candidates of tier 1, for a label
 /// that finds no free place. `halo` is the reach of the halo, as a part of
-/// the font size.
+/// the font size. `inside` tells if a world point is in the area.
 #[allow(clippy::too_many_arguments)]
 fn area_candidates(
     world: &World,
@@ -406,6 +406,7 @@ fn area_candidates(
     inner: [f64; 4],
     area: &[bool],
     members: &[usize],
+    inside: &dyn Fn([f64; 2]) -> bool,
     text: &str,
     f: &FontMetrics,
     size: f64,
@@ -418,7 +419,7 @@ fn area_candidates(
     let in_area = |q: [f64; 2]| {
         let w = page.to_world(q);
         let [x0, y0, x1, y1] = page.view;
-        w[0] >= x0 && w[0] <= x1 && w[1] >= y0 && w[1] <= y1 && area[g.find_cell(w[0], w[1])]
+        w[0] >= x0 && w[0] <= x1 && w[1] >= y0 && w[1] <= y1 && inside(w)
     };
     let mut cells: Vec<(u32, usize)> = members
         .iter()
@@ -1043,6 +1044,7 @@ pub fn place_with(
             inner,
             &feature_mask,
             members,
+            &|p: [f64; 2]| feature_mask[world.grid.find_cell(p[0], p[1])],
             &name,
             f,
             size,
@@ -1097,6 +1099,7 @@ pub fn place_with(
                 inner,
                 &area,
                 &members_of(&area),
+                &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
                 &name,
                 f,
                 size,
@@ -1141,6 +1144,7 @@ pub fn place_with(
                 inner,
                 &area,
                 &members_of(&area),
+                &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
                 &name,
                 f,
                 size,
@@ -1195,6 +1199,7 @@ pub fn place_with(
                     inner,
                     &area,
                     &members_of(&area),
+                    &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
                     &name,
                     f,
                     size,
@@ -1726,6 +1731,7 @@ mod tests {
             inner,
             &area,
             &members_of(&area),
+            &|p: [f64; 2]| area[w.grid.find_cell(p[0], p[1])],
             "Long Name",
             f,
             size,
