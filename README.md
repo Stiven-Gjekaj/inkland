@@ -38,6 +38,10 @@ _A faithful remake of Azgaar's Fantasy Map Generator, with hard pins, print-safe
 > Version 1.1 adds the desktop app to the release packages. Its data
 > dialogs add markets, regiments, zones, journeys, measurers, and legend
 > boxes on the map.
+> Version 1.2 gives the maps a more organic, hand-drawn look: rough coasts
+> and region outlines, mountain chains, ocean depth bands, curved labels and
+> roads, and terrain character areas. [docs/notes/book-maps.md](docs/notes/book-maps.md)
+> gives the options for book maps.
 
 ---
 
