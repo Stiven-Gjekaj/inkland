@@ -40,6 +40,10 @@ low land.
 - Near a port, the noise fades out, so the coast of the port stays where
   you draw it.
 
+A `sea` region inside a `land` region needs a higher `priority` than the
+land, for example `"priority": -1` on the land. Without it, the two
+regions conflict.
+
 A land region without a `roughness` gets 3 percent of its size, so a `box`
 does not show as a rectangle. Give `"roughness": 0` for an exact outline.
 A `sea` or a `lake` region is exact by default.
