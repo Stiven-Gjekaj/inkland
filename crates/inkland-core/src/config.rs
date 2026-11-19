@@ -199,6 +199,16 @@ pub struct World {
     )]
     #[schemars(range(min = 0.0, max = 1.0))]
     pub border_noise: f64,
+    /// How much the state borders follow the terrain. 0 to 1. A river cell
+    /// and a ridge cell cost more to enter, so a state stops at a river or
+    /// at a ridge, and the border goes along it. 0: the costs of Azgaar's
+    /// Fantasy Map Generator. Default 0.5.
+    #[serde(
+        default = "default_border_terrain",
+        skip_serializing_if = "is_default_border_terrain"
+    )]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub border_terrain: f64,
     /// Number of states. A point pin with `capital_of` is the capital of
     /// its state; generation adds the other capitals as cities. 0 and no
     /// `capital_of`: the world has no states and no capitals. With
@@ -819,6 +829,7 @@ impl Default for World {
             size_variety: default_size_variety(),
             growth_rate: default_growth_rate(),
             border_noise: default_border_noise(),
+            border_terrain: default_border_terrain(),
             states: default_states(),
             towns: Towns::default(),
             provinces_ratio: default_provinces_ratio(),
@@ -2161,6 +2172,14 @@ impl LayerName {
 fn default_unit_name() -> String {
     "mile".to_owned()
 }
+fn default_border_terrain() -> f64 {
+    0.5
+}
+
+fn is_default_border_terrain(v: &f64) -> bool {
+    *v == default_border_terrain()
+}
+
 fn default_border_noise() -> f64 {
     0.5
 }

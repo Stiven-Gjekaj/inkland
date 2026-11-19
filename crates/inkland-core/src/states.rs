@@ -105,7 +105,7 @@ pub fn expand(input: &Input, states: &[State], places: &[Place]) -> Vec<u32> {
     let mut state = vec![NONE; n];
     let mut cost = vec![0.0f64; n];
     let budget = n as f64 / 2.0 * config.world.growth_rate;
-    let extra = crate::border_cost::extra(config, grid);
+    let extra = crate::border_cost::extra(config, grid, &cells.h, &cells.r);
     let mut heap = BinaryHeap::new();
     let mut seq = 0u64;
     let mut is_center = vec![false; n];
