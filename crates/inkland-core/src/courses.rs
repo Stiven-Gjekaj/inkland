@@ -111,13 +111,57 @@ impl Plan<'_> {
     /// The height range of a course cell: the ranges of its regions, and at
     /// least sea level.
     fn range(&self, c: usize) -> [f64; 2] {
+        let l = self.limits(c);
+        [l.lo, l.hi]
+    }
+
+    /// The height range of a course cell, with what sets each end.
+    fn limits(&self, c: usize) -> Limits {
         let p = self.grid.points[c];
-        let [lo, hi] = ruling_at(self.regions, p)
-            .into_iter()
-            .fold([self.sea_level, 100.0], |[lo, hi], r| {
-                [lo.max(r.range[0]), hi.min(r.range[1])]
-            });
-        [lo.ceil(), hi.floor()]
+        let mut l = Limits {
+            lo: self.sea_level,
+            lo_by: "sea level".to_owned(),
+            hi: 100.0,
+            hi_by: "the top of the height scale".to_owned(),
+        };
+        for r in ruling_at(self.regions, p) {
+            if r.range[0] > l.lo {
+                l.lo = r.range[0];
+                l.lo_by = format!("the region {:?}", r.pin.id);
+            }
+            if r.range[1] < l.hi {
+                l.hi = r.range[1];
+                l.hi_by = format!("the region {:?}", r.pin.id);
+            }
+        }
+        l.lo = l.lo.ceil();
+        l.hi = l.hi.floor();
+        l
+    }
+}
+
+/// The height range of a cell, and what sets its bottom and its top.
+struct Limits {
+    lo: f64,
+    lo_by: String,
+    hi: f64,
+    hi_by: String,
+}
+
+impl Limits {
+    /// Why the cell at `p` cannot take the height `need`.
+    fn why(&self, p: [f64; 2], need: f64) -> String {
+        if self.lo > self.hi {
+            format!(
+                "no height fits the cell at [{:.3}, {:.3}]: {} gives at least {}, and {} gives at most {}",
+                p[0], p[1], self.lo_by, self.lo, self.hi_by, self.hi
+            )
+        } else {
+            format!(
+                "the cell at [{:.3}, {:.3}] can be at most {} ({}), but the course below it needs {}",
+                p[0], p[1], self.hi, self.hi_by, need
+            )
+        }
     }
 }
 
@@ -590,14 +634,8 @@ fn carve(
             return Err(not_downhill(
                 i,
                 river,
-                format!(
-                    "a cell at [{:.3}, {:.3}] allows heights {} to {}, but the course below it needs {}",
-                    plan.grid.points[cells[k]][0],
-                    plan.grid.points[cells[k]][1],
-                    ranges[k][0],
-                    ranges[k][1],
-                    need[k]
-                ),
+                plan.limits(cells[k])
+                    .why(plan.grid.points[cells[k]], need[k]),
             ));
         }
         next = need[k];
@@ -610,4 +648,38 @@ fn carve(
         prev = h;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Limits;
+
+    fn limits(lo: f64, lo_by: &str, hi: f64, hi_by: &str) -> Limits {
+        Limits {
+            lo,
+            lo_by: lo_by.to_owned(),
+            hi,
+            hi_by: hi_by.to_owned(),
+        }
+    }
+
+    #[test]
+    fn an_empty_range_names_both_limits() {
+        let l = limits(70.0, "the region \"peaks\"", 34.0, "the region \"lowland\"");
+        assert_eq!(
+            l.why([10.0, 20.5], 70.0),
+            "no height fits the cell at [10.000, 20.500]: the region \"peaks\" gives at least 70, \
+             and the region \"lowland\" gives at most 34"
+        );
+    }
+
+    #[test]
+    fn a_low_top_names_the_region_that_sets_it() {
+        let l = limits(20.0, "sea level", 23.0, "the region \"fen\"");
+        assert_eq!(
+            l.why([1.0, 2.0], 40.0),
+            "the cell at [1.000, 2.000] can be at most 23 (the region \"fen\"), \
+             but the course below it needs 40"
+        );
+    }
 }
