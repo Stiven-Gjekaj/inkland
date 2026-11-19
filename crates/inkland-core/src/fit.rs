@@ -169,9 +169,20 @@ pub fn apply_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], se
 /// Put the height of each cell inside a region into the range of its
 /// regions. A height that is in the range already does not change. This
 /// holds the regions on the second grid, whose new cells take the height of
-/// a cell of the first grid.
-pub fn clamp_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], sea_level: f64) {
+/// a cell of the first grid. The cells in `islands` (the cells of places
+/// with `island: true`) stay land.
+pub fn clamp_regions(
+    grid: &Grid,
+    heights: &mut [f64],
+    regions: &[FitRegion],
+    sea_level: f64,
+    islands: &[usize],
+) {
     for c in 0..grid.len() {
+        if islands.contains(&c) {
+            heights[c] = heights[c].max(sea_level);
+            continue;
+        }
         let p = grid.points[c];
         let inside = ruling(regions.iter().filter(|r| r.contains(p)).collect());
         let Some(first) = inside.first() else {
@@ -351,6 +362,35 @@ mod tests {
             .map(|c| w.heights[c])
             .collect();
         assert!(!sea.is_empty() && sea.iter().all(|&h| h < 20.0));
+    }
+
+    #[test]
+    fn an_island_place_in_a_pinned_sea_is_land_with_water_around_it() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 3, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": "pangea" },
+            "pins": {
+                "points": [{ "id": "rock", "kind": "fortress", "at": [60, 100],
+                             "port": true, "island": true }],
+                "regions": [{ "id": "bay", "kind": "sea", "box": [0, 0, 120, 200] }]
+            }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        let cell = w.pin_cells[0];
+        assert!(w.heights[cell] >= 20.0, "the island is water");
+        assert!(w.grid.neighbors(cell).all(|m| w.heights[m] < 20.0));
+    }
+
+    #[test]
+    fn an_island_flag_is_not_written_when_it_is_false() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 3, "frame": { "width": 300, "height": 200 },
+            "pins": { "points": [{ "id": "a", "kind": "town", "at": [6, 1] }] }
+        }))
+        .unwrap();
+        let v = serde_json::to_value(&c.pins.points[0]).unwrap();
+        assert!(v.get("island").is_none());
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {

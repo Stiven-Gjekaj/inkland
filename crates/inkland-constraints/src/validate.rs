@@ -1084,6 +1084,7 @@ impl<'a> Validator<'a> {
             .points
             .iter()
             .enumerate()
+            .filter(|(_, p)| !p.island)
             .map(|(i, p)| (format!("/pins/points/{i}/at"), p))
             .collect();
         for (name, o) in &c.overlays {

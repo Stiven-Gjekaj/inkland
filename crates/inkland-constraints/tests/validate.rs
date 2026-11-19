@@ -175,6 +175,15 @@ fn town_on_a_land_region_with_a_lower_priority_than_the_sea_is_infeasible() {
 }
 
 #[test]
+fn island_town_in_a_forced_sea_is_feasible() {
+    let c = with(json!({ "pins": {
+        "points": [{ "id": "portvale", "kind": "town", "at": [10, 150], "island": true }],
+        "regions": [{ "id": "western-sea", "kind": "sea", "box": [0, 0, 20, 300] }]
+    }}));
+    assert_eq!(codes(&c), vec![]);
+}
+
+#[test]
 fn city_next_to_a_forced_sea_is_feasible() {
     let c = with(json!({ "pins": {
         "points": [{ "id": "a", "kind": "city", "at": [21, 150], "port": true }],

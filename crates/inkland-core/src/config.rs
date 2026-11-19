@@ -1014,6 +1014,12 @@ pub struct PointPin {
     /// `true`: the cell of the place touches the sea or a lake.
     #[serde(default)]
     pub port: bool,
+    /// `true`: the place can be inside a `sea` or `lake` region. The cell
+    /// of the place becomes a small island of land. Only for `pins.points`.
+    /// For a larger island, put a land region with a higher `priority`
+    /// than the sea around the place.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub island: bool,
     /// Name of a state. The state forms around this place, its capital.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capital_of: Option<String>,
