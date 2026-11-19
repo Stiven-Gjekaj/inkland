@@ -96,3 +96,11 @@ The water of the template and the brushes becomes low land, 1 to 3 above
 sea level. Only the pinned `sea` and `lake` regions, and the lakes that
 rivers make, stay water. The frame shows no sea that the config does not
 ask for.
+
+## Text in a PDF
+
+In `print-safe` mode, no text has a stroke. The halo of a label at a point
+is a white box behind it, so the lines do not cross the text. A label on a
+path, such as a river name, has no box. `render.labels.halo: false` draws
+no boxes. The print check `no_text_stroke` fails when any text has a
+stroke, because a PDF printer turns stroked text into a Type 3 font.

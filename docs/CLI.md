@@ -238,8 +238,13 @@ inkland check --svg out/map.svg
 | `--fonts-allowed LIST` | The permitted font families, separated by commas. Default: Caladea, Inter, IM Fell English, IM Fell English SC. |
 
 The checks: `no_opacity`, `no_masks_filters_rgba`, `black_and_white`,
-`min_line_width`, `all_text_is_text_elements`, `font_families_allowed`, and
-`deterministic_ids`. A failed check gives exit code 1.
+`min_line_width`, `all_text_is_text_elements`, `no_text_stroke`,
+`font_families_allowed`, and `deterministic_ids`. A failed check gives exit
+code 1.
+
+The `no_text_stroke` check fails when a `<text>`, `<textPath>`, or `<tspan>`
+has a stroke, set on it or inherited from a group. A PDF printer such as
+headless Chrome turns stroked text into a Type 3 font.
 
 The `min_line_width` check measures each line as it is printed. It applies
 each transform and each view box, follows each `<use>` to its target, and
