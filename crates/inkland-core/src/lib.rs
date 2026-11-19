@@ -32,6 +32,7 @@ pub mod markers;
 pub mod meander;
 pub mod military;
 pub mod names;
+pub mod noise;
 pub mod num;
 pub mod overlay;
 pub mod pack;
