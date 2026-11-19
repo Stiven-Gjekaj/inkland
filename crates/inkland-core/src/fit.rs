@@ -51,11 +51,19 @@ pub struct FitRegion<'a> {
     coast: Vec<(Point, Point)>,
 }
 
-/// The noise of a rough outline: the shape, moved in or out by it.
+/// The noise of a rough outline: the shape, moved in or out by it. The
+/// noise has two scales: large bays of about 12 times the amount, and the
+/// fractal detail of `coast_detail` from 4 times the amount down. A domain
+/// warp bends the detail, so that coves and capes curl.
 struct Rough {
     /// The largest distance that the outline moves, in units.
     amount: f64,
+    /// The large bays.
+    bays: Fractal,
+    /// The coves and capes.
     noise: Fractal,
+    /// The domain warp, along x and along y.
+    warp: [Fractal; 2],
 }
 
 impl Rough {
@@ -64,19 +72,29 @@ impl Rough {
         if !(amount.is_finite() && amount > 0.0) {
             return None;
         }
-        let seed = Fractal::seed_of(tree.part_seed(Layer::Terrain, &format!("coast/{}", pin.id)));
+        let part = |name: &str| {
+            Fractal::seed_of(tree.part_seed(Layer::Terrain, &format!("{name}/{}", pin.id)))
+        };
         let octaves = pin.coast_detail.unwrap_or(4).clamp(1, 8);
         Some(Rough {
             amount,
-            noise: Fractal::new(seed, octaves, 4.0 * amount),
+            bays: Fractal::new(part("coast-bays"), 2, 12.0 * amount),
+            noise: Fractal::new(part("coast"), octaves, 4.0 * amount),
+            warp: [
+                Fractal::new(part("coast-warp-x"), 2, 6.0 * amount),
+                Fractal::new(part("coast-warp-y"), 2, 6.0 * amount),
+            ],
         })
     }
 
     /// How far the outline moves out at `p`, from `-amount` to `amount`.
     fn shift(&self, p: Point) -> f64 {
+        let w = 1.5 * self.amount;
+        let q = [p[0] + w * self.warp[0].at(p), p[1] + w * self.warp[1].at(p)];
+        let v = 0.55 * self.bays.at(p) + 0.45 * self.noise.at(q);
         // Fractal noise is seldom far from 0. Twice the noise, cut at -1
         // and 1, moves the outline by up to the full amount.
-        self.amount * (2.0 * self.noise.at(p)).clamp(-1.0, 1.0)
+        self.amount * (2.0 * v).clamp(-1.0, 1.0)
     }
 }
 
@@ -627,8 +645,8 @@ mod tests {
             assert!(fit[0].contains([t.min(20.0), 0.0]), "north edge at {t}");
         }
         // The east side moves.
-        let moved = (0..100).any(|k| fit[0].contains([32.0, f64::from(k)]))
-            && (0..100).any(|k| !fit[0].contains([28.0, f64::from(k)]));
+        let moved = (0..100).any(|k| fit[0].contains([31.0, f64::from(k)]))
+            || (0..100).any(|k| !fit[0].contains([29.0, f64::from(k)]));
         assert!(moved);
     }
 
@@ -734,6 +752,37 @@ mod tests {
         assert!(differs(&fit[0]));
         assert!(!differs(&fit[1]));
         assert!(!differs(&fit[2]));
+    }
+
+    #[test]
+    fn a_rough_outline_has_large_bays_and_small_coves() {
+        // Along a straight side, the shift of the outline changes slowly
+        // (bays) and quickly (coves).
+        let r = regions(json!([
+            { "id": "land", "kind": "land", "box": [0, 0, 1000, 500], "roughness": 10 }
+        ]));
+        let fit = FitRegion::all(&r, 20.0, [2000.0, 2000.0], &SeedTree::new(3));
+        let rough = fit[0].rough.as_ref().unwrap();
+        let shift: Vec<f64> = (0..1000)
+            .map(|i| rough.shift([f64::from(i), 500.0]))
+            .collect();
+        // Small: the change over 5 units. Large: the mean over 60 units.
+        let small = shift
+            .windows(6)
+            .map(|w| (w[5] - w[0]).abs())
+            .fold(0.0f64, f64::max);
+        let means: Vec<f64> = shift
+            .chunks(60)
+            .map(|c| c.iter().sum::<f64>() / c.len() as f64)
+            .collect();
+        let (lo, hi) = means
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &m| {
+                (a.min(m), b.max(m))
+            });
+        assert!(small > 2.0, "no coves: {small}");
+        assert!(hi - lo > 6.0, "no bays: {lo} {hi}");
+        assert!(shift.iter().all(|s| s.abs() <= 10.0));
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {
