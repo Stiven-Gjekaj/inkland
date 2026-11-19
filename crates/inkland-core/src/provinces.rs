@@ -12,6 +12,7 @@
 //!   colonies ("New ..."), territories, and more.
 //! - inkland: a state with fewer than 2 places gets one province at its
 //!   capital, so that each land cell is in a province.
+//! - A `provinces_ratio` of 0 makes no provinces, as in FMG.
 
 use crate::config::Config;
 use crate::features::Features;
@@ -123,6 +124,10 @@ pub fn generate(
     } = *input;
     let n = grid.len();
     let mut ids = vec![NONE; n];
+    // As in FMG: a ratio of 0 makes no provinces.
+    if config.world.provinces_ratio == 0 {
+        return (Vec::new(), ids);
+    }
     let mut provinces: Vec<Province> = Vec::new();
     let mut burg_at = vec![NONE; n];
     for p in places {
@@ -435,5 +440,27 @@ mod tests {
             assert!(pr.full_name.starts_with(&pr.name));
             assert!(s.cell_province.contains(&pr.id) || pr.seat == 0);
         }
+    }
+
+    #[test]
+    fn a_ratio_of_zero_makes_no_provinces() {
+        let count = |ratio: u8| {
+            let c: Config = serde_json::from_value(json!({
+                "version": 1, "seed": 12, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 5000, "template": "continents", "states": 5, "towns": 0,
+                           "provinces_ratio": ratio }
+            }))
+            .unwrap();
+            let w = World::build(&c).unwrap();
+            let none = w
+                .society
+                .cell_province
+                .iter()
+                .all(|&p| p == crate::society::NONE);
+            (w.society.provinces.len(), none)
+        };
+        let (some, _) = count(20);
+        assert!(some > 0);
+        assert_eq!(count(0), (0, true));
     }
 }

@@ -914,7 +914,7 @@ Generation options.
 | `military_units` | array of [`UnitEntry`](#unitentry) |  |  | Changes to the military units of Azgaar's Fantasy Map Generator, in order. Empty: the default roster of 6 units. |
 | `notes` | array of [`NoteEntry`](#noteentry) |  |  | Notes of the map, as the Notes editor of Azgaar's Fantasy Map Generator writes them. |
 | `places` | [`PlaceOptions`](#placeoptions) |  |  | Options for places that generation adds. |
-| `provinces_ratio` | integer |  | `20` | Provinces for each 100 places of a state. 0 to 100. A state gets at least 2 provinces when it has 2 places or more. 100: each place is the seat of a province. |
+| `provinces_ratio` | integer |  | `20` | Provinces for each 100 places of a state. 0 to 100. A state gets at least 2 provinces when it has 2 places or more. 100: each place is the seat of a province. 0: no provinces and no province borders. |
 | `regiments` | array of [`RegimentEntry`](#regimententry) |  |  | Changes to the regiments: add, change, move, split, or remove. |
 | `religions` | integer |  | `4` | Number of religions. |
 | `renames` | array of [`RenameEntry`](#renameentry) |  |  | Names and arms for generated states, cultures, religions, and provinces. Generation applies them after the coats of arms, so the later stages use the new names. |

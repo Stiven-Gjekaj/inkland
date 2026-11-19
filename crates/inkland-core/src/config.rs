@@ -232,7 +232,7 @@ pub struct World {
     pub towns: Towns,
     /// Provinces for each 100 places of a state. 0 to 100. A state gets at
     /// least 2 provinces when it has 2 places or more. 100: each place is
-    /// the seat of a province.
+    /// the seat of a province. 0: no provinces and no province borders.
     #[serde(default = "default_provinces_ratio")]
     #[schemars(range(min = 0, max = 100))]
     pub provinces_ratio: u8,
