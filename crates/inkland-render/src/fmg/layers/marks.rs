@@ -345,7 +345,30 @@ pub fn relief_icons(ctx: &Ctx) -> Vec<ReliefIcon> {
             !hidden.iter().any(|a| a.contains(p))
         });
     }
+    // A kind in `only_in` stands only in its shapes.
+    let only = ctx.config.relief_only_shapes(ctx.variant);
+    if !only.is_empty() {
+        out.retain(|i| {
+            let p = [(i.x + i.s / 2.0) / up, (i.y + i.s / 2.0) / up];
+            icon_kind(i.kind)
+                .and_then(|k| only.get(&k))
+                .is_none_or(|shapes| shapes.iter().any(|a| a.contains(p)))
+        });
+    }
     out
+}
+
+/// The kind in the relief options of a relief icon of FMG.
+pub fn icon_kind(kind: &str) -> Option<inkland_core::config::ReliefSymbol> {
+    use inkland_core::config::ReliefSymbol;
+    match kind {
+        "mount" | "mountSnow" => Some(ReliefSymbol::Mountain),
+        "hill" => Some(ReliefSymbol::Hill),
+        "swamp" => Some(ReliefSymbol::Marsh),
+        "dune" | "cactus" => Some(ReliefSymbol::Dune),
+        "deciduous" | "conifer" | "acacia" | "palm" | "deadTree" => Some(ReliefSymbol::Tree),
+        _ => None,
+    }
 }
 
 /// The mountain chains of `render.relief.terrain`: overlapping peaks at each

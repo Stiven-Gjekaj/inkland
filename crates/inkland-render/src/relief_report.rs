@@ -4,7 +4,7 @@
 //! age shows its own symbols and hides its own.
 
 use crate::page::Page;
-use inkland_core::config::{Config, RenderMode, Variant};
+use inkland_core::config::{Config, ReliefSymbol, RenderMode, Variant};
 use inkland_core::world::World;
 use std::collections::BTreeMap;
 
@@ -50,6 +50,20 @@ pub fn summary(world: &World, config: &Config, variant: &Variant) -> ReliefSumma
             .map(|(sym, p, _)| (sym.name().to_owned(), page.to_world(p)))
             .collect()
     };
+    // A kind in `only_in` stands only in its shapes.
+    let only = config.relief_only_shapes(variant);
+    let symbols: Vec<(String, [f64; 2])> = symbols
+        .into_iter()
+        .filter(|(kind, p)| {
+            let k = if config.render.mode == RenderMode::Colour {
+                crate::fmg::layers::marks::icon_kind(kind)
+            } else {
+                ReliefSymbol::from_name(kind)
+            };
+            k.and_then(|k| only.get(&k))
+                .is_none_or(|shapes| shapes.iter().any(|a| a.contains(*p)))
+        })
+        .collect();
     let mut out = ReliefSummary::default();
     for id in config.relief_of(variant).hide_in.iter() {
         out.hidden.entry(id.clone()).or_default();
@@ -90,6 +104,31 @@ mod tests {
             ]
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn only_in_keeps_a_kind_in_its_shapes() {
+        for mode in ["print-safe", "colour"] {
+            let mut c = config(mode);
+            let w = World::build(&c).unwrap();
+            let kind = if mode == "colour" {
+                "deciduous"
+            } else {
+                "tree"
+            };
+            let before = summary(&w, &c, &c.variants[0]);
+            let total = |s: &ReliefSummary| s.shown.get(kind).copied().unwrap_or(0);
+            assert!(total(&before) > 0, "{mode}");
+            c.render.relief.only_in.tree = vec!["wood".to_owned()];
+            let after = summary(&w, &c, &c.variants[0]);
+            // Only the trees in the wood (0 to 60, 0 to 60) stay.
+            assert!(total(&after) < total(&before), "{mode}");
+            assert_eq!(
+                after.shown.get("mountain"),
+                before.shown.get("mountain"),
+                "{mode}"
+            );
+        }
     }
 
     #[test]

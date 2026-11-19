@@ -364,6 +364,8 @@ fn write_relief(
     // A symbol under a label is left out, so that the text stays clear. The
     // regions in `hide_in` of the relief options of the variant show none.
     let hidden = config.relief_hidden_areas(variant);
+    // A kind in `only_in` stands only in its shapes.
+    let only = config.relief_only_shapes(variant);
     let symbols: Vec<_> = crate::decor::relief(
         world,
         page,
@@ -376,6 +378,10 @@ fn write_relief(
     .filter(|(_, p, _)| {
         let w = page.to_world(*p);
         !hidden.iter().any(|a| a.contains(w))
+    })
+    .filter(|(sym, p, _)| {
+        only.get(&sym.kind())
+            .is_none_or(|shapes| shapes.iter().any(|a| a.contains(page.to_world(*p))))
     })
     .collect();
     let _ = writeln!(

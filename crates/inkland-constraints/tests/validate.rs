@@ -887,3 +887,12 @@ fn a_label_angle_is_0_or_90() {
     }));
     assert_eq!(codes(&ok), vec![]);
 }
+
+#[test]
+fn relief_only_in_names_region_or_area_pins() {
+    let c = with(json!({
+        "pins": { "regions": [{ "id": "fen", "kind": "marsh", "box": [10, 10, 60, 60] }] },
+        "render": { "relief": { "only_in": { "marsh": ["fen", "moor"] } } }
+    }));
+    one(&c, ErrorCode::RefUnknown, "/render/relief/only_in/marsh/1");
+}

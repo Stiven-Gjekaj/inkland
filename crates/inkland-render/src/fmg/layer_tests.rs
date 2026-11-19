@@ -1218,3 +1218,32 @@ fn a_variant_can_leave_out_the_relief_of_a_region_in_both_modes() {
     assert!(print_in(&c) > 0, "the area has relief in print-safe mode");
     assert_eq!(print_in(&hidden), 0);
 }
+
+#[test]
+fn only_in_keeps_the_trees_in_the_wood() {
+    let mut c = base_config();
+    c.pins.areas = serde_json::from_value(json!([
+        { "id": "wood", "character": "wooded", "box": [100, 50, 300, 250] }
+    ]))
+    .unwrap();
+    let up = {
+        let page = crate::page::Page::new(&c, &c.variants[0]);
+        super::geom::Px::new(&page, c.frame.width, c.frame.height).unit_px
+    };
+    let trees = |c: &Config| -> Vec<[f64; 2]> {
+        relief_icons_of(c)
+            .iter()
+            .filter(|i| {
+                super::layers::marks::icon_kind(i.kind)
+                    == Some(inkland_core::config::ReliefSymbol::Tree)
+            })
+            .map(|i| [(i.x + i.s / 2.0) / up, (i.y + i.s / 2.0) / up])
+            .collect()
+    };
+    let inside = |p: &[f64; 2]| p[0] >= 100.0 && p[0] <= 300.0 && p[1] >= 50.0 && p[1] <= 250.0;
+    assert!(trees(&c).iter().any(|p| !inside(p)), "trees grow outside");
+    c.render.relief.only_in.tree = vec!["wood".to_owned()];
+    let kept = trees(&c);
+    assert!(!kept.is_empty());
+    assert!(kept.iter().all(inside));
+}

@@ -1908,6 +1908,13 @@ pub struct ReliefOptions {
     /// fen or the trees of a wood that a map of an older age does not show.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hide_in: Vec<String>,
+    /// Both render modes. For a symbol kind, the ids of the region pins and
+    /// area pins where it can stand: the symbols of that kind outside these
+    /// shapes are left out. For example `{ "marsh": ["low-fen"] }` keeps the
+    /// marsh symbols in the fen only. A kind that is not given stands
+    /// everywhere.
+    #[serde(skip_serializing_if = "OnlyIn::is_empty")]
+    pub only_in: OnlyIn,
 }
 
 impl Default for ReliefOptions {
@@ -1917,6 +1924,7 @@ impl Default for ReliefOptions {
             hide: Vec::new(),
             terrain: true,
             hide_in: Vec::new(),
+            only_in: OnlyIn::default(),
         }
     }
 }
@@ -1945,6 +1953,9 @@ pub struct ReliefPatch {
     /// See `render.relief.hide_in`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hide_in: Option<Vec<String>>,
+    /// See `render.relief.only_in`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub only_in: Option<OnlyIn>,
 }
 
 impl ReliefPatch {
@@ -1963,12 +1974,63 @@ impl ReliefPatch {
         if let Some(v) = &self.hide_in {
             out.hide_in = v.clone();
         }
+        if let Some(v) = &self.only_in {
+            out.only_in = v.clone();
+        }
         out
     }
 }
 
+/// For each relief symbol kind, the ids of the region pins and area pins
+/// where it can stand. A kind with no ids stands everywhere.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct OnlyIn {
+    /// The shapes where the mountains can stand.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub mountain: Vec<String>,
+    /// The shapes where the hills can stand.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub hill: Vec<String>,
+    /// The shapes where the trees can stand.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tree: Vec<String>,
+    /// The shapes where the marsh symbols can stand.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marsh: Vec<String>,
+    /// The shapes where the dunes can stand.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub dune: Vec<String>,
+    /// The shapes where the fields can stand.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub field: Vec<String>,
+}
+
+impl OnlyIn {
+    /// Each kind with ids, and its ids.
+    pub fn entries(&self) -> Vec<(ReliefSymbol, &Vec<String>)> {
+        [
+            (ReliefSymbol::Mountain, &self.mountain),
+            (ReliefSymbol::Hill, &self.hill),
+            (ReliefSymbol::Tree, &self.tree),
+            (ReliefSymbol::Marsh, &self.marsh),
+            (ReliefSymbol::Dune, &self.dune),
+            (ReliefSymbol::Field, &self.field),
+        ]
+        .into_iter()
+        .filter(|(_, ids)| !ids.is_empty())
+        .collect()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries().is_empty()
+    }
+}
+
 /// A kind of relief symbol of `print-safe` mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum ReliefSymbol {
     Mountain,
@@ -1977,6 +2039,34 @@ pub enum ReliefSymbol {
     Marsh,
     Dune,
     Field,
+}
+
+impl ReliefSymbol {
+    /// The kind with the name `name` in the config, for example `marsh`.
+    pub fn from_name(name: &str) -> Option<Self> {
+        [
+            ReliefSymbol::Mountain,
+            ReliefSymbol::Hill,
+            ReliefSymbol::Tree,
+            ReliefSymbol::Marsh,
+            ReliefSymbol::Dune,
+            ReliefSymbol::Field,
+        ]
+        .into_iter()
+        .find(|k| k.name() == name)
+    }
+
+    /// The name in the config, for example `marsh`.
+    pub fn name(self) -> &'static str {
+        match self {
+            ReliefSymbol::Mountain => "mountain",
+            ReliefSymbol::Hill => "hill",
+            ReliefSymbol::Tree => "tree",
+            ReliefSymbol::Marsh => "marsh",
+            ReliefSymbol::Dune => "dune",
+            ReliefSymbol::Field => "field",
+        }
+    }
 }
 
 /// Rules for the labels. A name is "generated" when the config does not
@@ -2053,6 +2143,29 @@ impl Config {
         self.relief_hidden_shapes(variant)
             .into_iter()
             .map(|(_, s)| s)
+            .collect()
+    }
+
+    /// The shape of a region pin or an area pin by its id.
+    pub fn pin_shape(&self, id: &str) -> Option<crate::geom::Shape> {
+        if let Some(r) = self.pins.regions.iter().find(|r| r.id == id) {
+            return crate::geom::Shape::of(r);
+        }
+        let a = self.pins.areas.iter().find(|a| a.id == id)?;
+        crate::geom::Shape::from_fields(&a.polygon, &a.rect, &a.circle)
+    }
+
+    /// For each symbol kind in `only_in` of the relief options of a
+    /// variant, the shapes where it can stand.
+    pub fn relief_only_shapes(
+        &self,
+        variant: &Variant,
+    ) -> BTreeMap<ReliefSymbol, Vec<crate::geom::Shape>> {
+        self.relief_of(variant)
+            .only_in
+            .entries()
+            .into_iter()
+            .map(|(k, ids)| (k, ids.iter().filter_map(|id| self.pin_shape(id)).collect()))
             .collect()
     }
 

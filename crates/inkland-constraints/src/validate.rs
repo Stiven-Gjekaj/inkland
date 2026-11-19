@@ -1123,6 +1123,29 @@ impl<'a> Validator<'a> {
                     .and_then(|r| r.hide_in.as_ref())
                     .map(|h| (format!("/variants/{i}/relief"), h))
             }));
+        // The ids in `only_in`.
+        let only = std::iter::once(("/render/relief".to_owned(), &c.render.relief.only_in)).chain(
+            c.variants.iter().enumerate().filter_map(|(i, v)| {
+                v.relief
+                    .as_ref()
+                    .and_then(|r| r.only_in.as_ref())
+                    .map(|o| (format!("/variants/{i}/relief"), o))
+            }),
+        );
+        for (path, only_in) in only {
+            for (kind, ids) in only_in.entries() {
+                let kind = kind.name();
+                for (k, id) in ids.iter().enumerate() {
+                    if !regions.contains(&id.as_str()) {
+                        self.err(
+                            ErrorCode::RefUnknown,
+                            format!("{path}/only_in/{kind}/{k}"),
+                            format!("{id:?} is not the id of a region pin or an area pin"),
+                        );
+                    }
+                }
+            }
+        }
         for (path, hide_in) in reliefs {
             for (k, id) in hide_in.iter().enumerate() {
                 if !regions.contains(&id.as_str()) {

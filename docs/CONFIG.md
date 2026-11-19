@@ -500,6 +500,19 @@ A note of the map.
 | `name` | string | yes |  | The title of the note. |
 | `note` | string |  | `""` | The text of the note. |
 
+### OnlyIn
+
+For each relief symbol kind, the ids of the region pins and area pins where it can stand. A kind with no ids stands everywhere.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `dune` | array of string |  |  | The shapes where the dunes can stand. |
+| `field` | array of string |  |  | The shapes where the fields can stand. |
+| `hill` | array of string |  |  | The shapes where the hills can stand. |
+| `marsh` | array of string |  |  | The shapes where the marsh symbols can stand. |
+| `mountain` | array of string |  |  | The shapes where the mountains can stand. |
+| `tree` | array of string |  |  | The shapes where the trees can stand. |
+
 ### Ordinary
 
 An ordinary: a band, a cross, a border, and so on.
@@ -675,6 +688,7 @@ The relief symbols of `print-safe` mode.
 | `density` | number |  | `1.0` | How dense the symbols are. 0 to 1. 1 is the full density. A smaller value puts the symbols further apart: 0.25 shows about a quarter of them. 0 shows none. |
 | `hide` | array of [`ReliefSymbol`](#reliefsymbol) |  |  | The symbol kinds to leave out: `mountain`, `hill`, `tree` (the forest biomes), `marsh` (wetland), `dune` (the deserts), or `field` (the farmland of `print-safe` mode: small fields on open lowland near the places). |
 | `hide_in` | array of string |  |  | Both render modes. The ids of region pins and area pins. The relief symbols inside these shapes are left out, for example the marsh of a fen or the trees of a wood that a map of an older age does not show. |
+| `only_in` | [`OnlyIn`](#onlyin) |  |  | Both render modes. For a symbol kind, the ids of the region pins and area pins where it can stand: the symbols of that kind outside these shapes are left out. For example `{ "marsh": ["low-fen"] }` keeps the marsh symbols in the fen only. A kind that is not given stands everywhere. |
 | `terrain` | boolean |  |  | Both render modes. `true`: the symbols follow the terrain. Mountains stand in chains of overlapping peaks along the ridges, larger at the crest, with hills at their feet. Trees grow in groups, denser in the highland, and the symbols change a little in size. `false`: the placement of Azgaar's Fantasy Map Generator. Default `true`. |
 
 ### ReliefPatch
@@ -686,6 +700,7 @@ The relief options of a variant: each field that it gives replaces the field of 
 | `density` | number |  |  | See `render.relief.density`. |
 | `hide` | array of [`ReliefSymbol`](#reliefsymbol) |  |  | See `render.relief.hide`. |
 | `hide_in` | array of string |  |  | See `render.relief.hide_in`. |
+| `only_in` | [`OnlyIn`](#onlyin) |  |  | See `render.relief.only_in`. |
 | `terrain` | boolean |  |  | See `render.relief.terrain`. |
 
 ### ReliefSymbol

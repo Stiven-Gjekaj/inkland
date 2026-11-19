@@ -251,16 +251,22 @@ pub enum Symbol {
 }
 
 impl Symbol {
+    /// The kind of the symbol in the relief options.
+    pub fn kind(self) -> inkland_core::config::ReliefSymbol {
+        use inkland_core::config::ReliefSymbol;
+        match self {
+            Symbol::Mountain => ReliefSymbol::Mountain,
+            Symbol::Hill => ReliefSymbol::Hill,
+            Symbol::Tree => ReliefSymbol::Tree,
+            Symbol::Marsh => ReliefSymbol::Marsh,
+            Symbol::Dune => ReliefSymbol::Dune,
+            Symbol::Field => ReliefSymbol::Field,
+        }
+    }
+
     /// The name of the kind, as in `render.relief.hide`.
     pub fn name(self) -> &'static str {
-        match self {
-            Symbol::Mountain => "mountain",
-            Symbol::Hill => "hill",
-            Symbol::Tree => "tree",
-            Symbol::Marsh => "marsh",
-            Symbol::Dune => "dune",
-            Symbol::Field => "field",
-        }
+        self.kind().name()
     }
 
     /// The least distance between two symbols of this kind, in mm.
@@ -384,24 +390,13 @@ pub fn relief(
     opts: &inkland_core::config::ReliefOptions,
     peakless: &[inkland_core::geom::Shape],
 ) -> Vec<(Symbol, [f64; 2], f64)> {
-    use inkland_core::config::ReliefSymbol;
     if opts.density <= 0.0 {
         return Vec::new();
     }
     // A density d keeps about d of the symbols: the spacing grows by
     // 1 / sqrt(d), so the area of each symbol grows by 1 / d.
     let scale = 1.0 / libm::sqrt(opts.density.min(1.0));
-    let hidden = |sym: Symbol| {
-        let kind = match sym {
-            Symbol::Mountain => ReliefSymbol::Mountain,
-            Symbol::Hill => ReliefSymbol::Hill,
-            Symbol::Tree => ReliefSymbol::Tree,
-            Symbol::Marsh => ReliefSymbol::Marsh,
-            Symbol::Dune => ReliefSymbol::Dune,
-            Symbol::Field => ReliefSymbol::Field,
-        };
-        opts.hide.contains(&kind)
-    };
+    let hidden = |sym: Symbol| opts.hide.contains(&sym.kind());
     let g = &world.grid;
     let mut rng = Rand::new(SeedTree::new(seed).part_rng(Layer::Decoration, "relief"));
     let mut order: Vec<(u64, usize)> = (0..g.len())
