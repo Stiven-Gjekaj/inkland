@@ -1202,6 +1202,12 @@ pub struct AreaPin {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0.0, max = 1.0))]
     pub strength: Option<f64>,
+    /// `true`: the relief can show mountain peaks along the ridges in the
+    /// area and its soft edge. `false`: no ridge peaks; the high land gets
+    /// the hill or mountain symbol of its height. Default: `false` for
+    /// `rolling` and `flat`, `true` for `rough` and `wooded`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peaks: Option<bool>,
     /// Width of the soft edge outside the outline, in units. The effect
     /// fades out over this width. Default: a fifth of the size of the shape
     /// (the square root of the area of its bounding box).
@@ -2167,6 +2173,14 @@ impl Config {
             .into_iter()
             .map(|(k, ids)| (k, ids.iter().filter_map(|id| self.pin_shape(id)).collect()))
             .collect()
+    }
+
+    /// `true` if the relief of the area pin can show ridge peaks.
+    pub fn area_has_peaks(area: &AreaPin) -> bool {
+        area.peaks.unwrap_or(matches!(
+            area.character,
+            Character::Rough | Character::Wooded
+        ))
     }
 
     /// The shapes of the region pins without ridge peaks: the `hills`

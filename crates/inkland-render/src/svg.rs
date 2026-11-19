@@ -371,7 +371,7 @@ fn write_relief(
         page,
         config.seed,
         &config.relief_of(variant),
-        &config.peakless_shapes(),
+        &crate::decor::Peakless::of(world, config),
     )
     .into_iter()
     .filter(|(_, p, _)| !labels.covers(*p, 1.0))

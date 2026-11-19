@@ -57,6 +57,7 @@ A soft area with a character of the land. Give exactly one of `polygon`, `box`, 
 | `circle` | [`Circle`](#circle) |  |  | Circle, in units. |
 | `edge` | number |  |  | Width of the soft edge outside the outline, in units. The effect fades out over this width. Default: a fifth of the size of the shape (the square root of the area of its bounding box). |
 | `id` | string | yes |  | Identifier: lower-case letters and digits, words joined by `-`. Unique across all pins. |
+| `peaks` | boolean |  |  | `true`: the relief can show mountain peaks along the ridges in the area and its soft edge. `false`: no ridge peaks; the high land gets the hill or mountain symbol of its height. Default: `false` for `rolling` and `flat`, `true` for `rough` and `wooded`. |
 | `polygon` | array of array of 2 number |  |  | Outline `[[x, y], ...]`, in units. 3 or more points. The outline must not cross itself. |
 | `strength` | number |  |  | How strong the character is. 0 to 1. Default 1. |
 
