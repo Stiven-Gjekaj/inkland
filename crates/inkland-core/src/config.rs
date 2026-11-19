@@ -1020,6 +1020,8 @@ pub struct PointPin {
     #[serde(default)]
     pub port: bool,
     /// Name of a state. The state forms around this place, its capital.
+    /// A later pin with the same name is a seat of the state: the state
+    /// also grows from it, for example on the other side of a sea.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capital_of: Option<String>,
     /// Name of the kind. Required when `kind` is `custom`.

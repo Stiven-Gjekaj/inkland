@@ -104,6 +104,9 @@ pub struct State {
     /// The type of the culture of the state.
     pub kind: crate::cultures::CultureType,
     pub expansionism: f64,
+    /// The place ids of the other seats: pinned places with the same
+    /// `capital_of` as the capital. The state also grows from them.
+    pub seats: Vec<u32>,
     /// The neighbor states.
     pub neighbors: Vec<u32>,
     /// A color as `#rrggbb`. Data only; the print-safe SVG does not use it.
@@ -147,6 +150,7 @@ impl Default for State {
             center: 0,
             kind: crate::cultures::CultureType::Generic,
             expansionism: 1.0,
+            seats: Vec::new(),
             neighbors: Vec::new(),
             color: String::new(),
             form: String::new(),

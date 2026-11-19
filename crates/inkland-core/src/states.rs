@@ -2,7 +2,9 @@
 //! `normalize`, `findNeighbors`, and `assignColors`.
 //!
 //! - Each capital founds a state. A pinned capital gives its state the name
-//!   in `capital_of`.
+//!   in `capital_of`. A later pin with the same `capital_of` is a seat of
+//!   that state (inkland): the state grows from its capital and its seats,
+//!   so it can hold land on two sides of a sea.
 //! - States grow by least cost from their capitals with the costs of FMG:
 //!   culture, population, biome, height, river, and coast, divided by the
 //!   expansionism of the state. The growth stops at a total budget.
@@ -54,9 +56,13 @@ pub fn create(
         let chain = &input.chains[p.culture as usize];
         let name = match pinned {
             Some(s) if !states.iter().any(|x| x.name == s) => s,
-            Some(_) => {
-                // A second pin with the same state name is not a capital.
+            Some(s) => {
+                // A second pin with the same state name is not a capital. It
+                // is a seat of the state.
                 p.capital = false;
+                if let Some(st) = states.iter_mut().find(|x| x.name == s) {
+                    st.seats.push(p.id);
+                }
                 continue;
             }
             None => {
@@ -108,15 +114,19 @@ pub fn expand(input: &Input, states: &[State], places: &[Place]) -> Vec<u32> {
     let mut heap = BinaryHeap::new();
     let mut seq = 0u64;
     let mut is_center = vec![false; n];
+    let seat_cell = |id: u32| places.iter().find(|p| p.id == id).map(|p| p.cell);
     for s in states {
-        state[s.center] = s.id;
-        is_center[s.center] = true;
         let native = cultures
             .get((s.culture as usize).wrapping_sub(1))
             .map_or(biomes[s.center], |c| biomes[c.center]);
-        heap.push(Reverse((Key(0.0, seq), s.center, s.id, native)));
-        seq += 1;
-        cost[s.center] = 1.0;
+        let seats = s.seats.iter().filter_map(|&id| seat_cell(id));
+        for c in std::iter::once(s.center).chain(seats) {
+            state[c] = s.id;
+            is_center[c] = true;
+            heap.push(Reverse((Key(0.0, seq), c, s.id, native)));
+            seq += 1;
+            cost[c] = 1.0;
+        }
     }
     let is_lake = |c: usize| features.get(features.of_cell[c]).kind == FeatureKind::Lake;
     while let Some(Reverse((Key(p, _), e, s, native))) = heap.pop() {
@@ -191,7 +201,7 @@ pub fn expand(input: &Input, states: &[State], places: &[Place]) -> Vec<u32> {
 
     // normalize.
     let mut burg = vec![false; n];
-    let mut capital_cell = vec![false; n];
+    let mut capital_cell = is_center.clone();
     for p in places {
         burg[p.cell] = true;
         if p.capital {
@@ -904,6 +914,57 @@ mod tests {
         if s.states.len() > 1 {
             assert!(s.states.iter().any(|st| !st.neighbors.is_empty()));
         }
+    }
+
+    #[test]
+    fn a_second_pin_with_the_same_state_is_a_seat_that_the_state_grows_from() {
+        let config = |second: &str| -> Config {
+            serde_json::from_value(json!({
+                "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea", "states": 4,
+                           "growth_rate": 0.3 },
+                "pins": { "points": [
+                    { "id": "home", "kind": "city", "at": [110, 150], "capital_of": "Realm" },
+                    { "id": "far", "kind": "city", "at": [300, 140], "capital_of": second }
+                ] }
+            }))
+            .unwrap()
+        };
+        let w = World::build(&config("Realm")).unwrap();
+        let s = &w.society;
+        let realm: Vec<_> = s.states.iter().filter(|x| x.name == "Realm").collect();
+        assert_eq!(realm.len(), 1, "one state for the two pins");
+        let realm = realm[0];
+        let home = s
+            .places
+            .iter()
+            .find(|p| p.pin.as_deref() == Some("home"))
+            .unwrap();
+        let far = s
+            .places
+            .iter()
+            .find(|p| p.pin.as_deref() == Some("far"))
+            .unwrap();
+        assert_eq!(realm.capital, home.id, "the first pin is the capital");
+        assert_eq!(realm.seats, vec![far.id]);
+        assert!(home.capital && !far.capital);
+        assert_eq!(s.cell_state[far.cell], realm.id);
+        assert_eq!(far.state, realm.id);
+        // The state grows from the seat: the land around it is in the state.
+        for c in w.grid.neighbors(far.cell) {
+            if s.cells.land(c) {
+                assert_eq!(s.cell_state[c], realm.id, "cell {c}");
+            }
+        }
+        // A seat does not take the place of a generated capital.
+        assert_eq!(s.states.len(), 4);
+        let two = World::build(&config("Other")).unwrap();
+        assert_eq!(two.society.states.len(), 4);
+        // The same config gives the same states.
+        assert_eq!(
+            World::build(&config("Realm")).unwrap().society.cell_state,
+            s.cell_state
+        );
     }
 
     fn state(id: u32, form: &str) -> crate::society::State {
