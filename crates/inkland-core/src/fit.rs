@@ -333,13 +333,15 @@ pub fn apply_regions(grid: &Grid, heights: &mut [f64], regions: &[FitRegion], se
 /// regions. A height that is in the range already does not change. This
 /// holds the regions on the second grid, whose new cells take the height of
 /// a cell of the first grid. The cells in `places` (the cells of the point
-/// pins) stay land, also in a rough sea or as an island.
+/// pins) stay land, also in a rough sea or as an island. The cells in
+/// `channels` (the port channels of `apply_points`) stay as they are.
 pub fn clamp_regions(
     grid: &Grid,
     heights: &mut [f64],
     regions: &[FitRegion],
     sea_level: f64,
     places: &[usize],
+    channels: &[usize],
 ) {
     for c in 0..grid.len() {
         let p = grid.points[c];
@@ -350,9 +352,8 @@ pub fn clamp_regions(
         let range = inside.iter().skip(1).fold(first.range, |[lo, hi], r| {
             [lo.max(r.range[0]), hi.min(r.range[1])]
         });
-        // The first grid made the cells of a `land` region land. Water
-        // there now is a port channel, which stays.
-        if heights[c] < sea_level && inside.iter().all(|r| r.lift) {
+        // A port channel stays water.
+        if channels.contains(&c) {
             continue;
         }
         let h = if inside.iter().all(|r| r.land_only) {
@@ -374,14 +375,15 @@ pub struct FitPoint<'a> {
     pub cell: usize,
 }
 
-/// Make the places land, and give each port a water cell next to it.
+/// Make the places land, and give each port a water cell next to it. The
+/// result is the cells of the port channels.
 pub fn apply_points(
     grid: &Grid,
     heights: &mut [f64],
     points: &[FitPoint],
     regions: &[FitRegion],
     sea_level: f64,
-) -> Result<(), Error> {
+) -> Result<Vec<usize>, Error> {
     let n = grid.len();
     // A `land` region without a height only asks for land, so a channel
     // can cut its coast. Other land regions keep the channel out.
@@ -394,6 +396,7 @@ pub fn apply_points(
 
     // Cells that a port channel must not make water.
     let mut keep_land = vec![false; n];
+    let mut channels = Vec::new();
     for p in points {
         keep_land[p.cell] = true;
         heights[p.cell] = heights[p.cell].max(sea_level);
@@ -416,9 +419,10 @@ pub fn apply_points(
             })?;
         for c in channel {
             heights[c] = heights[c].min(sea_level - 1.0);
+            channels.push(c);
         }
     }
-    Ok(())
+    Ok(channels)
 }
 
 /// The shortest path of cells from a neighbor of `port` to a water cell.
