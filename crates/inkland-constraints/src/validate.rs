@@ -581,6 +581,25 @@ impl<'a> Validator<'a> {
                 );
             }
         }
+        if let Some(poly) = &pin.claim {
+            let message = if pin.capital_of.is_none() {
+                Some("claim needs capital_of: only a state claims land")
+            } else if poly.len() < 3 {
+                Some("a polygon needs 3 or more points")
+            } else if polygon_self_intersects(poly) {
+                Some("the polygon crosses itself")
+            } else {
+                None
+            };
+            if let Some(m) = message {
+                let code = if pin.capital_of.is_none() {
+                    ErrorCode::ValueOutOfRange
+                } else {
+                    ErrorCode::RegionPolygonInvalid
+                };
+                self.err(code, format!("{path}/claim"), m);
+            }
+        }
         for (key, coa) in [("coa", &pin.coa), ("state_coa", &pin.state_coa)] {
             for f in coa.iter().flat_map(inkland_core::emblems::validate) {
                 self.err(

@@ -9,6 +9,8 @@
 //!   culture, population, biome, height, river, and coast, divided by the
 //!   expansionism of the state. The growth stops at a total budget. A
 //!   capital pin can give the expansionism (inkland); else it is random.
+//! - inkland: a capital pin can give a soft claim, a polygon. The state
+//!   grows into it first; the other states pay more for its cells.
 //! - `normalize` gives a lone cell to the state around it.
 //! - inkland: each land cell must be in a state. A land cell that no state
 //!   reaches takes the state of the nearest cell with a state.
@@ -36,6 +38,10 @@ pub struct Input<'a> {
     /// Chain 0 is the wildlands; chain `k` is culture `k`.
     pub chains: &'a [Chain],
 }
+
+/// The extra cost of a cell in the claim of another state (inkland). It is
+/// the cost of a sea cell for most states.
+const CLAIM_COST: f64 = 1000.0;
 
 /// One state for each capital (`createStates`).
 pub fn create(
@@ -140,6 +146,35 @@ pub fn expand(input: &Input, states: &[State], places: &[Place]) -> Vec<u32> {
             cost[c] = 1.0;
         }
     }
+    // inkland: the soft claims. A cell in the claim of its own state costs
+    // nothing more than the step; a cell in the claim of another state
+    // costs `CLAIM_COST` more. The first state with a claim on a cell wins.
+    let claims: Vec<(u32, crate::geom::Shape)> = states
+        .iter()
+        .flat_map(|s| {
+            config
+                .pins
+                .points
+                .iter()
+                .filter(move |q| q.capital_of.as_ref() == Some(&s.name))
+                .filter_map(move |q| {
+                    let poly = q.claim.as_ref().filter(|p| p.len() >= 3)?;
+                    Some((s.id, crate::geom::Shape::Polygon(poly.clone())))
+                })
+        })
+        .collect();
+    let claim_of: Vec<u32> = if claims.is_empty() {
+        Vec::new()
+    } else {
+        (0..n)
+            .map(|c| {
+                claims
+                    .iter()
+                    .find(|(_, shape)| shape.contains(grid.points[c]))
+                    .map_or(NONE, |(id, _)| *id)
+            })
+            .collect()
+    };
     let is_lake = |c: usize| features.get(features.of_cell[c]).kind == FeatureKind::Lake;
     while let Some(Reverse((Key(p, _), e, s, native))) = heap.pop() {
         let st = &states[s as usize - 1];
@@ -196,6 +231,11 @@ pub fn expand(input: &Input, states: &[State], places: &[Place]) -> Vec<u32> {
                 + river_cost
                 + type_cost(cells.t[m], kind))
             .max(0.0);
+            let cell_cost = match claim_of.get(m) {
+                Some(&c) if c == s => 0.0,
+                Some(&c) if c != NONE => cell_cost + CLAIM_COST,
+                _ => cell_cost,
+            };
             let total = p + 10.0 + cell_cost / st.expansionism;
             if total > budget {
                 continue;
@@ -1010,6 +1050,57 @@ mod tests {
         assert!(size(&big_west, "West") > size(&big_west, "East"));
         assert!(size(&big_east, "East") > size(&big_east, "West"));
         assert!(size(&big_west, "West") > size(&big_east, "West"));
+    }
+
+    #[test]
+    fn a_state_grows_into_its_claim_first() {
+        let config = |claim: Option<serde_json::Value>| -> Config {
+            let mut east = json!({ "id": "east", "kind": "city", "at": [260, 150],
+                                   "capital_of": "East" });
+            if let Some(c) = claim {
+                east["claim"] = c;
+            }
+            serde_json::from_value(json!({
+                "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea", "states": 4 },
+                "pins": { "points": [
+                    { "id": "west", "kind": "city", "at": [140, 150], "capital_of": "West" },
+                    east
+                ] }
+            }))
+            .unwrap()
+        };
+        // A claim of East, around its capital, that reaches near the
+        // capital of West.
+        let poly = [
+            [165.0, 110.0],
+            [275.0, 110.0],
+            [275.0, 190.0],
+            [165.0, 190.0],
+        ];
+        let shape = crate::geom::Shape::Polygon(poly.to_vec());
+        let share = |w: &World| {
+            let s = &w.society;
+            let east = s.states.iter().find(|x| x.name == "East").unwrap().id;
+            let cells: Vec<usize> = (0..w.grid.len())
+                .filter(|&c| s.cells.land(c) && shape.contains(w.grid.points[c]))
+                .collect();
+            assert!(cells.len() > 20);
+            let held = cells.iter().filter(|&&c| s.cell_state[c] == east).count();
+            held as f64 / cells.len() as f64
+        };
+        let without = share(&World::build(&config(None)).unwrap());
+        let claimed = World::build(&config(Some(json!(poly)))).unwrap();
+        let with = share(&claimed);
+        assert!(with > 0.9, "{with} {without}");
+        assert!(with > without, "{with} {without}");
+        assert_eq!(
+            World::build(&config(Some(json!(poly))))
+                .unwrap()
+                .society
+                .cell_state,
+            claimed.society.cell_state
+        );
     }
 
     fn state(id: u32, form: &str) -> crate::society::State {

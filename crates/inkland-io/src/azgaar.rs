@@ -513,6 +513,7 @@ fn burgs(
             coa: None,
             state_coa: None,
             expansionism: None,
+            claim: None,
         });
     }
     Ok((points, skipped))

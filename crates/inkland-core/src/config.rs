@@ -1048,6 +1048,12 @@ pub struct PointPin {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0.1, max = 10.0))]
     pub expansionism: Option<f64>,
+    /// A soft claim of the state of this capital (`capital_of`): a polygon
+    /// of 3 or more points `[x, y]`, in units. The state grows into it
+    /// first, and the other states take its cells only at a high cost. The
+    /// claims of a capital and its seats add together. Default: no claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim: Option<Vec<Point>>,
 }
 
 /// Kinds of places.

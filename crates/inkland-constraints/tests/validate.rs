@@ -594,3 +594,31 @@ fn expansionism_needs_a_capital_and_a_value_in_range() {
     ] } }));
     assert_eq!(codes(&c), vec![]);
 }
+
+#[test]
+fn a_claim_needs_a_capital_and_a_valid_polygon() {
+    let pin = |capital: bool, claim: serde_json::Value| {
+        let mut p = json!({ "id": "a", "kind": "city", "at": [10, 10], "claim": claim });
+        if capital {
+            p["capital_of"] = json!("Realm");
+        }
+        with(json!({ "pins": { "points": [p] } }))
+    };
+    let square = json!([[0, 0], [40, 0], [40, 40], [0, 40]]);
+    one(
+        &pin(false, square.clone()),
+        ErrorCode::ValueOutOfRange,
+        "/pins/points/0/claim",
+    );
+    one(
+        &pin(true, json!([[0, 0], [40, 0]])),
+        ErrorCode::RegionPolygonInvalid,
+        "/pins/points/0/claim",
+    );
+    one(
+        &pin(true, json!([[0, 0], [40, 40], [40, 0], [0, 40]])),
+        ErrorCode::RegionPolygonInvalid,
+        "/pins/points/0/claim",
+    );
+    assert_eq!(codes(&pin(true, square)), vec![]);
+}
