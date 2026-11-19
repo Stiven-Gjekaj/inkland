@@ -550,20 +550,7 @@ fn area_candidates(
                         h: [half, (ch + dd) / 2.0 + pad],
                     };
                     // The part of the label outside the area costs more.
-                    let mut outside = 0;
-                    for i in 0..5 {
-                        for j in 0..3 {
-                            let s = -b.h[0] + 2.0 * b.h[0] * f64::from(i) / 4.0;
-                            let t = -b.h[1] + b.h[1] * f64::from(j);
-                            let p = [
-                                b.c[0] + b.u[0] * s - b.u[1] * t,
-                                b.c[1] + b.u[1] * s + b.u[0] * t,
-                            ];
-                            if !in_area(p) {
-                                outside += 1;
-                            }
-                        }
-                    }
+                    let outside = box_points(&b).filter(|&p| !in_area(p)).count() as u32;
                     // Skip a candidate that is almost the same as one before it.
                     if out.iter().any(|o| match o.geometry {
                         Geometry::Point { x, y, angle, .. } => {
@@ -600,6 +587,21 @@ fn area_candidates(
         }
     }
     out
+}
+
+/// Fifteen points on a box: five along it on each of its two long sides
+/// and on its middle line.
+fn box_points(b: &Obb) -> impl Iterator<Item = [f64; 2]> + '_ {
+    (0..5).flat_map(move |i| {
+        (0..3).map(move |j| {
+            let s = -b.h[0] + 2.0 * b.h[0] * f64::from(i) / 4.0;
+            let t = -b.h[1] + b.h[1] * f64::from(j);
+            [
+                b.c[0] + b.u[0] * s - b.u[1] * t,
+                b.c[1] + b.u[1] * s + b.u[0] * t,
+            ]
+        })
+    })
 }
 
 /// The points of a square lattice in the part of the world rectangle `b`
@@ -1202,7 +1204,13 @@ pub fn place_with(
         let Some(shape) = Shape::of(pin) else {
             continue;
         };
-        let area: Vec<bool> = (0..g.len()).map(|c| shape.contains(g.points[c])).collect();
+        // The label of a sea or a lake uses only water cells.
+        let water = pin.kind.is_water();
+        let wet = |c: usize| !water || !world.features.is_land(c);
+        let area: Vec<bool> = (0..g.len())
+            .map(|c| shape.contains(g.points[c]) && wet(c))
+            .collect();
+        let inside = |p: [f64; 2]| shape.contains(p) && wet(g.find_cell(p[0], p[1]));
         // The grid has no cells in deep water, so a sea far from a coast can
         // have no cell. The shape, not its cells, tells if it is in the view.
         let bounds = shape.bbox();
@@ -1213,22 +1221,33 @@ pub fn place_with(
         let size = size_of("region", &pin.id, &look, sizes.region);
         let name = look.text(name);
         let f = FontMetrics::of(&look.family);
+        let mut candidates = area_candidates(
+            world,
+            page,
+            inner,
+            &area,
+            &members_of(&area),
+            &inside,
+            Some(bounds),
+            &name,
+            f,
+            size,
+            look.halo,
+            (0.05, 0.5),
+        );
+        if water {
+            candidates.retain(|cand| {
+                cand.boxes.iter().all(|b| {
+                    box_points(b).all(|q| {
+                        let p = page.to_world(q);
+                        !world.features.is_land(g.find_cell(p[0], p[1]))
+                    })
+                })
+            });
+        }
         requests.push(Request {
             place: None,
-            candidates: area_candidates(
-                world,
-                page,
-                inner,
-                &area,
-                &members_of(&area),
-                &|p: [f64; 2]| shape.contains(p),
-                Some(bounds),
-                &name,
-                f,
-                size,
-                look.halo,
-                (0.05, 0.5),
-            ),
+            candidates,
             id: format!("label-region-{}", pin.id),
             kind: Kind::Region,
             group: "region",
@@ -1758,7 +1777,10 @@ mod tests {
             panic!("the label is not at a point");
         };
         let at = page.to_world([x, y]);
-        assert!(Shape::of(&c.pins.regions[1]).unwrap().contains(at), "{at:?}");
+        assert!(
+            Shape::of(&c.pins.regions[1]).unwrap().contains(at),
+            "{at:?}"
+        );
     }
 
     #[test]
@@ -1799,6 +1821,37 @@ mod tests {
             .unwrap();
         assert!(u.required);
         assert_eq!(u.reason, "outside");
+    }
+
+    #[test]
+    fn a_sea_label_at_the_frame_edge_stays_on_the_water() {
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({ "pins": {
+                "points": [{ "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150] }],
+                "regions": [
+                    { "id": "land", "kind": "plains", "polygon": [[80, 0], [400, 0], [400, 300], [0, 300], [0, 30], [80, 30]] },
+                    { "id": "west", "kind": "sea", "name": "The Western Ocean",
+                      "box": [0, 0, 80, 30] }
+                ]
+            }}),
+        );
+        let page = Page::new(&c, &c.variants[0]);
+        let labels = check_no_overlap(&w, &c);
+        // In this corner, the land and the extras leave no free water: the
+        // label goes in the list, not on the land.
+        let Some(l) = labels.placed.iter().find(|l| l.id == "label-region-west") else {
+            assert!(labels.unplaced.iter().any(|u| u.id == "label-region-west"));
+            return;
+        };
+        for b in &l.boxes {
+            for q in box_points(b) {
+                let p = page.to_world(q);
+                let cell = w.grid.find_cell(p[0], p[1]);
+                assert!(!w.features.is_land(cell), "the label is on land at {p:?}");
+            }
+        }
     }
 
     #[test]
