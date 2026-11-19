@@ -215,6 +215,9 @@ pub struct Labels {
     /// The generated places (not pinned, not capitals) whose symbols a
     /// required label covers. Their symbols and labels are left out.
     pub hidden_places: Vec<u32>,
+    /// The places whose label the config leaves out and whose symbol it
+    /// leaves out too (`render.labels.unlabelled_symbols`).
+    pub no_symbol: Vec<u32>,
 }
 
 impl Labels {
@@ -820,12 +823,14 @@ pub fn feature_points(config: &Config, variant: &Variant, page: &Page) -> Vec<[f
 
 /// The boxes that labels must not touch: place symbols and extras. The
 /// second list gives the place of each box that a required label can hide:
-/// the symbol of a generated place that is not a capital.
+/// the symbol of a generated place that is not a capital. The places in
+/// `skip` have no symbol.
 fn fixed_obstacles(
     world: &World,
     config: &Config,
     variant: &Variant,
     page: &Page,
+    skip: &[u32],
 ) -> (Vec<Obb>, Vec<Option<u32>>) {
     let symbols = symbol_points(world, page);
     let [x0, y0, x1, y1] = page.view;
@@ -836,6 +841,7 @@ fn fixed_obstacles(
         .places
         .iter()
         .filter(|p| p.at[0] >= x0 && p.at[0] <= x1 && p.at[1] >= y0 && p.at[1] <= y1)
+        .filter(|p| !skip.contains(&p.id))
     {
         let [x, y] = page.to_page(p.at);
         let r = symbol_radius(p.kind, p.capital);
@@ -956,6 +962,8 @@ pub fn place_with(
             .map(str::to_owned)
     };
     let mut requests: Vec<Request> = Vec::new();
+    let symbols = config.render.labels.unlabelled_symbols;
+    let mut no_symbol: Vec<u32> = Vec::new();
 
     // Places.
     for p in &world.society.places {
@@ -964,6 +972,9 @@ pub fn place_with(
         }
         let key = p.pin.clone().unwrap_or_else(|| p.id.to_string());
         if !shown("place", &key) {
+            if !symbols {
+                no_symbol.push(p.id);
+            }
             continue;
         }
         let group = place_group(p.kind, p.capital);
@@ -1344,6 +1355,12 @@ pub fn place_with(
         let written = config.written_names();
         requests.retain(|r| {
             let keep = written.contains(&r.text.trim().to_lowercase());
+            if !keep
+                && !symbols
+                && let Some(p) = r.place
+            {
+                no_symbol.push(p);
+            }
             if !keep {
                 out.unplaced.push(Unplaced {
                     id: r.id.clone(),
@@ -1433,7 +1450,9 @@ pub fn place_with(
         }
     }
 
-    let (mut obstacles, mut hideable) = fixed_obstacles(world, config, variant, page);
+    no_symbol.sort_unstable();
+    let (mut obstacles, mut hideable) = fixed_obstacles(world, config, variant, page, &no_symbol);
+    out.no_symbol = no_symbol;
     let mut index = Index::default();
     for (i, o) in obstacles.iter().enumerate() {
         index.insert(i, o.bounds());
@@ -1663,7 +1682,7 @@ mod tests {
         let page = Page::new(c, &c.variants[0]);
         let labels = place(w, c, &c.variants[0], &page);
         let [mx, my, mw, mh] = page.map_rect();
-        let (fixed, hideable) = fixed_obstacles(w, c, &c.variants[0], &page);
+        let (fixed, hideable) = fixed_obstacles(w, c, &c.variants[0], &page, &labels.no_symbol);
         // The symbols that a required label hides are not drawn.
         let fixed: Vec<Obb> = fixed
             .into_iter()
@@ -1942,6 +1961,56 @@ mod tests {
         let level = place(&w, &c, &v, &page);
         assert_eq!(turned(&level), 0);
         assert!(level.placed.iter().any(|l| l.id == "label-region-hills"));
+    }
+
+    #[test]
+    fn a_place_with_a_left_out_label_can_lose_its_symbol() {
+        // The capital with no name in the config has a generated name.
+        let (w, mut c) = world(
+            3,
+            "pangea",
+            json!({ "pins": {
+                "points": [
+                    { "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150] },
+                    { "id": "seat", "kind": "town", "at": [120, 90], "capital_of": "Varn" }
+                ]
+            }}),
+        );
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let seat = w
+            .society
+            .places
+            .iter()
+            .find(|p| p.pin.as_deref() == Some("seat"))
+            .unwrap()
+            .id;
+        c.render.labels.generated = false;
+        let kept = place(&w, &c, &v, &page);
+        assert!(kept.unplaced.iter().any(|u| u.id == "label-place-seat"));
+        assert!(kept.no_symbol.is_empty());
+        c.render.labels.unlabelled_symbols = false;
+        let gone = check_no_overlap(&w, &c);
+        assert!(gone.no_symbol.contains(&seat));
+        let ostrey = w
+            .society
+            .places
+            .iter()
+            .find(|p| p.name == "Ostrey")
+            .unwrap();
+        assert!(!gone.no_symbol.contains(&ostrey.id));
+        // The overlay option `hide` also takes the symbol away.
+        c.render.labels.generated = true;
+        c.overlays.insert(
+            "today".into(),
+            serde_json::from_value(json!({ "labels": { "place:ostrey": { "hide": true } } }))
+                .unwrap(),
+        );
+        let mut v = v;
+        v.overlay = Some("today".into());
+        let hidden = place(&w, &c, &v, &page);
+        assert!(hidden.no_symbol.contains(&ostrey.id));
+        assert!(!hidden.no_symbol.contains(&seat));
     }
 
     #[test]

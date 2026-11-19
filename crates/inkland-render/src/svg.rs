@@ -632,7 +632,7 @@ fn write_places(
         .places
         .iter()
         .filter(|p| p.at[0] >= x0 && p.at[0] <= x1 && p.at[1] >= y0 && p.at[1] <= y1)
-        .filter(|p| !labels.hidden_places.contains(&p.id))
+        .filter(|p| !labels.hidden_places.contains(&p.id) && !labels.no_symbol.contains(&p.id))
         .map(|p| {
             let id = match &p.pin {
                 Some(pin) => format!("place-{pin}"),

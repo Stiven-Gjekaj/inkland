@@ -952,3 +952,33 @@ fn the_new_layers_draw_nothing_in_print_safe_mode() {
     let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
     assert_eq!(svg, base);
 }
+
+#[test]
+fn a_place_with_a_left_out_label_loses_its_symbol_in_both_modes() {
+    let icons = |svg: &str| {
+        let doc = roxmltree::Document::parse(svg).unwrap();
+        let group = doc
+            .descendants()
+            .find(|n| n.attribute("id") == Some("burg-icons"))
+            .unwrap();
+        group
+            .descendants()
+            .filter(|n| n.has_tag_name("use"))
+            .count()
+    };
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::BurgIcons, LayerName::Labels];
+    // No place has a name in the config, so each label has a generated name.
+    c.render.labels.generated = false;
+    let all = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert!(icons(&all) > 0);
+    c.render.labels.unlabelled_symbols = false;
+    let none = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert_eq!(icons(&none), 0);
+    c.render.mode = RenderMode::PrintSafe;
+    let print = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert!(!print.contains("<g id=\"place-port-town\">"));
+    c.render.labels.unlabelled_symbols = true;
+    let print = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert!(print.contains("<g id=\"place-port-town\">"));
+}

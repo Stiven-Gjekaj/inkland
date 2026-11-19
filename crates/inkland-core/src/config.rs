@@ -1549,6 +1549,12 @@ pub struct LabelRules {
     /// labels. A value below 90 also gives only level labels. Default 90.
     #[schemars(range(min = 0.0, max = 90.0))]
     pub max_angle: f64,
+    /// `false`: a place whose label the config leaves out has no symbol
+    /// either. The config leaves out a label with a generated name when
+    /// `generated` is `false`, and a label with `hide` in the label options
+    /// of an overlay. A label that has no free place keeps its symbol.
+    /// Default `true`.
+    pub unlabelled_symbols: bool,
 }
 
 impl Default for LabelRules {
@@ -1558,6 +1564,7 @@ impl Default for LabelRules {
             check_generated: false,
             halo: true,
             max_angle: 90.0,
+            unlabelled_symbols: true,
         }
     }
 }

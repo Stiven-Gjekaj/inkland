@@ -408,6 +408,7 @@ pub fn burg_icons(s: &mut String, ctx: &Ctx) {
             .places
             .iter()
             .filter(|p| burg_group(p) == group)
+            .filter(|p| !ctx.labels.no_symbol.contains(&p.id))
             .filter(|p| p.at[0] >= vx0 && p.at[0] <= vx1 && p.at[1] >= vy0 && p.at[1] <= vy1)
             .collect();
         let gid = icons::kebab(group);
