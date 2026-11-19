@@ -135,6 +135,29 @@ impl Scene {
         }
         missing.sort();
         missing.dedup();
+        // A generic family is never missing. A family of a list is missing
+        // only if no font of a list that names it is found: the preview
+        // then uses the next font of the list.
+        let generic = [
+            "serif",
+            "sans-serif",
+            "monospace",
+            "cursive",
+            "fantasy",
+            "system-ui",
+        ];
+        let lists = font_lists(&svg);
+        let found = |f: &str| !missing.iter().any(|m| m == f) && !generic.contains(&f);
+        let needed: Vec<String> = missing
+            .iter()
+            .filter(|f| !generic.contains(&f.as_str()))
+            .filter(|f| {
+                let in_lists: Vec<&Vec<String>> = lists.iter().filter(|l| l.contains(f)).collect();
+                in_lists.is_empty() || in_lists.iter().any(|l| !l.iter().any(|x| found(x)))
+            })
+            .cloned()
+            .collect();
+        let missing = needed;
         let opt = usvg::Options {
             fontdb: Arc::clone(db),
             font_resolver: usvg::FontResolver {
@@ -198,6 +221,27 @@ pub fn rgba_to_png(rgba: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>, St
         .map_err(|e| format!("cannot write the PNG: {e}"))
 }
 
+/// The font lists of the `font-family` attributes of SVG text: each list
+/// has its families in order.
+fn font_lists(svg: &str) -> Vec<Vec<String>> {
+    let mut out: Vec<Vec<String>> = Vec::new();
+    let mut rest = svg;
+    while let Some(at) = rest.find("font-family=\"") {
+        rest = &rest[at + 13..];
+        let end = rest.find('"').unwrap_or(rest.len());
+        let list: Vec<String> = rest[..end]
+            .split(',')
+            .map(|f| f.trim().trim_matches(|c| c == '\'' || c == '"').to_owned())
+            .filter(|f| !f.is_empty())
+            .collect();
+        if !out.contains(&list) {
+            out.push(list);
+        }
+        rest = &rest[end..];
+    }
+    out
+}
+
 /// The font families that SVG text names in its `font-family`
 /// attributes, sorted, each once.
 pub fn families_in(svg: &str) -> Vec<String> {
@@ -252,6 +296,36 @@ pub fn svg_to_png(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_font_list_with_a_found_font_is_not_missing() {
+        // No system has a font with this name. Caladea is in the program.
+        let svg = |family: &str| {
+            format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="20mm" viewBox="0 0 50 20"><text x="2" y="12" font-family="{family}" font-size="5">Serenity</text></svg>"##
+            )
+        };
+        let missing = |family: &str| {
+            let families = families_in(&svg(family));
+            let names: Vec<&str> = families.iter().map(String::as_str).collect();
+            svg_to_png(&svg(family), 200, &[], &names)
+                .unwrap()
+                .missing_fonts
+        };
+        assert_eq!(
+            missing("No Such Font Zq, Caladea, serif"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            missing("No Such Font Zq"),
+            vec!["No Such Font Zq".to_owned()]
+        );
+        assert_eq!(
+            missing("No Such Font Zq, serif"),
+            vec!["No Such Font Zq".to_owned()],
+            "a generic family is not a found font"
+        );
+    }
 
     #[test]
     fn longer_side_has_the_wanted_size() {
