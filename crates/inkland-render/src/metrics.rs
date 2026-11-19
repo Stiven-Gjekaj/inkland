@@ -33,10 +33,18 @@ impl FontMetrics {
     /// The metrics of a family. The name match ignores case. An unknown
     /// family uses the wide table.
     pub fn of(family: &str) -> &'static FontMetrics {
+        // A list of families has the metrics of its first family: the font
+        // that the map asks for, which a system can have.
+        let first = family
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches(|c| c == '\'' || c == '"');
         data::FONTS
             .iter()
             .chain(styles::STYLE_FONTS.iter())
-            .find(|f| f.family.eq_ignore_ascii_case(family.trim()))
+            .find(|f| f.family.eq_ignore_ascii_case(first))
             .unwrap_or(&WIDE)
     }
 
@@ -181,10 +189,16 @@ mod tests {
                     continue;
                 };
                 let f = FontMetrics::of(&family);
-                if not_free.contains(&family.as_str()) {
+                // A font without a free license comes with a list of free
+                // fonts after it; its metrics are of the first family.
+                let first = family.split(',').next().unwrap_or("").trim();
+                if not_free.contains(&first) {
                     assert_eq!(f.family, "", "{family}");
+                    if matches!(first, "Georgia" | "Times New Roman") {
+                        assert!(family.contains("Caladea"), "{family} has a free serif");
+                    }
                 } else {
-                    assert_eq!(f.family, family, "{name:?} {g}");
+                    assert_eq!(f.family, first, "{name:?} {g}");
                 }
             }
         }

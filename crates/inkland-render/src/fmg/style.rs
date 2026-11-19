@@ -59,6 +59,37 @@ fn merge(base: &mut Value, top: &Value) {
     }
 }
 
+/// The fonts of the presets that have no free license, so that inkland
+/// does not have their files, and a free font of the program with a
+/// similar form. A family becomes a list: the font, then the free font,
+/// then the generic family. A system with the font uses it; else a browser
+/// and the preview use the free font.
+const FREE_FALLBACKS: [(&str, &str); 2] = [
+    ("Georgia", "Georgia, Caladea, serif"),
+    ("Times New Roman", "Times New Roman, Caladea, serif"),
+];
+
+/// Give each `font-family` of the style that names a font without a free
+/// license the list of `FREE_FALLBACKS`.
+fn add_free_fallbacks(v: &mut Value) {
+    match v {
+        Value::Object(map) => {
+            for (k, x) in map.iter_mut() {
+                if k == "font-family"
+                    && let Value::String(f) = x
+                    && let Some((_, list)) = FREE_FALLBACKS.iter().find(|(name, _)| name == f)
+                {
+                    *f = (*list).to_owned();
+                } else {
+                    add_free_fallbacks(x);
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(add_free_fallbacks),
+        _ => {}
+    }
+}
+
 impl Style {
     /// The style of a preset, with the default values where the preset has
     /// none.
@@ -69,6 +100,7 @@ impl Style {
             let top: Value = serde_json::from_str(source(name)).expect("each style is JSON");
             merge(&mut root, &top);
         }
+        add_free_fallbacks(&mut root);
         Style { root }
     }
 
