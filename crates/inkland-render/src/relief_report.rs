@@ -45,7 +45,7 @@ pub fn summary(world: &World, config: &Config, variant: &Variant) -> ReliefSumma
             .collect()
     } else {
         let opts = config.relief_of(&all);
-        crate::decor::relief(world, &page, config.seed, opts)
+        crate::decor::relief(world, &page, config.seed, opts, &config.peakless_shapes())
             .into_iter()
             .map(|(sym, p, _)| (sym.name().to_owned(), page.to_world(p)))
             .collect()

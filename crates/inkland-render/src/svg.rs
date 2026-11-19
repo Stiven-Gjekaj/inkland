@@ -364,14 +364,20 @@ fn write_relief(
     // A symbol under a label is left out, so that the text stays clear. The
     // regions in `hide_in` of the relief options of the variant show none.
     let hidden = config.relief_hidden_areas(variant);
-    let symbols: Vec<_> = crate::decor::relief(world, page, config.seed, config.relief_of(variant))
-        .into_iter()
-        .filter(|(_, p, _)| !labels.covers(*p, 1.0))
-        .filter(|(_, p, _)| {
-            let w = page.to_world(*p);
-            !hidden.iter().any(|a| a.contains(w))
-        })
-        .collect();
+    let symbols: Vec<_> = crate::decor::relief(
+        world,
+        page,
+        config.seed,
+        config.relief_of(variant),
+        &config.peakless_shapes(),
+    )
+    .into_iter()
+    .filter(|(_, p, _)| !labels.covers(*p, 1.0))
+    .filter(|(_, p, _)| {
+        let w = page.to_world(*p);
+        !hidden.iter().any(|a| a.contains(w))
+    })
+    .collect();
     let _ = writeln!(
         s,
         "<g id=\"relief\" clip-path=\"url(#clip-map)\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\">",

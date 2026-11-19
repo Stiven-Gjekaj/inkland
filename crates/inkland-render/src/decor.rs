@@ -69,7 +69,9 @@ pub const RIDGE_HEIGHT: f64 = 15.0;
 
 /// The terrain of a world for the relief symbols. The noise of the groups
 /// comes from the `decoration` layer of the seed tree.
-pub fn relief_terrain(world: &World) -> ReliefTerrain {
+///
+/// No ridge stands in a shape of `peakless`, for example a `hills` region.
+pub fn relief_terrain(world: &World, peakless: &[inkland_core::geom::Shape]) -> ReliefTerrain {
     let g = &world.grid;
     let n = g.len();
     let sea = world.sea_level;
@@ -89,6 +91,9 @@ pub fn relief_terrain(world: &World) -> ReliefTerrain {
     for (c, r) in ridge.iter_mut().enumerate() {
         let h = world.heights[c];
         if !land(c) || h < least {
+            continue;
+        }
+        if peakless.iter().any(|s| s.contains(g.points[c])) {
             continue;
         }
         let (mut count, mut lower, mut sum) = (0, 0, 0.0);
@@ -377,6 +382,7 @@ pub fn relief(
     page: &Page,
     seed: u64,
     opts: &inkland_core::config::ReliefOptions,
+    peakless: &[inkland_core::geom::Shape],
 ) -> Vec<(Symbol, [f64; 2], f64)> {
     use inkland_core::config::ReliefSymbol;
     if opts.density <= 0.0 {
@@ -402,7 +408,7 @@ pub fn relief(
         .map(|c| ((rng.unit() * (1u64 << 52) as f64) as u64, c))
         .collect();
     order.sort();
-    let terrain = opts.terrain.then(|| relief_terrain(world));
+    let terrain = opts.terrain.then(|| relief_terrain(world, peakless));
     // Each candidate: the symbol, the world point, the size, and the
     // spacing factor. `None` for the point: the cell site with jitter.
     let mut candidates: Vec<Candidate> = Vec::new();
@@ -548,7 +554,7 @@ mod tests {
         let page = Page::new(&c, &c.variants[0]);
         let g = &w.grid;
         let near = 6.0 * g.step_x.max(g.step_y);
-        let fields: Vec<[f64; 2]> = relief(&w, &page, c.seed, &ReliefOptions::default())
+        let fields: Vec<[f64; 2]> = relief(&w, &page, c.seed, &ReliefOptions::default(), &[])
             .into_iter()
             .filter(|s| s.0 == Symbol::Field)
             .map(|s| page.to_world(s.1))
@@ -576,6 +582,7 @@ mod tests {
                 hide: vec![ReliefSymbol::Field],
                 ..Default::default()
             },
+            &[],
         );
         assert!(none.iter().all(|s| s.0 != Symbol::Field));
     }
@@ -591,7 +598,7 @@ mod tests {
         .unwrap();
         let w = World::build(&c).unwrap();
         let page = Page::new(&c, &c.variants[0]);
-        let run = |o: ReliefOptions| relief(&w, &page, c.seed, &o);
+        let run = |o: ReliefOptions| relief(&w, &page, c.seed, &o, &[]);
         let count =
             |v: &[(Symbol, [f64; 2], f64)], s: Symbol| v.iter().filter(|x| x.0 == s).count();
         let full = run(ReliefOptions {
@@ -666,8 +673,9 @@ mod tests {
                 terrain: false,
                 ..Default::default()
             },
+            &[],
         );
-        let new = relief(&w, &page, c.seed, &ReliefOptions::default());
+        let new = relief(&w, &page, c.seed, &ReliefOptions::default(), &[]);
         let mountains = |v: &[(Symbol, [f64; 2], f64)]| {
             v.iter()
                 .filter(|x| x.0 == Symbol::Mountain)
@@ -693,6 +701,47 @@ mod tests {
     }
 
     #[test]
+    fn a_hills_region_shows_hills_and_no_ridge_peaks() {
+        use inkland_core::config::{Config, ReliefOptions};
+        // Low land, and rough hills are the highest land of the map.
+        let count = |peaks: Option<bool>| {
+            let mut v = serde_json::json!({
+                "version": 1, "seed": 6, "frame": { "width": 300, "height": 200 },
+                "world": { "cells": 4000, "template": { "steps": ["Add 25 all"] } },
+                "pins": { "regions": [
+                    { "id": "sea", "kind": "sea", "box": [0, 0, 20, 200] },
+                    { "id": "wolds", "kind": "hills", "box": [120, 60, 220, 140], "height": [42, 52] }
+                ],
+                "areas": [{ "id": "rough", "character": "rough", "box": [120, 60, 220, 140] }] }
+            });
+            if let Some(p) = peaks {
+                v["pins"]["regions"][1]["peaks"] = serde_json::json!(p);
+            }
+            let c: Config = serde_json::from_value(v).unwrap();
+            let w = World::build(&c).unwrap();
+            let page = Page::new(&c, &c.variants[0]);
+            let symbols = relief(
+                &w,
+                &page,
+                c.seed,
+                &ReliefOptions::default(),
+                &c.peakless_shapes(),
+            );
+            let inside = |p: [f64; 2]| {
+                let q = page.to_world(p);
+                (125.0..=215.0).contains(&q[0]) && (65.0..=135.0).contains(&q[1])
+            };
+            let of = |k: Symbol| symbols.iter().filter(|s| s.0 == k && inside(s.1)).count();
+            (of(Symbol::Mountain), of(Symbol::Hill))
+        };
+        let (mountains, hills) = count(None);
+        assert_eq!(mountains, 0);
+        assert!(hills > 10, "{hills}");
+        let (mountains, _) = count(Some(true));
+        assert!(mountains > 0, "peaks: true gives the ridge peaks");
+    }
+
+    #[test]
     fn relief_terrain_finds_ridges_with_feet_and_clumps() {
         use inkland_core::config::Config;
         let c: Config = serde_json::from_value(serde_json::json!({
@@ -701,7 +750,7 @@ mod tests {
         }))
         .unwrap();
         let w = World::build(&c).unwrap();
-        let t = relief_terrain(&w);
+        let t = relief_terrain(&w, &[]);
         let ridges: Vec<usize> = (0..w.grid.len()).filter(|&k| t.ridge[k]).collect();
         assert!(ridges.len() > 5);
         for &k in &ridges {
@@ -720,7 +769,7 @@ mod tests {
             .iter()
             .fold((1.0f64, -1.0f64), |(a, b), &v| (a.min(v), b.max(v)));
         assert!(lo < -0.3 && hi > 0.3);
-        assert_eq!(relief_terrain(&w), t);
+        assert_eq!(relief_terrain(&w, &[]), t);
     }
 
     #[test]

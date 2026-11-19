@@ -190,7 +190,7 @@ pub fn relief_icons(ctx: &Ctx) -> Vec<ReliefIcon> {
         .config
         .relief_of(ctx.variant)
         .terrain
-        .then(|| crate::decor::relief_terrain(w));
+        .then(|| crate::decor::relief_terrain(w, &ctx.config.peakless_shapes()));
     if let Some(t) = &terrain {
         chains(ctx, t, &order, &mut rng, &mut out);
     }

@@ -1378,6 +1378,12 @@ pub struct RegionPin {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 0.0, max = 1.0))]
     pub islets: Option<f64>,
+    /// `true`: the relief can show mountain peaks along the ridges in the
+    /// region. `false`: the region shows no ridge peaks; its high land gets
+    /// the hill or mountain symbol of its height. Default: `false` for
+    /// `hills`, `true` for the other kinds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peaks: Option<bool>,
     /// Only for `sea` and `lake`. The width, in units, of the shallow water
     /// along the coast. The water is at the top of the height range at the
     /// coast and goes down to the bottom of the range at this distance from
@@ -2002,6 +2008,17 @@ impl Config {
         self.relief_hidden_shapes(variant)
             .into_iter()
             .map(|(_, s)| s)
+            .collect()
+    }
+
+    /// The shapes of the region pins without ridge peaks: the `hills`
+    /// regions, and each region with `peaks: false`.
+    pub fn peakless_shapes(&self) -> Vec<crate::geom::Shape> {
+        self.pins
+            .regions
+            .iter()
+            .filter(|r| !r.peaks.unwrap_or(r.kind != RegionKind::Hills))
+            .filter_map(crate::geom::Shape::of)
             .collect()
     }
 
