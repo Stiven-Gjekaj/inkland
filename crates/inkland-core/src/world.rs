@@ -217,7 +217,7 @@ impl World {
         }
         let mut keep_lake = vec![false; base_grid.len()];
         for c in 0..base_grid.len() {
-            for r in regions.iter().filter(|r| r.contains(base_grid.points[c])) {
+            for r in crate::fit::ruling_at(&regions, base_grid.points[c]) {
                 if r.pin.kind.is_water() {
                     keep_lake[c] |= r.pin.kind == RegionKind::Lake;
                 } else {
@@ -325,11 +325,7 @@ impl World {
         // Each pinned road keeps a land path between its stops. The cells
         // of the water regions stay water.
         let keep_water: Vec<bool> = (0..grid.len())
-            .map(|c| {
-                regions
-                    .iter()
-                    .any(|r| r.pin.kind.is_water() && r.contains(grid.points[c]))
-            })
+            .map(|c| crate::fit::forced_water(&regions, grid.points[c]))
             .collect();
         crate::roads::keep_corridors(
             &grid,

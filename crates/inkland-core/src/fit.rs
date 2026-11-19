@@ -110,6 +110,24 @@ fn ruling<'r, 'a>(inside: Vec<&'r FitRegion<'a>>) -> Vec<&'r FitRegion<'a>> {
         .collect()
 }
 
+/// The regions that rule the point `p`: of the regions that hold it, the
+/// ones with the highest priority. The list is empty outside all regions.
+pub fn ruling_at<'r, 'a>(regions: &'r [FitRegion<'a>], p: [f64; 2]) -> Vec<&'r FitRegion<'a>> {
+    ruling(regions.iter().filter(|r| r.contains(p)).collect())
+}
+
+/// `true` if a water region rules the point `p`. A land region with a
+/// higher priority than the sea around it makes its cells land.
+pub fn forced_water(regions: &[FitRegion], p: [f64; 2]) -> bool {
+    ruling_at(regions, p).iter().any(|r| r.pin.kind.is_water())
+}
+
+/// `true` if only land regions rule the point `p`.
+pub fn forced_land(regions: &[FitRegion], p: [f64; 2]) -> bool {
+    let rule = ruling_at(regions, p);
+    !rule.is_empty() && rule.iter().all(|r| !r.pin.kind.is_water())
+}
+
 /// A whole-number height in the range.
 fn put(v: f64, [lo, hi]: [f64; 2]) -> f64 {
     v.trunc().clamp(lo.ceil(), hi.floor().max(lo.ceil()))
@@ -187,11 +205,7 @@ pub fn apply_points(
     sea_level: f64,
 ) -> Result<(), Error> {
     let n = grid.len();
-    let in_land_region = |c: usize| {
-        regions
-            .iter()
-            .any(|r| !r.pin.kind.is_water() && r.contains(grid.points[c]))
-    };
+    let in_land_region = |c: usize| forced_land(regions, grid.points[c]);
 
     // Cells that a port channel must not make water.
     let mut keep_land = vec![false; n];
@@ -322,6 +336,27 @@ mod tests {
         ]));
         assert_eq!(effective_range(&r[0], 10.0), [5.0, 9.0]);
         assert_eq!(effective_range(&r[1], 30.0), [30.0, 30.0]);
+    }
+
+    #[test]
+    fn a_land_region_with_a_higher_priority_rules_over_the_sea() {
+        let r = regions(json!([
+            { "id": "bay", "kind": "sea", "box": [0, 0, 60, 60] },
+            { "id": "isle", "kind": "hills", "circle": { "at": [30, 30], "r": 5 }, "priority": 1 },
+            { "id": "rock", "kind": "hills", "circle": { "at": [10, 10], "r": 3 } }
+        ]));
+        let fit = FitRegion::all(&r, 20.0);
+        // The island rules its cells.
+        assert!(forced_land(&fit, [30.0, 30.0]));
+        assert!(!forced_water(&fit, [30.0, 30.0]));
+        // Outside the island, the sea rules.
+        assert!(forced_water(&fit, [50.0, 50.0]));
+        assert!(!forced_land(&fit, [50.0, 50.0]));
+        // Regions with the same priority share the cell: water is forced.
+        assert!(forced_water(&fit, [10.0, 10.0]));
+        assert!(!forced_land(&fit, [10.0, 10.0]));
+        // Outside all regions, nothing is forced.
+        assert!(!forced_water(&fit, [80.0, 80.0]) && !forced_land(&fit, [80.0, 80.0]));
     }
 
     #[test]

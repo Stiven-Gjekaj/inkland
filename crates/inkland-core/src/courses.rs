@@ -13,7 +13,7 @@
 
 use crate::config::{Anchor, Config, RegionKind, RiverPin};
 use crate::error::{Error, ErrorCode};
-use crate::fit::FitRegion;
+use crate::fit::{FitRegion, forced_land, forced_water, ruling_at};
 use crate::grid::Grid;
 use crate::rivers::{Course, CourseEnd};
 use std::cmp::Reverse;
@@ -112,10 +112,8 @@ impl Plan<'_> {
     /// least sea level.
     fn range(&self, c: usize) -> [f64; 2] {
         let p = self.grid.points[c];
-        let [lo, hi] = self
-            .regions
-            .iter()
-            .filter(|r| r.contains(p))
+        let [lo, hi] = ruling_at(self.regions, p)
+            .into_iter()
             .fold([self.sea_level, 100.0], |[lo, hi], r| {
                 [lo.max(r.range[0]), hi.min(r.range[1])]
             });
@@ -244,11 +242,7 @@ fn plan_one(
     };
     if !plan.land(heights, source) {
         let p = grid.points[source];
-        if plan
-            .regions
-            .iter()
-            .any(|r| r.pin.kind.is_water() && r.contains(p))
-        {
+        if forced_water(plan.regions, p) {
             return Err(not_downhill(
                 i,
                 river,
@@ -277,10 +271,7 @@ fn plan_one(
                 MouthKind::Water(Target::One(shore_cell(plan, heights, c, *p)))
             } else {
                 let next_to_water = grid.neighbors(c).any(|m| heights[m] < sea);
-                let forced_land = plan
-                    .regions
-                    .iter()
-                    .any(|r| !r.pin.kind.is_water() && r.contains(*p));
+                let forced_land = forced_land(plan.regions, *p);
                 if next_to_water && !forced_land {
                     heights[c] = sea - 1.0;
                     MouthKind::Water(Target::One(c))
@@ -450,11 +441,7 @@ fn plan_one(
 /// land, or from water that no region forces.
 fn shore_cell(plan: &Plan, heights: &[f64], mouth: usize, point: [f64; 2]) -> usize {
     let grid = plan.grid;
-    let forced_water = |c: usize| {
-        plan.regions
-            .iter()
-            .any(|r| r.pin.kind.is_water() && r.contains(grid.points[c]))
-    };
+    let forced_water = |c: usize| forced_water(plan.regions, grid.points[c]);
     let reachable = |c: usize| {
         grid.neighbors(c)
             .any(|m| plan.land(heights, m) || !forced_water(m))
@@ -538,10 +525,7 @@ fn find_leg(
             let water = !plan.land(heights, m);
             // Water can be a step of the course only where no region forces
             // water: carving makes it land. Forced water is only the goal.
-            let forced_water = plan
-                .regions
-                .iter()
-                .any(|r| r.pin.kind.is_water() && r.contains(grid.points[m]));
+            let forced_water = forced_water(plan.regions, grid.points[m]);
             if water && forced_water && !(is_goal && water_target) {
                 continue;
             }
