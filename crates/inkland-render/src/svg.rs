@@ -5,6 +5,7 @@
 //! coordinates have 3 decimals. Groups and elements have stable ids, and the
 //! writer puts them in a fixed order.
 
+use crate::hand::Hand;
 use crate::page::{Page, line_mm};
 use inkland_core::config::{Config, Variant};
 use inkland_core::num::fixed;
@@ -50,6 +51,8 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
     let coast_w = line_mm(COAST_WIDTH_PT.max(min));
     let neat_w = line_mm(NEATLINE_WIDTH_PT.max(min));
     let [mx, my, mw, mh] = page.map_rect();
+    let hand = Hand::of(config);
+    let hand = hand.as_ref();
 
     let mut s = String::new();
     s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -100,12 +103,12 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
                 continue;
             }
             match *part {
-                "water-lines" => write_water_lines(&mut s, world, &page, min),
-                "coast" => write_coast(&mut s, world, config, &page, coast_w),
+                "water-lines" => write_water_lines(&mut s, world, &page, min, hand),
+                "coast" => write_coast(&mut s, world, config, &page, coast_w, hand),
                 "relief" => write_relief(&mut s, world, config, &page, min, &labels),
-                "rivers" => write_rivers(&mut s, world, config, variant, &page),
-                "borders" => write_borders(&mut s, world, config, &page),
-                "roads" => write_roads(&mut s, world, config, &page),
+                "rivers" => write_rivers(&mut s, world, config, variant, &page, hand),
+                "borders" => write_borders(&mut s, world, config, &page, hand),
+                "roads" => write_roads(&mut s, world, config, &page, hand),
                 "features" => write_features(&mut s, config, variant, &page),
                 "places" => write_places(&mut s, world, config, &page, &labels),
                 "labels" => write_labels(&mut s, &labels, config.render.labels.halo),
@@ -233,7 +236,7 @@ fn write_labels(s: &mut String, labels: &crate::labels::Labels, halo: bool) {
 }
 
 /// Water lines: two thin lines in the water along each coast.
-fn write_water_lines(s: &mut String, world: &World, page: &Page, min: f64) {
+fn write_water_lines(s: &mut String, world: &World, page: &Page, min: f64, hand: Option<&Hand>) {
     let _ = writeln!(
         s,
         "<g id=\"water-lines\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\">",
@@ -246,15 +249,23 @@ fn write_water_lines(s: &mut String, world: &World, page: &Page, min: f64) {
             .collect();
         let closed = line.len() > 2 && line.first() == line.last();
         let smooth = crate::decor::chaikin(&pts, closed, 2);
-        let d = path_data(page, &smooth, closed);
+        let id = format!("water-line-{}", i + 1);
+        let d = hand_path(page, hand, &id, &smooth, closed);
         if !d.is_empty() {
-            let _ = writeln!(s, "<path id=\"water-line-{}\" d=\"{d}\"/>", i + 1);
+            let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\"/>");
         }
     }
     s.push_str("</g>\n");
 }
 
-fn write_coast(s: &mut String, world: &World, config: &Config, page: &Page, coast_w: f64) {
+fn write_coast(
+    s: &mut String,
+    world: &World,
+    config: &Config,
+    page: &Page,
+    coast_w: f64,
+    hand: Option<&Hand>,
+) {
     let _ = writeln!(
         s,
         "<g id=\"coast\" clip-path=\"url(#clip-map)\" fill=\"none\" stroke=\"{INK}\" stroke-width=\"{}\" stroke-linejoin=\"round\" stroke-linecap=\"round\">",
@@ -278,7 +289,8 @@ fn write_coast(s: &mut String, world: &World, config: &Config, page: &Page, coas
     }
     for line in &world.coastlines {
         let smooth = crate::decor::chaikin(&line.points, line.closed, 2);
-        let d = path_data(page, &smooth, line.closed);
+        let key = format!("coast-{}", line.id);
+        let d = hand_path(page, hand, &key, &smooth, line.closed);
         if d.is_empty() {
             continue;
         }
@@ -337,7 +349,14 @@ pub fn river_width_pt(width_km: f64, mm_per_px: f64, min_pt: f64) -> f64 {
     w.clamp(RIVER_MIN_PT, RIVER_MAX_PT).max(min_pt)
 }
 
-fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Variant, page: &Page) {
+fn write_rivers(
+    s: &mut String,
+    world: &World,
+    config: &Config,
+    variant: &Variant,
+    page: &Page,
+    hand: Option<&Hand>,
+) {
     let mm_per_px = crate::fmg::geom::Px::new(page, config.frame.width, config.frame.height).mm;
     let min = config.render.min_line_width_pt;
     let overlay = crate::labels::overlay_of(config, variant);
@@ -357,7 +376,7 @@ fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Varian
                 Some(k) => format!("river-{}", config.pins.rivers[k].id),
                 None => format!("river-{}", r.id),
             };
-            let d = river_curve(page, &r.points);
+            let d = river_curve(page, hand, &id, &r.points);
             (!d.is_empty()).then(|| (id, d, line_mm(river_width_pt(r.width, mm_per_px, min))))
         })
         .collect();
@@ -372,14 +391,14 @@ fn write_rivers(s: &mut String, world: &World, config: &Config, variant: &Varian
     s.push_str("</g>\n");
 }
 
-fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
+fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page, hand: Option<&Hand>) {
     let min = config.render.min_line_width_pt;
-    let line = |verts: &[u32]| -> String {
+    let line = |key: &str, verts: &[u32]| -> String {
         let pts: Vec<[f64; 2]> = verts
             .iter()
             .map(|&v| world.grid.vertices[v as usize])
             .collect();
-        path_data(page, &pts, false)
+        hand_path(page, hand, key, &pts, false)
     };
     let (state_edges, province_edges) = inkland_core::borders::state_and_province_edges(world);
     let _ = writeln!(
@@ -395,9 +414,10 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
         .iter()
         .enumerate()
     {
-        let d = line(l);
+        let id = format!("border-province-{}", i + 1);
+        let d = line(&id, l);
         if !d.is_empty() {
-            let _ = writeln!(s, "<path id=\"border-province-{}\" d=\"{d}\"/>", i + 1);
+            let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\"/>");
         }
     }
     s.push_str("</g>\n");
@@ -410,15 +430,16 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page) {
         .iter()
         .enumerate()
     {
-        let d = line(l);
+        let id = format!("border-state-{}", i + 1);
+        let d = line(&id, l);
         if !d.is_empty() {
-            let _ = writeln!(s, "<path id=\"border-state-{}\" d=\"{d}\"/>", i + 1);
+            let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\"/>");
         }
     }
     s.push_str("</g>\n</g>\n");
 }
 
-fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
+fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page, hand: Option<&Hand>) {
     use inkland_core::config::RoadKind;
     use inkland_core::curves::road_line;
     use std::collections::BTreeSet;
@@ -446,9 +467,10 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
         for w in r.cells.windows(2) {
             pinned_edges.insert((w[0].min(w[1]), w[0].max(w[1])));
         }
-        let d = path_data(page, &road_line(seed, &r.points), false);
+        let key = format!("road-{id}");
+        let d = hand_path(page, hand, &key, &road_line(seed, &r.points), false);
         if !d.is_empty() {
-            items.push((format!("road-{id}"), d, r.kind));
+            items.push((key, d, r.kind));
         }
     }
     items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -497,12 +519,12 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page) {
                 .iter()
                 .map(|&c| world.grid.points[c as usize])
                 .collect();
-            let d = path_data(page, &road_line(seed, &pts), false);
+            let id = format!("{name}-{}", i + 1);
+            let d = hand_path(page, hand, &id, &road_line(seed, &pts), false);
             if !d.is_empty() {
                 let _ = writeln!(
                     s,
-                    "<path id=\"{name}-{}\" d=\"{d}\" stroke-width=\"{w}\" stroke-dasharray=\"{dash}\"/>",
-                    i + 1
+                    "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{w}\" stroke-dasharray=\"{dash}\"/>"
                 );
             }
         }
@@ -658,7 +680,7 @@ fn write_places(
 /// The smooth curve of a river line on the page: a Catmull-Rom curve with
 /// alpha 0.1, as FMG `getRiverPath` draws it. The curve passes through
 /// each point of the meandered line.
-fn river_curve(page: &Page, points: &[[f64; 2]]) -> String {
+fn river_curve(page: &Page, hand: Option<&Hand>, key: &str, points: &[[f64; 2]]) -> String {
     let mut pts: Vec<[f64; 2]> = Vec::with_capacity(points.len());
     for &p in points {
         let q = page.to_page(p);
@@ -669,10 +691,36 @@ fn river_curve(page: &Page, points: &[[f64; 2]]) -> String {
     if pts.len() < 2 {
         return String::new();
     }
+    if let Some(h) = hand {
+        pts = h.wobble(key, &pts, false);
+    }
     crate::fmg::geom::catmull_rom(&pts, 0.1)
 }
 
 fn path_data(page: &Page, points: &[[f64; 2]], closed: bool) -> String {
+    let pts: Vec<[f64; 2]> = points.iter().map(|&p| page.to_page(p)).collect();
+    mm_path_data(&pts, closed)
+}
+
+/// The path data of a line that a hand draws (`render.hand_drawn`), or of
+/// the exact line. `key` gives the line its own wobble.
+fn hand_path(
+    page: &Page,
+    hand: Option<&Hand>,
+    key: &str,
+    points: &[[f64; 2]],
+    closed: bool,
+) -> String {
+    let pts: Vec<[f64; 2]> = points.iter().map(|&p| page.to_page(p)).collect();
+    match hand {
+        Some(h) => mm_path_data(&h.wobble(key, &pts, closed), closed),
+        None => mm_path_data(&pts, closed),
+    }
+}
+
+/// The path data of a line in millimetres on the page. A closed line has
+/// its first point again at its end.
+fn mm_path_data(points: &[[f64; 2]], closed: bool) -> String {
     let pts: &[[f64; 2]] = if closed && points.len() > 1 {
         &points[..points.len() - 1]
     } else {
@@ -681,8 +729,7 @@ fn path_data(page: &Page, points: &[[f64; 2]], closed: bool) -> String {
     let mut d = String::new();
     let mut last = String::new();
     let mut count = 0;
-    for &p in pts {
-        let [x, y] = page.to_page(p);
+    for &[x, y] in pts {
         let xy = format!("{} {}", n(x), n(y));
         if xy == last {
             continue;
@@ -772,10 +819,10 @@ mod tests {
         let c = config();
         let page = Page::new(&c, &c.variants[0]);
         let pts = [[10.0, 10.0], [10.0, 10.0], [30.0, 20.0], [50.0, 15.0]];
-        let d = river_curve(&page, &pts);
+        let d = river_curve(&page, None, "r", &pts);
         assert!(d.starts_with('M') && d.contains('C'), "{d}");
         assert_eq!(d.matches('C').count(), 2, "{d}");
-        assert!(river_curve(&page, &pts[..2]).is_empty());
+        assert!(river_curve(&page, None, "r", &pts[..2]).is_empty());
     }
 
     #[test]
@@ -845,7 +892,8 @@ mod tests {
 
     #[test]
     fn a_road_is_drawn_as_the_curve_of_the_core() {
-        let c = config();
+        let mut c = config();
+        c.render.hand_drawn = false;
         let mut w = World::build(&c).unwrap();
         w.roads.push(inkland_core::roads::Road {
             id: 99,
@@ -871,5 +919,39 @@ mod tests {
         // One point on each sample of the curve: no corner at the middle.
         let points = d.matches(['M', 'L']).count();
         assert_eq!(points, 2 * inkland_core::curves::SAMPLES + 1);
+    }
+
+    /// The `d` of the element with this id.
+    fn path_of(svg: &str, id: &str) -> String {
+        let doc = roxmltree::Document::parse(svg).unwrap();
+        doc.descendants()
+            .find(|e| e.attribute("id") == Some(id))
+            .and_then(|e| e.attribute("d"))
+            .unwrap_or_else(|| panic!("no path {id}"))
+            .to_string()
+    }
+
+    #[test]
+    fn the_hand_drawn_look_moves_the_lines_and_can_be_turned_off() {
+        let mut c = config();
+        let w = World::build(&c).unwrap();
+        let on = render(&w, &c, &c.variants[0]).svg;
+        c.render.hand_drawn = false;
+        let off = render(&w, &c, &c.variants[0]).svg;
+        let id = format!("coast-{}", w.coastlines[0].id);
+        assert_ne!(path_of(&on, &id), path_of(&off, &id));
+        assert_ne!(path_of(&on, "water-line-1"), path_of(&off, "water-line-1"));
+        // The wobble adds points between the points of the exact line.
+        assert!(on.matches('L').count() > off.matches('L').count());
+        // Both pass the print checks.
+        for svg in [&on, &off] {
+            let opts = crate::checks::CheckOptions {
+                min_line_width_pt: c.render.min_line_width_pt,
+                fonts_allowed: c.render.fonts_allowed.clone(),
+            };
+            for r in crate::checks::check_svg(svg, &opts) {
+                assert!(r.pass, "{}: {}", r.name, r.details);
+            }
+        }
     }
 }
