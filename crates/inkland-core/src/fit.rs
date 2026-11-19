@@ -923,6 +923,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_long_port_channel_of_the_first_grid_holds_on_the_second() {
+        // The port is about 9 cells of the first grid from the sea. The
+        // second grid has more cells near the coast, so its own channel of
+        // 8 cells does not reach the sea.
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 5, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": { "steps": [] } },
+            "pins": {
+                "points": [{ "id": "haven", "kind": "town", "at": [96, 100], "port": true }],
+                "regions": [{ "id": "maeris", "kind": "land", "box": [60, 40, 240, 160],
+                              "roughness": 0 }]
+            }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        let port = w.pin_cells[0];
+        assert!(w.grid.neighbors(port).any(|m| w.heights[m] < 20.0));
+    }
+
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {
         let c: Config = serde_json::from_value(json!({
             "version": 1, "seed": 1, "frame": { "width": 100, "height": 100 },

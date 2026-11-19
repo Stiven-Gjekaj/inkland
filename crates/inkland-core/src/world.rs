@@ -220,7 +220,8 @@ impl World {
                 cell: base_pin_cells[index],
             })
             .collect();
-        apply_points(&base_grid, &mut base_heights, &points, &regions, sea_level)?;
+        let base_channels =
+            apply_points(&base_grid, &mut base_heights, &points, &regions, sea_level)?;
 
         // Lakes in deep depressions, then lakes that break into the ocean
         // (FMG `addDeepDepressionLakes` and `openNearSeaLakes`).
@@ -313,7 +314,18 @@ impl World {
 
         // The pins hold on the second grid too: a new cell in a region gets
         // a height in its range, and each port keeps water next to it.
-        crate::fit::clamp_regions(&grid, &mut heights, &regions, sea_level, &pin_cells, &[]);
+        // The port channels of the first grid stay water on the second.
+        let mut channels: Vec<usize> = (0..grid.len())
+            .filter(|&c| base_channels.contains(&base_cell[c]) && heights[c] < sea_level)
+            .collect();
+        crate::fit::clamp_regions(
+            &grid,
+            &mut heights,
+            &regions,
+            sea_level,
+            &pin_cells,
+            &channels,
+        );
         let points: Vec<FitPoint> = pins
             .points
             .iter()
@@ -324,7 +336,13 @@ impl World {
                 cell: pin_cells[index],
             })
             .collect();
-        let channels = apply_points(&grid, &mut heights, &points, &regions, sea_level)?;
+        channels.extend(apply_points(
+            &grid,
+            &mut heights,
+            &points,
+            &regions,
+            sea_level,
+        )?);
 
         let plan = crate::courses::Plan {
             grid: &grid,
