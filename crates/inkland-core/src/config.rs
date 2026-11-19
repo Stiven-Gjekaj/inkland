@@ -1535,6 +1535,12 @@ pub struct LabelRules {
     /// `no_generated_labels`. It fails when the variant shows a label with
     /// a generated name. Default `false`.
     pub check_generated: bool,
+    /// `print-safe` mode: `true` draws a white box behind each label that
+    /// is not on a path, so that the lines under it do not cross the text.
+    /// `false`: no box. The text never has a stroke, because a PDF printer
+    /// turns stroked text into a Type 3 font. `colour` mode draws the halo
+    /// of its style. Default `true`.
+    pub halo: bool,
 }
 
 impl Default for LabelRules {
@@ -1542,6 +1548,7 @@ impl Default for LabelRules {
         Self {
             generated: true,
             check_generated: false,
+            halo: true,
         }
     }
 }

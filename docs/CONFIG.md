@@ -326,6 +326,7 @@ Rules for the labels. A name is "generated" when the config does not write it: t
 |---|---|---|---|---|
 | `check_generated` | boolean |  | `false` | `true`: the report of each variant has the check `no_generated_labels`. It fails when the variant shows a label with a generated name. Default `false`. |
 | `generated` | boolean |  | `true` | `false`: show no label with a generated name. Default `true`. |
+| `halo` | boolean |  | `true` | `print-safe` mode: `true` draws a white box behind each label that is not on a path, so that the lines under it do not cross the text. `false`: no box. The text never has a stroke, because a PDF printer turns stroked text into a Type 3 font. `colour` mode draws the halo of its style. Default `true`. |
 
 ### Lattice
 

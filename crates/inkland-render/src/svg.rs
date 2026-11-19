@@ -108,7 +108,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
                 "roads" => write_roads(&mut s, world, config, &page),
                 "features" => write_features(&mut s, config, variant, &page),
                 "places" => write_places(&mut s, world, config, &page, &labels),
-                "labels" => write_labels(&mut s, &labels),
+                "labels" => write_labels(&mut s, &labels, config.render.labels.halo),
                 "cells" => crate::print_layers::cells(&mut s, world, &page, min),
                 "grid" => crate::print_layers::grid(&mut s, config, &page, min),
                 "coordinates" => crate::print_layers::coordinates(&mut s, config, &page, min),
@@ -139,7 +139,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
 
 /// Write the labels: real `<text>` with a white halo behind it. A river label
 /// follows a path in `<defs>`.
-fn write_labels(s: &mut String, labels: &crate::labels::Labels) {
+fn write_labels(s: &mut String, labels: &crate::labels::Labels, halo: bool) {
     use crate::extras::xml;
     use crate::labels::Geometry;
     let paths: Vec<_> = labels
@@ -162,11 +162,29 @@ fn write_labels(s: &mut String, labels: &crate::labels::Labels) {
         }
         s.push_str("</defs>\n");
     }
-    let _ = writeln!(
-        s,
-        "<g id=\"labels\" fill=\"{INK}\" stroke=\"{PAPER}\" stroke-width=\"{}\" stroke-linejoin=\"round\" paint-order=\"stroke\">",
-        n(crate::labels::HALO_MM)
-    );
+    // The halo is a white box behind each label at a point: the box that
+    // the placer keeps free for the label. The text has no stroke, because
+    // a PDF printer turns stroked text into a Type 3 font. A label on a
+    // path gets no box, so that its own river stays whole.
+    if halo {
+        let _ = writeln!(s, "<g id=\"label-halos\" fill=\"{PAPER}\" stroke=\"none\">");
+        for l in &labels.placed {
+            if !matches!(l.geometry, Geometry::Point { .. }) {
+                continue;
+            }
+            let mut d = String::new();
+            for b in &l.boxes {
+                for (i, p) in b.corners().iter().enumerate() {
+                    d.push(if i == 0 { 'M' } else { 'L' });
+                    let _ = write!(d, "{} {}", n(p[0]), n(p[1]));
+                }
+                d.push('Z');
+            }
+            let _ = writeln!(s, "<path id=\"halo-{}\" d=\"{d}\"/>", l.id);
+        }
+        s.push_str("</g>\n");
+    }
+    let _ = writeln!(s, "<g id=\"labels\" fill=\"{INK}\" stroke=\"none\">");
     for l in &labels.placed {
         let spacing = if l.spacing > 0.0 {
             format!(" letter-spacing=\"{}\"", n(l.spacing))

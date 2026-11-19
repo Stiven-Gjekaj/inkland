@@ -568,6 +568,28 @@ mod tests {
     }
 
     #[test]
+    fn the_print_halo_is_a_box_behind_the_text_and_can_be_turned_off() {
+        use inkland_core::config::Config;
+        use inkland_core::world::World;
+        let mut c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 4, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": "pangea" }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        for halo in [true, false] {
+            c.render.labels.halo = halo;
+            let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
+            assert_eq!(svg.contains("<g id=\"label-halos\""), halo);
+            assert_eq!(svg.contains("<path id=\"halo-label-"), halo);
+            assert!(
+                !svg.contains("stroke=\"#ffffff\" stroke-width"),
+                "halo {halo}"
+            );
+        }
+    }
+
+    #[test]
     fn a_transform_makes_a_line_thinner() {
         let svg = |inner: &str| {
             format!(

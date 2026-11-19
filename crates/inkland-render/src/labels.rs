@@ -22,11 +22,10 @@ use inkland_core::geom::Shape;
 use inkland_core::world::World;
 use std::collections::{BTreeMap, VecDeque};
 
-/// Free space around the text, for the halo of `print-safe` mode. A label
+/// Free space around the text, for the white box behind the text in
+/// `print-safe` mode. A label
 /// with a wider halo gets more space (see `Look::halo`).
 const PAD: f64 = 0.3;
-/// Width of the white halo behind each label.
-pub const HALO_MM: f64 = 0.6;
 /// Extra cost of a label for each river that it crosses.
 const RIVER_COST: f64 = 0.5;
 /// The cost of each symbol of a generated place that a required label
