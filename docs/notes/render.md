@@ -32,7 +32,7 @@ These notes describe `render.mode: "colour"`. The code is in
 | biomes, states, provinces, cultures, religions | `draw-*.ts`, `isoline-fills.ts` | Cell areas with a water gap stroke, through the land mask. States have a blurred halo. |
 | zones | `draw-zones.ts`, `hatches.ts` | The zones of `World::zones`, filled with the FMG hatch patterns. |
 | borders | `draw-borders.ts` | Straight lines along the cell edges. |
-| routes | `draw-routes.ts` | Catmull-Rom curves (alpha 0.1). Shared stretches of the network are drawn once. |
+| routes | `draw-routes.ts` | The drawn curves of the core (`curves::road_line`): a centripetal Catmull-Rom spline with a small seeded wander. Shared stretches of the network are drawn once. |
 | rivers | `draw-rivers.ts`, `river-generator.ts` | Meandering and the width outline of FMG, with the width factor and source width of each river. |
 | relief | `draw-relief-icons.ts`, `relief-generator.ts` | Poisson-disc placement with the FMG rules and biome pools; the 5 icon sets. Icons under a label are left out. |
 | burg icons | `draw-burg-icons.ts` | Icon and anchor groups by kind. |
@@ -66,6 +66,9 @@ These notes describe `render.mode: "colour"`. The code is in
   `"applicable": false` in colour mode.
 - The texture and the ocean pattern are data URIs in the SVG, so the file
   has all that it needs.
+- Roads are smooth curves with a small seeded wander, not the
+  Catmull-Rom curves of FMG. Both modes draw the same curve, and the
+  report measures the length of the road along it.
 - Not done: the trade animation (the SVG is still) and the fogging layer.
 
 ## Print-safe mode
@@ -78,3 +81,5 @@ These notes describe `render.mode: "colour"`. The code is in
   drawings. `emblems` has a drawing with hatching when
   `render.emblems.hatching` is `true`. The other new layers draw nothing.
 - The river width comes from `River::width`, the FMG width.
+- Roads are the same curves as in colour mode, with the dashes of a road
+  or a trail.
