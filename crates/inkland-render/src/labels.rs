@@ -877,6 +877,85 @@ fn curve_candidates(
 
 /// Fifteen points on a box: five along it on each of its two long sides
 /// and on its middle line.
+/// The last candidates of a sea or lake label, for when no other candidate
+/// has a place: level labels at the deepest water cells of the area in the
+/// view, from the full size down to 0.4 of it. A label that stays on water
+/// is of tier 2. If none does, the smallest size inside the map is of tier
+/// 3, so the label is still drawn in its sea.
+#[allow(clippy::too_many_arguments)]
+fn water_fallback(
+    world: &World,
+    page: &Page,
+    inner: [f64; 4],
+    area: &[bool],
+    text: &str,
+    f: &FontMetrics,
+    size: f64,
+    halo: f64,
+) -> Vec<Candidate> {
+    let g = &world.grid;
+    let members = members_of(area);
+    let depth = depths(world, area, &members);
+    let mut cells: Vec<usize> = members
+        .iter()
+        .copied()
+        .filter(|&c| {
+            let q = page.to_page(g.points[c]);
+            q[0] >= inner[0] && q[0] <= inner[2] && q[1] >= inner[1] && q[1] <= inner[3]
+        })
+        .collect();
+    cells.sort_by(|&a, &b| depth[b].cmp(&depth[a]).then(a.cmp(&b)));
+    let on_water = |b: &Obb| {
+        box_points(b).all(|q| {
+            let p = page.to_world(q);
+            !world.features.is_land(g.find_cell(p[0], p[1]))
+        })
+    };
+    let mut out = Vec::new();
+    for (rank, &c) in cells.iter().take(12).enumerate() {
+        let [x, y0] = page.to_page(g.points[c]);
+        for (step, k) in AREA_STEPS.iter().enumerate() {
+            let sz = size * k;
+            let y = y0 + f.cap(sz) / 2.0;
+            let b = text_box(
+                x,
+                y,
+                "middle",
+                f.width(text, sz, 0.0),
+                f,
+                sz,
+                pad_of(sz, halo),
+            );
+            if !b.inside(inner) {
+                continue;
+            }
+            let wet = on_water(&b);
+            let last = step == AREA_STEPS.len() - 1;
+            if !wet && !last {
+                continue;
+            }
+            out.push(Candidate {
+                boxes: vec![b],
+                geometry: Geometry::Point {
+                    x,
+                    y,
+                    anchor: "middle",
+                    angle: 0,
+                },
+                size: sz,
+                spacing: 0.0,
+                cost: rank as f64 + step as f64,
+                tier: if wet { 2 } else { 3 },
+                river: None,
+            });
+            if wet {
+                break;
+            }
+        }
+    }
+    out
+}
+
 fn box_points(b: &Obb) -> impl Iterator<Item = [f64; 2]> + '_ {
     (0..5).flat_map(move |i| {
         (0..3).map(move |j| {
@@ -1546,6 +1625,11 @@ pub fn place_with(
                     })
                 })
             });
+            // The last choice, after all other candidates: level labels on
+            // the deepest water of the area in the view.
+            candidates.extend(water_fallback(
+                world, page, inner, &area, &name, f, size, look.halo,
+            ));
         }
         requests.push(Request {
             place: None,
@@ -2412,6 +2496,39 @@ mod tests {
         .unwrap();
         at.variants[0].overlay = Some("o".into());
         assert!((size_of_label(&at) - free).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_sea_label_in_a_narrow_strait_is_still_placed() {
+        let (w, mut c) = world(
+            3,
+            "pangea",
+            json!({
+                "world": { "cells": 2500, "template": "pangea", "fill_land": true },
+                "pins": { "regions": [
+                    { "id": "strait", "kind": "sea", "name": "The Sea of Serenity",
+                      "box": [195, 0, 205, 300] }
+                ] }
+            }),
+        );
+        // Only level, straight labels: none fits on the water of the strait.
+        c.render.labels.max_angle = 0.0;
+        c.render.labels.curved = false;
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let labels = place(&w, &c, &v, &page);
+        let l = labels
+            .placed
+            .iter()
+            .find(|l| l.id == "label-region-strait")
+            .unwrap_or_else(|| panic!("unplaced: {:?}", labels.unplaced));
+        let Geometry::Point { x, angle, .. } = l.geometry else {
+            panic!("not a level label");
+        };
+        assert_eq!(angle, 0);
+        // It stands in the strait.
+        let at = page.to_world([x, 0.0]);
+        assert!((190.0..=210.0).contains(&at[0]), "at x {}", at[0]);
     }
 
     #[test]
