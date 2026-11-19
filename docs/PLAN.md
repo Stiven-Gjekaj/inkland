@@ -785,8 +785,40 @@ follow each other.
             { "place": "harrowgate", "at_length": 71.4 }],
   "legs":  [{ "from": "ostrey", "to": "brannocks-ford", "length": 20.1 },
             { "from": "brannocks-ford", "to": "harrowgate", "length": 51.3 }],
-  "crossings": [{ "river": "brann", "at_length": 20.1, "kind": "bridge" }] }
+  "crossings": [{ "river": "brann", "at_length": 20.1, "kind": "bridge" }],
+  "travel": [{ "transport": "On foot (laden)", "speed_kmh": 3.0,
+               "hours_per_day": 8.0, "hours": 38.3, "days": 4.79 }] }
 ```
+
+The report also has a `travel` list: the time on the full road for each
+land transport.
+The book cites travel in days, for example "four days west" or "three days
+by cart".
+
+- The list uses the journey transports of the world (`world.transports`).
+  These are the transports of Azgaar's Fantasy Map Generator.
+  The report does not have a second table of speeds.
+  Reason: one table of speeds is in the config, and the journeys and the
+  report use the same table.
+  To change a speed, or to add a cart, write an entry in
+  `world.transports`.
+  To remove a transport that the book does not have, for example `Train`,
+  write an entry with `remove: true`.
+- The list has each transport of the domain `land` with a speed of more
+  than 0, in the order of `world.transports`.
+  Roads are on land, so the report does not give water or air transports.
+- `speed_kmh` is the speed in km/h.
+  The report changes the units of `units.name` into kilometers.
+  It knows `mile`, `league`, `km`, `versta`, `nautical mile`, and
+  `nautical league`.
+  It counts a different unit as one kilometer, as Azgaar's Fantasy Map
+  Generator does.
+- `hours` is the time in motion: the road length divided by the speed.
+- `hours_per_day` is the hours of travel that one day of the transport
+  sustains.
+- `days` is `hours` divided by `hours_per_day`: the number of travel days.
+- The pinned road is on the road network, so the report does not use the
+  off-road speed factor.
 
 ## 8. Answers to the Phase 0 questions
 

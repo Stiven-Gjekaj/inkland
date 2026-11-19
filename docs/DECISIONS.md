@@ -42,7 +42,8 @@ This file records the choices that the human makes.
 
 - Journeys: no. The report gives the road lengths between places, for
   example "road A to B: 71 miles". The book uses these lengths to check the
-  travel days.
+  travel days. The report also gives the travel days on each pinned road
+  for each land transport of `world.transports` (issue 33).
 - Coats of arms: not now. Later, possibly, for the four factions (Gaunt, the
   Church, Corrantey, the Hush). The book build can draw arms itself.
 - Economy, military, zones: no. The story fixes these.
