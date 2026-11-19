@@ -1262,7 +1262,9 @@ pub struct Overlay {
     /// New names, from `"<kind>:<id>"` to the name.
     #[serde(default)]
     pub rename: BTreeMap<String, String>,
-    /// Label options, from `"<kind>:<id>"` to the options.
+    /// Label options, from `"<kind>:<id>"` to the options. The key of a
+    /// state label is `"state:<id>"`, with the id of the point pin that is
+    /// the capital of the state, for example `"state:solmere"`.
     #[serde(default)]
     pub labels: BTreeMap<String, LabelOptions>,
 }

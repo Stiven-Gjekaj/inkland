@@ -119,6 +119,47 @@ fn variant_with_an_unknown_overlay_is_refused() {
 }
 
 #[test]
+fn a_label_key_names_a_state_by_its_capital_pin() {
+    let c = with(json!({
+        "pins": { "points": [
+            { "id": "solmere", "kind": "city", "at": [1, 1], "capital_of": "Astoria" },
+            { "id": "ostrey", "kind": "town", "at": [5, 5] }
+        ] },
+        "overlays": { "today": { "labels": {
+            "state:solmere": { "at": [10, 10] },
+            "state:ostrey": { "hide": true },
+            "state:1": { "hide": true }
+        } } }
+    }));
+    let mut got = codes(&c);
+    got.sort();
+    assert_eq!(
+        got,
+        vec![
+            (
+                ErrorCode::RefUnknown,
+                "/overlays/today/labels/state:1".to_owned()
+            ),
+            (
+                ErrorCode::RefUnknown,
+                "/overlays/today/labels/state:ostrey".to_owned()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_state_key_is_only_a_label_key() {
+    let c = with(json!({
+        "pins": { "points": [
+            { "id": "solmere", "kind": "city", "at": [1, 1], "capital_of": "Astoria" }
+        ] },
+        "overlays": { "today": { "remove": ["state:solmere"] } }
+    }));
+    one(&c, ErrorCode::RefUnknown, "/overlays/today/remove/0");
+}
+
+#[test]
 fn overlay_remove_of_an_unknown_item_is_refused() {
     let c = with(json!({
         "pins": { "points": [{ "id": "ostrey", "kind": "ruin", "at": [1, 1] }] },

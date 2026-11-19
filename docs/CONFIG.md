@@ -460,7 +460,7 @@ An overlay: what one variant adds to, removes from, or renames in the base world
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `add` | [`OverlayAdd`](#overlayadd) |  |  | Items that only this overlay shows. |
-| `labels` | map of name to [`LabelOptions`](#labeloptions) |  |  | Label options, from `"<kind>:<id>"` to the options. |
+| `labels` | map of name to [`LabelOptions`](#labeloptions) |  |  | Label options, from `"<kind>:<id>"` to the options. The key of a state label is `"state:<id>"`, with the id of the point pin that is the capital of the state, for example `"state:solmere"`. |
 | `remove` | array of string |  | `[]` | Items to hide, as `"<kind>:<id>"`, for example `"place:ostrey"`. |
 | `rename` | map of name to string |  |  | New names, from `"<kind>:<id>"` to the name. |
 
