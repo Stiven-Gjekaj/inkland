@@ -14,7 +14,7 @@ const RELIEF_SCALE: f64 = 6.0;
 const SHADE_STEP: f64 = 0.08;
 /// The darkest step and the lightest step.
 const DARK_STEPS: u32 = 6;
-const LIGHT_STEPS: u32 = 3;
+const LIGHT_STEPS: u32 = 6;
 /// The opacity of one dark step and of one light step.
 const DARK_OPACITY: f64 = 0.06;
 const LIGHT_OPACITY: f64 = 0.07;
@@ -32,8 +32,6 @@ pub fn shades(ctx: &Ctx) -> Vec<f64> {
     let w = ctx.world;
     let g = &w.grid;
     let spacing = libm::sqrt(g.step_x * g.step_y).max(1e-9);
-    let l = light();
-    let flat = l[2];
     (0..g.len())
         .map(|c| {
             if !w.features.is_land(c) {
@@ -61,11 +59,21 @@ pub fn shades(ctx: &Ctx) -> Vec<f64> {
             }
             let gx = (cc * bx - b * by) / det;
             let gy = (a * by - b * bx) / det;
-            let norm = libm::sqrt(gx * gx + gy * gy + 1.0);
-            let shade = (-gx * l[0] - gy * l[1] + l[2]) / norm;
-            shade - flat
+            shade_of(gx, gy)
         })
         .collect()
+}
+
+/// The shade of a slope with the height gradient `[gx, gy]` (in relief
+/// units for each cell spacing): more than 0 on a slope that turns to the
+/// light, less than 0 on a slope that turns away from it, and 0 on flat
+/// land and on a slope along the light. Only the turn of the slope to the
+/// light counts. A steep slope that turns neither way is not dark, so that
+/// rough land does not show a shadow all over.
+fn shade_of(gx: f64, gy: f64) -> f64 {
+    let l = light();
+    let norm = libm::sqrt(gx * gx + gy * gy + 1.0);
+    (-gx * l[0] - gy * l[1]) / norm
 }
 
 /// The step of a shade: 1 to `DARK_STEPS` in shadow, `DARK_STEPS + 1` and
@@ -248,5 +256,19 @@ mod tests {
         // The gaps grow.
         let gaps: Vec<f64> = ECHO.windows(2).map(|w| w[1].0 - w[0].0).collect();
         assert!(gaps.windows(2).all(|g| g[0] < g[1]));
+    }
+
+    #[test]
+    fn only_the_turn_to_the_light_shades_a_slope() {
+        // The light comes from the north-west: -x and -y.
+        assert_eq!(shade_of(0.0, 0.0), 0.0);
+        // A slope that goes up to the south-east turns to the light.
+        assert!(shade_of(1.0, 1.0) > 0.0);
+        // A slope that goes up to the north-west turns away from it.
+        assert!(shade_of(-1.0, -1.0) < 0.0);
+        // A steep slope along the light, up to the north-east, is not dark.
+        assert!(shade_of(5.0, -5.0).abs() < 1e-12);
+        // A steeper slope that turns away is darker.
+        assert!(shade_of(-2.0, -2.0) < shade_of(-0.5, -0.5));
     }
 }
