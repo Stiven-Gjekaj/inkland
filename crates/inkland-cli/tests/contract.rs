@@ -235,6 +235,53 @@ fn unknown_flag_is_exit_2_with_cli_usage() {
     assert_eq!(out["error"]["code"], "CLI_USAGE");
 }
 
+/// The width and the height in the IHDR chunk of a PNG file.
+fn png_size(path: &Path) -> (u32, u32) {
+    let b = std::fs::read(path).unwrap();
+    assert_eq!(&b[1..4], b"PNG");
+    let w = u32::from_be_bytes(b[16..20].try_into().unwrap());
+    let h = u32::from_be_bytes(b[20..24].try_into().unwrap());
+    (w, h)
+}
+
+#[test]
+fn preview_width_sets_the_longer_side_of_the_png() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = minimal();
+    c["world"] = json!({ "cells": 1000 });
+    let config = write_config(dir.path(), &c);
+    let out = dir.path().join("out");
+    let preview = dir.path().join("p.png");
+    let base = [
+        "generate",
+        "--config",
+        config.to_str().unwrap(),
+        "--out-dir",
+        out.to_str().unwrap(),
+        "--preview",
+        preview.to_str().unwrap(),
+    ];
+    let (code, summary) = run(&base);
+    assert_eq!(code, 0, "{summary}");
+    let (w, h) = png_size(&preview);
+    assert_eq!(w.max(h), 1024);
+    let mut args = base.to_vec();
+    args.extend(["--preview-width", "300"]);
+    let (code, summary) = run(&args);
+    assert_eq!(code, 0, "{summary}");
+    let (w, h) = png_size(&preview);
+    assert_eq!(w.max(h), 300);
+}
+
+#[test]
+fn preview_width_out_of_range_is_cli_usage() {
+    for width in ["63", "8193", "0"] {
+        let (code, out) = run(&["generate", "--config", "x.json", "--preview-width", width]);
+        assert_eq!(code, 2, "{width}");
+        assert_eq!(out["error"]["code"], "CLI_USAGE", "{width}");
+    }
+}
+
 #[test]
 fn unknown_variant_is_refused() {
     let dir = tempfile::tempdir().unwrap();
