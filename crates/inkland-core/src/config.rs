@@ -1826,9 +1826,9 @@ pub struct ReliefOptions {
     /// placement of Azgaar's Fantasy Map Generator. Default `true`.
     #[serde(skip_serializing_if = "is_true")]
     pub terrain: bool,
-    /// Both render modes. The ids of region pins. The relief symbols inside
-    /// these regions are left out, for example the marsh of a fen that a
-    /// map of an older age does not show.
+    /// Both render modes. The ids of region pins and area pins. The relief
+    /// symbols inside these shapes are left out, for example the marsh of a
+    /// fen or the trees of a wood that a map of an older age does not show.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hide_in: Vec<String>,
 }
@@ -1926,16 +1926,23 @@ impl Config {
         variant.relief.as_ref().unwrap_or(&self.render.relief)
     }
 
-    /// The shapes of the regions in `hide_in` of the relief options of a
-    /// variant.
+    /// The shapes of the region pins and the area pins in `hide_in` of the
+    /// relief options of a variant.
     pub fn relief_hidden_areas(&self, variant: &Variant) -> Vec<crate::geom::Shape> {
         let ids = &self.relief_of(variant).hide_in;
-        self.pins
+        let regions = self
+            .pins
             .regions
             .iter()
             .filter(|r| ids.contains(&r.id))
-            .filter_map(crate::geom::Shape::of)
-            .collect()
+            .filter_map(crate::geom::Shape::of);
+        let areas = self
+            .pins
+            .areas
+            .iter()
+            .filter(|a| ids.contains(&a.id))
+            .filter_map(|a| crate::geom::Shape::from_fields(&a.polygon, &a.rect, &a.circle));
+        regions.chain(areas).collect()
     }
 
     /// The names that the config writes, in lower case. A label with
@@ -2486,6 +2493,21 @@ mod tests {
 
     fn minimal() -> serde_json::Value {
         json!({ "version": 1, "seed": 7, "frame": { "width": 400, "height": 300 } })
+    }
+
+    #[test]
+    fn relief_can_hide_in_an_area() {
+        let mut v = minimal();
+        v["pins"] = json!({
+            "regions": [{ "id": "fen", "kind": "marsh", "box": [10, 10, 50, 50] }],
+            "areas": [{ "id": "kingsholm-wood", "character": "wooded", "box": [100, 100, 150, 150] }]
+        });
+        v["render"] = json!({ "relief": { "hide_in": ["kingsholm-wood"] } });
+        let c: Config = serde_json::from_value(v).unwrap();
+        let hidden = c.relief_hidden_areas(&c.variants[0]);
+        assert_eq!(hidden.len(), 1);
+        assert!(hidden[0].contains([120.0, 120.0]));
+        assert!(!hidden[0].contains([20.0, 20.0]));
     }
 
     #[test]

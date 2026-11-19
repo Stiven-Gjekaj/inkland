@@ -1092,8 +1092,14 @@ impl<'a> Validator<'a> {
                 );
             }
         }
-        // The regions whose relief symbols a map leaves out.
-        let regions: Vec<&str> = c.pins.regions.iter().map(|r| r.id.as_str()).collect();
+        // The regions and areas whose relief symbols a map leaves out.
+        let regions: Vec<&str> = c
+            .pins
+            .regions
+            .iter()
+            .map(|r| r.id.as_str())
+            .chain(c.pins.areas.iter().map(|a| a.id.as_str()))
+            .collect();
         let reliefs = std::iter::once(("/render/relief".to_owned(), &c.render.relief)).chain(
             c.variants.iter().enumerate().filter_map(|(i, v)| {
                 v.relief
@@ -1107,7 +1113,7 @@ impl<'a> Validator<'a> {
                     self.err(
                         ErrorCode::RefUnknown,
                         format!("{path}/hide_in/{k}"),
-                        format!("{id:?} is not the id of a region pin"),
+                        format!("{id:?} is not the id of a region pin or an area pin"),
                     );
                 }
             }

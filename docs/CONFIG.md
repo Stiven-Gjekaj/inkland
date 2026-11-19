@@ -657,7 +657,7 @@ The relief symbols of `print-safe` mode.
 |---|---|---|---|---|
 | `density` | number |  | `1.0` | How dense the symbols are. 0 to 1. 1 is the full density. A smaller value puts the symbols further apart: 0.25 shows about a quarter of them. 0 shows none. |
 | `hide` | array of [`ReliefSymbol`](#reliefsymbol) |  |  | The symbol kinds to leave out: `mountain`, `hill`, `tree` (the forest biomes), `marsh` (wetland), `dune` (the deserts), or `field` (the farmland of `print-safe` mode: small fields on open lowland near the places). |
-| `hide_in` | array of string |  |  | Both render modes. The ids of region pins. The relief symbols inside these regions are left out, for example the marsh of a fen that a map of an older age does not show. |
+| `hide_in` | array of string |  |  | Both render modes. The ids of region pins and area pins. The relief symbols inside these shapes are left out, for example the marsh of a fen or the trees of a wood that a map of an older age does not show. |
 | `terrain` | boolean |  |  | Both render modes. `true`: the symbols follow the terrain. Mountains stand in chains of overlapping peaks along the ridges, larger at the crest, with hills at their feet. Trees grow in groups, denser in the highland, and the symbols change a little in size. `false`: the placement of Azgaar's Fantasy Map Generator. Default `true`. |
 
 ### ReliefSymbol
