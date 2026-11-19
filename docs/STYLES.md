@@ -67,6 +67,17 @@ label placer keeps the halo free, inside the map. The original program has
 no label groups for lakes, oceans, and islands. Lakes use the `river`
 group, oceans use the `added` group, and islands use the `province` group.
 
+## Options of inkland
+
+inkland reads some options that the presets of FMG do not have. A preset
+without the option gets the default.
+
+| Path | Default | What it does |
+|---|---|---|
+| `ocean.groups.oceanLayers.options.depths` | `4,8,12` when `outline` is `none`, else `none` | The depth layers: depths below sea level on the height scale. Each layer fills the ocean at least that deep. `none`: no depth layers. |
+| `ocean.groups.oceanLayers.options.depth_color` | `ocean.options.bands.color` | The fill of the depth layers. |
+| `ocean.groups.oceanLayers.options.depth_opacity` | `0.12` | The opacity of each depth layer. The layers add up. |
+
 ## The paths of the default preset
 
 This list shows each path of the `default` preset and its value. Other
