@@ -445,11 +445,12 @@ pub fn preview_png(
 /// The print checks that test black and white output. They do not apply
 /// to `colour` mode, which has colours, effects, thin lines, and the fonts
 /// of its style.
-pub const PRINT_ONLY_CHECKS: [&str; 5] = [
+pub const PRINT_ONLY_CHECKS: [&str; 6] = [
     "no_opacity",
     "no_masks_filters_rgba",
     "black_and_white",
     "min_line_width",
+    "no_text_stroke",
     "font_families_allowed",
 ];
 

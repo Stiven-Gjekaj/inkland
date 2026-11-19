@@ -690,7 +690,7 @@ fn check_passes_a_generated_svg_and_fails_a_bad_one() {
     let svg = out.join("default.svg");
     let (code, report) = run(&["check", "--svg", svg.to_str().unwrap()]);
     assert_eq!(code, 0, "{report}");
-    assert_eq!(report["checks"].as_array().unwrap().len(), 7);
+    assert_eq!(report["checks"].as_array().unwrap().len(), 8);
     let bad = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/svg-bad/opacity.svg");
     let (code, report) = run(&["check", "--svg", bad.to_str().unwrap()]);
     assert_eq!(code, 1);

@@ -39,12 +39,13 @@ impl CheckResult {
 }
 
 /// The names of the checks, in the order that they run.
-pub const NAMES: [&str; 7] = [
+pub const NAMES: [&str; 8] = [
     "no_opacity",
     "no_masks_filters_rgba",
     "black_and_white",
     "min_line_width",
     "all_text_is_text_elements",
+    "no_text_stroke",
     "font_families_allowed",
     "deterministic_ids",
 ];
@@ -426,6 +427,28 @@ pub fn check_svg(svg: &str, opts: &CheckOptions) -> Vec<CheckResult> {
         }
     }
 
+    // no_text_stroke: no text has a stroke, set on it or inherited from a
+    // group. A PDF printer turns stroked text into a Type 3 font.
+    let mut stroked = Vec::new();
+    for &n in &elements {
+        if !matches!(n.tag_name().name(), "text" | "textPath" | "tspan") {
+            continue;
+        }
+        let nearest = |name: &str| {
+            n.ancestors()
+                .filter(|a| a.is_element())
+                .find_map(|a| prop(a, name))
+        };
+        let stroke = nearest("stroke").unwrap_or_else(|| "none".to_owned());
+        let width =
+            nearest("stroke-width").and_then(|w| w.trim_end_matches("px").parse::<f64>().ok());
+        if stroke.trim() != "none" && width != Some(0.0) {
+            let text = n.ancestors().find(|a| a.has_tag_name("text")).unwrap_or(n);
+            stroked.push(id_of(text));
+        }
+    }
+    stroked.dedup();
+
     // font_families_allowed
     let allowed: BTreeSet<&str> = opts.fonts_allowed.iter().map(String::as_str).collect();
     let mut fonts = Vec::new();
@@ -488,6 +511,11 @@ pub fn check_svg(svg: &str, opts: &CheckOptions) -> Vec<CheckResult> {
             details: list(outlined),
         },
         CheckResult {
+            name: "no_text_stroke",
+            pass: stroked.is_empty(),
+            details: list(stroked),
+        },
+        CheckResult {
             name: "font_families_allowed",
             pass: fonts.is_empty(),
             details: list(fonts),
@@ -540,11 +568,39 @@ mod tests {
             failed(bad!("outlined-text.svg")),
             ["all_text_is_text_elements"]
         );
+        assert_eq!(failed(bad!("stroked-text.svg")), ["no_text_stroke"]);
         assert_eq!(failed(bad!("bad-font.svg")), ["font_families_allowed"]);
         assert_eq!(failed(bad!("duplicate-id.svg")), ["deterministic_ids"]);
         assert_eq!(
             failed(bad!("rgba.svg")),
             ["no_masks_filters_rgba", "black_and_white"]
+        );
+    }
+
+    #[test]
+    fn text_with_a_stroke_fails_and_text_without_one_passes() {
+        let svg = |group: &str, text: &str| {
+            format!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10mm\" height=\"10mm\" viewBox=\"0 0 10 10\"><g id=\"labels\" fill=\"#000000\"{group}><text id=\"label-a\" x=\"1\" y=\"5\" font-family=\"Caladea\" font-size=\"3\"{text}><tspan id=\"t-a\">A</tspan></text></g></svg>"
+            )
+        };
+        let stroke = |g: &str, t: &str| failed(&svg(g, t)).contains(&"no_text_stroke");
+        assert!(
+            stroke(" stroke=\"#ffffff\"", ""),
+            "inherited from the group"
+        );
+        assert!(
+            stroke("", " style=\"stroke: #ffffff\""),
+            "in the style of the text"
+        );
+        assert!(!stroke("", ""), "no stroke");
+        assert!(
+            !stroke(" stroke=\"#ffffff\"", " stroke=\"none\""),
+            "the text turns it off"
+        );
+        assert!(
+            !stroke(" stroke=\"#ffffff\" stroke-width=\"0\"", ""),
+            "zero width"
         );
     }
 
@@ -582,10 +638,7 @@ mod tests {
             let svg = crate::svg::render(&w, &c, &c.variants[0]).svg;
             assert_eq!(svg.contains("<g id=\"label-halos\""), halo);
             assert_eq!(svg.contains("<path id=\"halo-label-"), halo);
-            assert!(
-                !svg.contains("stroke=\"#ffffff\" stroke-width"),
-                "halo {halo}"
-            );
+            assert!(!failed(&svg).contains(&"no_text_stroke"), "halo {halo}");
         }
     }
 
