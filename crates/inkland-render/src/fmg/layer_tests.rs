@@ -986,3 +986,27 @@ fn routes_draw_the_curve_of_the_core() {
     assert_eq!(points, 2 * inkland_core::curves::SAMPLES + 1);
     assert!(!d.contains('C'));
 }
+
+#[test]
+fn hill_shading_goes_on_the_land_below_the_rivers() {
+    let svg = render_with(
+        &[LayerName::Landmass, LayerName::Rivers],
+        StyleName::Default,
+    );
+    let shade = svg
+        .find("id=\"hill-shading\"")
+        .expect("the land has shading");
+    let rivers = svg.find("<g id=\"rivers\"").expect("the map has rivers");
+    assert!(shade < rivers);
+    assert!(svg.contains("<filter id=\"hill-shading-blur\""));
+    assert!(svg.contains("id=\"hill-shade-1\""), "a slope is in shadow");
+    parse_and_draw(&svg);
+    // Without the land, or with the option off, there is no shading.
+    let svg = render_with(&[LayerName::Rivers], StyleName::Default);
+    assert!(!svg.contains("hill-shading"));
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Landmass, LayerName::Rivers];
+    c.render.hill_shading = false;
+    let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert!(!svg.contains("hill-shading"));
+}

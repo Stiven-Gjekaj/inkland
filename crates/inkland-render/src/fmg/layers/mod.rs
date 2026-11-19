@@ -12,6 +12,7 @@ mod notes;
 pub(crate) mod overlays;
 mod palette;
 mod ripples;
+pub(crate) mod shading;
 pub(crate) mod text;
 
 pub use decor::boxes;
@@ -66,6 +67,13 @@ pub fn write(s: &mut String, ctx: &Ctx, layer: LayerName) {
         Military => military::military(s, ctx),
         Coast | Regions | Roads | Places => {}
     }
+}
+
+/// `true` if the hill shading goes below this layer: the hill shading is
+/// above the land colours and below the rivers and the relief symbols.
+pub fn above_hill_shading(layer: LayerName) -> bool {
+    let at = |l: LayerName| super::ORDER.iter().position(|&x| x == l);
+    at(layer) >= at(LayerName::Rivers)
 }
 
 /// Write the extras of the variant that are not layers: the scale bar and
