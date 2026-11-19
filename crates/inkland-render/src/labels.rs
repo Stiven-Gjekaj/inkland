@@ -912,8 +912,30 @@ fn water_fallback(
         })
     };
     let mut out = Vec::new();
+    // The middle of the water on the row of a cell, between the shores to
+    // the west and to the east, in page mm.
+    let middle = |c: usize| -> [f64; 2] {
+        let p = g.points[c];
+        let step = g.step_x.max(1e-9) / 4.0;
+        let wet = |x: f64| {
+            let q = [x, p[1]];
+            let k = g.find_cell(q[0], q[1]);
+            area[k] && !world.features.is_land(k)
+        };
+        let reach = |dir: f64| {
+            let mut x = p[0];
+            for _ in 0..400 {
+                if !wet(x + dir * step) {
+                    break;
+                }
+                x += dir * step;
+            }
+            x
+        };
+        page.to_page([(reach(-1.0) + reach(1.0)) / 2.0, p[1]])
+    };
     for (rank, &c) in cells.iter().take(12).enumerate() {
-        let [x, y0] = page.to_page(g.points[c]);
+        let [x, y0] = middle(c);
         for (step, k) in AREA_STEPS.iter().enumerate() {
             let sz = size * k;
             let y = y0 + f.cap(sz) / 2.0;
@@ -944,8 +966,16 @@ fn water_fallback(
                 },
                 size: sz,
                 spacing: 0.0,
-                cost: rank as f64 + step as f64,
-                tier: if wet { 2 } else { 3 },
+                // A label on the water competes with the other area
+                // candidates by its size, on the same scale as their cost,
+                // so that a larger label on open water wins over a smaller
+                // one. A label over land is the last choice.
+                cost: if wet {
+                    2.0 * (1.0 - k) + 0.01 * rank as f64
+                } else {
+                    rank as f64 + step as f64
+                },
+                tier: if wet { 0 } else { 3 },
                 river: None,
             });
             if wet {
@@ -1697,8 +1727,9 @@ pub fn place_with(
                     })
                 })
             });
-            // The last choice, after all other candidates: level labels on
-            // the deepest water of the area in the view.
+            // Level labels on the deepest water of the area in the view:
+            // on the water, they compete by size; over land, they are the
+            // last choice.
             candidates.extend(water_fallback(
                 world, page, inner, &area, &name, f, size, look.halo,
             ));
@@ -2635,6 +2666,58 @@ mod tests {
         // It stands in the strait.
         let at = page.to_world([x, 0.0]);
         assert!((190.0..=210.0).contains(&at[0]), "at x {}", at[0]);
+    }
+
+    #[test]
+    fn a_label_on_open_water_competes_by_size_in_the_middle_of_the_water() {
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({
+                "world": { "cells": 2500, "template": "pangea", "fill_land": true },
+                "pins": { "regions": [
+                    { "id": "strait", "kind": "sea", "name": "The Sea of Serenity",
+                      "box": [170, 0, 230, 300] }
+                ] }
+            }),
+        );
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let [mx, my, mw, mh] = page.map_rect();
+        let inner = [mx + 0.5, my + 0.5, mx + mw - 0.5, my + mh - 0.5];
+        let g = &w.grid;
+        let area: Vec<bool> = (0..g.len())
+            .map(|k| {
+                let p = g.points[k];
+                (170.0..=230.0).contains(&p[0]) && !w.features.is_land(k)
+            })
+            .collect();
+        let f = FontMetrics::of(&c.render.fonts.labels_sc);
+        let full = pt(c.render.font_sizes_pt.region);
+        let out = water_fallback(&w, &page, inner, &area, "The Sea of Serenity", f, full, 0.0);
+        // The candidates on the water that are larger than the smallest
+        // size of an area label.
+        let wet: Vec<&Candidate> = out
+            .iter()
+            .filter(|o| o.tier == 0 && o.size > pt(MIN_LABEL_PT) + 1e-9)
+            .collect();
+        assert!(
+            !wet.is_empty(),
+            "{:?}",
+            out.iter().map(|o| (o.tier, o.size)).collect::<Vec<_>>()
+        );
+        // A normal candidate at the smallest size costs at least this much,
+        // so each of them wins over it.
+        let smallest = 2.0 * (1.0 - pt(MIN_LABEL_PT) / full);
+        for o in &wet {
+            assert!(o.cost < smallest, "{} {smallest}", o.cost);
+            let Geometry::Point { x, y, .. } = o.geometry else {
+                panic!("not a straight label");
+            };
+            // In the middle of the water between the two shores.
+            let at = page.to_world([x, y]);
+            assert!((at[0] - 200.0).abs() < 8.0, "{at:?}");
+        }
     }
 
     #[test]
