@@ -246,6 +246,18 @@ pub enum Symbol {
 }
 
 impl Symbol {
+    /// The name of the kind, as in `render.relief.hide`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Symbol::Mountain => "mountain",
+            Symbol::Hill => "hill",
+            Symbol::Tree => "tree",
+            Symbol::Marsh => "marsh",
+            Symbol::Dune => "dune",
+            Symbol::Field => "field",
+        }
+    }
+
     /// The least distance between two symbols of this kind, in mm.
     fn spacing(self) -> f64 {
         match self {

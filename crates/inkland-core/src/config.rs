@@ -1991,19 +1991,31 @@ impl Config {
     /// The shapes of the region pins and the area pins in `hide_in` of the
     /// relief options of a variant.
     pub fn relief_hidden_areas(&self, variant: &Variant) -> Vec<crate::geom::Shape> {
+        self.relief_hidden_shapes(variant)
+            .into_iter()
+            .map(|(_, s)| s)
+            .collect()
+    }
+
+    /// The ids and the shapes of the region pins and the area pins in
+    /// `hide_in` of the relief options of a variant, regions first.
+    pub fn relief_hidden_shapes(&self, variant: &Variant) -> Vec<(String, crate::geom::Shape)> {
         let ids = &self.relief_of(variant).hide_in;
         let regions = self
             .pins
             .regions
             .iter()
             .filter(|r| ids.contains(&r.id))
-            .filter_map(crate::geom::Shape::of);
+            .filter_map(|r| crate::geom::Shape::of(r).map(|s| (r.id.clone(), s)));
         let areas = self
             .pins
             .areas
             .iter()
             .filter(|a| ids.contains(&a.id))
-            .filter_map(|a| crate::geom::Shape::from_fields(&a.polygon, &a.rect, &a.circle));
+            .filter_map(|a| {
+                crate::geom::Shape::from_fields(&a.polygon, &a.rect, &a.circle)
+                    .map(|s| (a.id.clone(), s))
+            });
         regions.chain(areas).collect()
     }
 

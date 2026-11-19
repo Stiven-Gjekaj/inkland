@@ -338,6 +338,8 @@ pub fn generate_with_world(
             }
         }
         add_labels(&mut report, &rendered.labels, config);
+        let relief = inkland_render::relief_report::summary(w, config, v);
+        report["relief"] = json!({ "shown": relief.shown, "hidden": relief.hidden });
         // The print checks run on the written SVG text.
         let checks = check_svg(&svg, config);
         if let Some(list) = report["checks"].as_array_mut() {
@@ -862,6 +864,33 @@ mod tests {
             .find(|c| c["name"] == "black_and_white")
             .unwrap();
         assert_eq!(bw["pass"], false);
+    }
+
+    #[test]
+    fn report_compares_the_relief_of_two_ages() {
+        let c = config(json!({
+            "world": { "cells": 2000, "template": "pangea" },
+            "pins": { "regions": [{ "id": "fen", "kind": "marsh", "box": [20, 20, 60, 60] }] },
+            "variants": [
+                { "name": "then", "page": { "w_mm": 100, "h_mm": 80 } },
+                { "name": "now", "page": { "w_mm": 100, "h_mm": 80 },
+                  "relief": { "hide_in": ["fen"] } }
+            ]
+        }));
+        let out = generate(&c, None).unwrap();
+        let total = |v: &Value| {
+            v.as_object()
+                .unwrap()
+                .values()
+                .map(|n| n.as_u64().unwrap())
+                .sum::<u64>()
+        };
+        let then = &out.variants[0].report["relief"];
+        let now = &out.variants[1].report["relief"];
+        assert!(then["hidden"].as_object().unwrap().is_empty());
+        let fen = total(&now["hidden"]["fen"]);
+        assert!(fen > 0, "{now}");
+        assert_eq!(total(&then["shown"]), total(&now["shown"]) + fen);
     }
 
     #[test]

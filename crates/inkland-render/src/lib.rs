@@ -16,6 +16,7 @@ pub mod page;
 #[cfg(feature = "png")]
 pub mod png;
 pub mod print_layers;
+pub mod relief_report;
 pub mod svg;
 pub mod transform;
 pub mod water;

@@ -6,7 +6,7 @@ mod decor;
 pub(crate) mod economy;
 mod hachures;
 mod lines;
-pub(crate) mod marks;
+pub mod marks;
 mod military;
 mod notes;
 pub(crate) mod overlays;
