@@ -140,7 +140,21 @@ Climate options.
 |---|---|---|---|---|
 | `geography` | [`Geography`](#geography) |  |  | The size and the position of the map on the globe, as in FMG. If it is given, it sets the latitudes, and `latitude_range` has no effect. A value that it does not give comes from a random draw. |
 | `latitude_range` | array of 2 number |  | `[30.0,55.0]` | Latitude of the south edge and of the north edge, in degrees. |
+| `preset` | [`ClimatePreset`](#climatepreset) |  |  | A climate for the whole map: `temperate`, `cool`, `cold`, `warm`, or `tropical`. It sets the sea-level temperature at the middle of the map. The latitudes still make the north and the south a little different, and the height still cools the land. Without it, the latitudes alone set the temperature, as in FMG, and a map at 50 degrees is near 0 C at sea level. |
+| `temperature` | number |  |  | The sea-level temperature at the middle of the map, in degrees C. -30 to 40. It replaces the temperature of `preset`. |
 | `wind` | array of 6 number |  |  | Winds, one for each 30 degree latitude band from 90 north to 90 south: the direction to which the wind blows, in degrees clockwise from north. Default: `[225, 45, 225, 315, 135, 315]`. |
+
+### ClimatePreset
+
+A climate for the whole map.
+
+One of:
+
+- `"warm"`: 18 C at sea level: dry grassland, savanna, and broadleaf forest.
+- `"temperate"`: 11 C: broadleaf forest and grassland, taiga only on high ground.
+- `"cool"`: 5 C: taiga and tundra on high ground.
+- `"cold"`: -2 C: taiga and tundra, glacier on high ground.
+- `"tropical"`: 26 C: rainforest, savanna, and hot desert.
 
 ### Coa
 

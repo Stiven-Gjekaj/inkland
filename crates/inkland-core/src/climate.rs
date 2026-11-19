@@ -79,13 +79,21 @@ pub fn metres(h: f64, sea_level: f64) -> f64 {
 /// `[south, north]`. As in FMG `Temperature.compute`, each lattice row has
 /// the latitude of its first cell, the drop with height is rounded, and the
 /// result is cut to a whole number toward 0 (an `Int8Array`).
+///
+/// With `climate.preset` or `climate.temperature`, the temperatures move by
+/// one amount so that the middle of the map has that temperature at sea
+/// level.
 pub fn temperatures(grid: &Grid, heights: &[f64], config: &Config, range: [f64; 2]) -> Vec<f64> {
     let sea = f64::from(config.world.sea_level);
     let cx = grid.cells_x as usize;
+    let shift = config.world.climate.middle_temperature().map_or(0.0, |t| {
+        t - sea_level_temperature((range[0] + range[1]) / 2.0)
+    });
     (0..grid.len())
         .map(|c| {
             let row_first = c - c % cx;
-            let base = sea_level_temperature(latitude_in(range, config, grid.points[row_first][1]));
+            let base = shift
+                + sea_level_temperature(latitude_in(range, config, grid.points[row_first][1]));
             let drop = (metres(heights[c], sea) / 1000.0 * 6.5).round();
             (base - drop).clamp(-128.0, 127.0).trunc()
         })
@@ -272,6 +280,23 @@ mod tests {
             2000,
             &mut Rand::new(SeedTree::new(1).part_rng(Layer::Terrain, "grid")),
         )
+    }
+
+    #[test]
+    fn a_temperate_preset_warms_a_map_at_fifty_degrees() {
+        let g = grid();
+        let flat = vec![25.0; g.len()];
+        let mut c = config([48.0, 54.0], "top-left");
+        let fmg = temperatures(&g, &flat, &c, c.world.climate.latitude_range);
+        let middle = g.slot(200.0, 150.0);
+        assert!(fmg[middle] < 2.0, "{}", fmg[middle]);
+        c.world.climate.preset = Some(crate::config::ClimatePreset::Temperate);
+        let t = temperatures(&g, &flat, &c, c.world.climate.latitude_range);
+        assert!((t[middle] - 11.0).abs() <= 1.0, "{}", t[middle]);
+        assert!(t[g.slot(200.0, 2.0)] < t[g.slot(200.0, 298.0)]);
+        c.world.climate.temperature = Some(20.0);
+        let t = temperatures(&g, &flat, &c, c.world.climate.latitude_range);
+        assert!((t[middle] - 20.0).abs() <= 1.0, "{}", t[middle]);
     }
 
     #[test]

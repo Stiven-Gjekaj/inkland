@@ -1031,6 +1031,19 @@ pub struct Climate {
     /// from north. Default: `[225, 45, 225, 315, 135, 315]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wind: Option<[f64; 6]>,
+    /// A climate for the whole map: `temperate`, `cool`, `cold`, `warm`, or
+    /// `tropical`. It sets the sea-level temperature at the middle of the
+    /// map. The latitudes still make the north and the south a little
+    /// different, and the height still cools the land. Without it, the
+    /// latitudes alone set the temperature, as in FMG, and a map at 50
+    /// degrees is near 0 C at sea level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<ClimatePreset>,
+    /// The sea-level temperature at the middle of the map, in degrees C.
+    /// -30 to 40. It replaces the temperature of `preset`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = -30.0, max = 40.0))]
+    pub temperature: Option<f64>,
 }
 
 impl Default for Climate {
@@ -1039,6 +1052,46 @@ impl Default for Climate {
             latitude_range: default_latitude_range(),
             geography: None,
             wind: None,
+            preset: None,
+            temperature: None,
+        }
+    }
+}
+
+impl Climate {
+    /// The sea-level temperature at the middle of the map that `temperature`
+    /// or `preset` sets, in degrees C.
+    pub fn middle_temperature(&self) -> Option<f64> {
+        self.temperature
+            .or(self.preset.map(ClimatePreset::temperature))
+    }
+}
+
+/// A climate for the whole map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ClimatePreset {
+    /// 18 C at sea level: dry grassland, savanna, and broadleaf forest.
+    Warm,
+    /// 11 C: broadleaf forest and grassland, taiga only on high ground.
+    Temperate,
+    /// 5 C: taiga and tundra on high ground.
+    Cool,
+    /// -2 C: taiga and tundra, glacier on high ground.
+    Cold,
+    /// 26 C: rainforest, savanna, and hot desert.
+    Tropical,
+}
+
+impl ClimatePreset {
+    /// The sea-level temperature at the middle of the map, in degrees C.
+    pub fn temperature(self) -> f64 {
+        match self {
+            ClimatePreset::Warm => 18.0,
+            ClimatePreset::Temperate => 11.0,
+            ClimatePreset::Cool => 5.0,
+            ClimatePreset::Cold => -2.0,
+            ClimatePreset::Tropical => 26.0,
         }
     }
 }

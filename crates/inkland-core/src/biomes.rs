@@ -37,6 +37,7 @@ pub const COLD_DESERT: u8 = 2;
 pub const TROPICAL_SEASONAL_FOREST: u8 = 5;
 pub const TEMPERATE_DECIDUOUS_FOREST: u8 = 6;
 pub const TAIGA: u8 = 9;
+pub const TUNDRA: u8 = 10;
 pub const GLACIER: u8 = 11;
 pub const WETLAND: u8 = 12;
 
@@ -135,6 +136,39 @@ pub fn biomes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_temperate_map_at_fifty_degrees_has_no_glacier_on_low_land() {
+        let biomes_of = |preset: serde_json::Value| {
+            let c: crate::config::Config = serde_json::from_value(serde_json::json!({
+                "version": 1, "seed": 4, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea",
+                           "climate": { "latitude_range": [48, 54], "preset": preset } }
+            }))
+            .unwrap();
+            let w = crate::world::World::build(&c).unwrap();
+            (0..w.grid.len())
+                .filter(|&k| (20.0..=50.0).contains(&w.heights[k]))
+                .map(|k| (w.heights[k], w.biomes[k]))
+                .collect::<Vec<_>>()
+        };
+        let cold = |v: &[(f64, u8)]| {
+            v.iter()
+                .filter(|(_, b)| matches!(*b, GLACIER | TAIGA | TUNDRA))
+                .count()
+        };
+        let fmg = biomes_of(serde_json::Value::Null);
+        assert!(cold(&fmg) > fmg.len() / 2, "FMG at 50 degrees is cold");
+        let temperate = biomes_of(serde_json::json!("temperate"));
+        assert!(temperate.iter().all(|(_, b)| *b != GLACIER));
+        assert!(
+            temperate
+                .iter()
+                .filter(|(h, _)| *h <= 35.0)
+                .all(|(_, b)| *b != TAIGA && *b != TUNDRA),
+            "no taiga or tundra on the plains"
+        );
+    }
 
     #[test]
     fn water_is_marine_and_cold_land_is_glacier() {
