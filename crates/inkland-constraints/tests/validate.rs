@@ -568,3 +568,29 @@ fn overlapping_regions_with_other_priorities_may_have_disjoint_ranges() {
     one(&regions(0), ErrorCode::RegionConflict, "/pins/regions/1");
     assert_eq!(codes(&regions(1)), vec![]);
 }
+
+#[test]
+fn expansionism_needs_a_capital_and_a_value_in_range() {
+    one(
+        &with(json!({ "pins": { "points": [
+            { "id": "a", "kind": "city", "at": [10, 10], "expansionism": 2 }
+        ] } })),
+        ErrorCode::ValueOutOfRange,
+        "/pins/points/0/expansionism",
+    );
+    for bad in [0.0, 0.05, 10.5] {
+        one(
+            &with(json!({ "pins": { "points": [
+                { "id": "a", "kind": "city", "at": [10, 10], "capital_of": "Realm",
+                  "expansionism": bad }
+            ] } })),
+            ErrorCode::ValueOutOfRange,
+            "/pins/points/0/expansionism",
+        );
+    }
+    let c = with(json!({ "pins": { "points": [
+        { "id": "a", "kind": "city", "at": [10, 10], "capital_of": "Realm", "expansionism": 0.1 },
+        { "id": "b", "kind": "city", "at": [50, 50], "capital_of": "Other", "expansionism": 10 }
+    ] } }));
+    assert_eq!(codes(&c), vec![]);
+}

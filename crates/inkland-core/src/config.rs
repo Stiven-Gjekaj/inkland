@@ -1040,6 +1040,14 @@ pub struct PointPin {
     /// arms.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_coa: Option<crate::emblems::Coa>,
+    /// How far the state of this capital (`capital_of`) grows, 0.1 to 10.
+    /// It divides the cost of each cell that the state takes, so a bigger
+    /// value gives a bigger state. It replaces the random expansionism of
+    /// `world.size_variety`. On a seat, it counts only when the capital
+    /// gives none. Default: random.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.1, max = 10.0))]
+    pub expansionism: Option<f64>,
 }
 
 /// Kinds of places.

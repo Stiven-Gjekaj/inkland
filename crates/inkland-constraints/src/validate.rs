@@ -566,6 +566,21 @@ impl<'a> Validator<'a> {
                 "state_coa needs capital_of: only a capital gives arms to a state",
             );
         }
+        if let Some(x) = pin.expansionism {
+            if pin.capital_of.is_none() {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/expansionism"),
+                    "expansionism needs capital_of: only a state grows",
+                );
+            } else if !(0.1..=10.0).contains(&x) {
+                self.err(
+                    ErrorCode::ValueOutOfRange,
+                    format!("{path}/expansionism"),
+                    "expansionism must be 0.1 to 10",
+                );
+            }
+        }
         for (key, coa) in [("coa", &pin.coa), ("state_coa", &pin.state_coa)] {
             for f in coa.iter().flat_map(inkland_core::emblems::validate) {
                 self.err(

@@ -7,7 +7,8 @@
 //!   so it can hold land on two sides of a sea.
 //! - States grow by least cost from their capitals with the costs of FMG:
 //!   culture, population, biome, height, river, and coast, divided by the
-//!   expansionism of the state. The growth stops at a total budget.
+//!   expansionism of the state. The growth stops at a total budget. A
+//!   capital pin can give the expansionism (inkland); else it is random.
 //! - `normalize` gives a lone cell to the state around it.
 //! - inkland: each land cell must be in a state. A land cell that no state
 //!   reaches takes the state of the nearest cell with a state.
@@ -52,7 +53,18 @@ pub fn create(
             .as_ref()
             .and_then(|id| config.pins.points.iter().find(|q| &q.id == id))
             .and_then(|q| q.capital_of.clone());
-        let expansionism = rn(rng.unit() * config.world.size_variety + 1.0, 1);
+        // inkland: the random value is always drawn, so that a given
+        // expansionism does not change the other states.
+        let random = rn(rng.unit() * config.world.size_variety + 1.0, 1);
+        let given = pinned.as_ref().and_then(|s| {
+            config
+                .pins
+                .points
+                .iter()
+                .filter(|q| q.capital_of.as_ref() == Some(s))
+                .find_map(|q| q.expansionism)
+        });
+        let expansionism = given.unwrap_or(random);
         let chain = &input.chains[p.culture as usize];
         let name = match pinned {
             Some(s) if !states.iter().any(|x| x.name == s) => s,
@@ -965,6 +977,39 @@ mod tests {
             World::build(&config("Realm")).unwrap().society.cell_state,
             s.cell_state
         );
+    }
+
+    #[test]
+    fn a_capital_pin_gives_the_expansionism_of_its_state() {
+        let config = |a: Option<f64>, b: Option<f64>| -> Config {
+            let mut c: Config = serde_json::from_value(json!({
+                "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea", "states": 4 },
+                "pins": { "points": [
+                    { "id": "west", "kind": "city", "at": [140, 150], "capital_of": "West" },
+                    { "id": "east", "kind": "city", "at": [260, 150], "capital_of": "East" }
+                ] }
+            }))
+            .unwrap();
+            c.pins.points[0].expansionism = a;
+            c.pins.points[1].expansionism = b;
+            c
+        };
+        let size = |w: &World, name: &str| {
+            let id = w.society.states.iter().find(|s| s.name == name).unwrap().id;
+            w.society.cell_state.iter().filter(|&&s| s == id).count()
+        };
+        let base = World::build(&config(None, None)).unwrap();
+        let big_west = World::build(&config(Some(6.0), Some(0.5))).unwrap();
+        let big_east = World::build(&config(Some(0.5), Some(6.0))).unwrap();
+        let exp =
+            |w: &World| -> Vec<f64> { w.society.states.iter().map(|s| s.expansionism).collect() };
+        assert_eq!(&exp(&big_west)[..2], &[6.0, 0.5]);
+        // The generated states keep their random expansionism.
+        assert_eq!(&exp(&big_west)[2..], &exp(&base)[2..]);
+        assert!(size(&big_west, "West") > size(&big_west, "East"));
+        assert!(size(&big_east, "East") > size(&big_east, "West"));
+        assert!(size(&big_west, "West") > size(&big_east, "West"));
     }
 
     fn state(id: u32, form: &str) -> crate::society::State {

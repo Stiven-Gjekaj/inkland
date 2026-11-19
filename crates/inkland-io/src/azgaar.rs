@@ -512,6 +512,7 @@ fn burgs(
             custom_kind: None,
             coa: None,
             state_coa: None,
+            expansionism: None,
         });
     }
     Ok((points, skipped))
