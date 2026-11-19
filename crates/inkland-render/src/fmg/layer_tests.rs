@@ -982,3 +982,88 @@ fn a_place_with_a_left_out_label_loses_its_symbol_in_both_modes() {
     let print = crate::svg::render(world(), &c, &c.variants[0]).svg;
     assert!(print.contains("<g id=\"place-port-town\">"));
 }
+
+/// A road of an overlay with three points and a corner at the middle.
+fn bent_road() -> inkland_core::roads::Road {
+    inkland_core::roads::Road {
+        id: 99,
+        pin: None,
+        overlay: Some("bend".into()),
+        kind: inkland_core::config::RoadKind::Road,
+        group: "roads",
+        name: None,
+        feature: 0,
+        cells: vec![0, 1, 2],
+        points: vec![[150.0, 150.0], [200.0, 120.0], [250.0, 150.0]],
+        length: 0.0,
+        stops: Vec::new(),
+        crossings: Vec::new(),
+    }
+}
+
+#[test]
+fn routes_draw_the_curve_of_the_core() {
+    let w = world_with(|w| w.roads.push(bent_road()));
+    let svg = render_world(&w, &[LayerName::Routes]);
+    let doc = roxmltree::Document::parse(&svg).unwrap();
+    let path = doc
+        .descendants()
+        .find(|e| e.attribute("id") == Some("route-bend"))
+        .expect("the road has a path");
+    let d = path.attribute("d").unwrap();
+    // One point on each sample of the curve: no corner at the middle.
+    let points = d.matches(['M', 'L']).count();
+    assert_eq!(points, 2 * inkland_core::curves::SAMPLES + 1);
+    assert!(!d.contains('C'));
+}
+
+#[test]
+fn hill_shading_goes_on_the_land_below_the_rivers() {
+    let svg = render_with(
+        &[LayerName::Landmass, LayerName::Rivers],
+        StyleName::Default,
+    );
+    let shade = svg
+        .find("id=\"hill-shading\"")
+        .expect("the land has shading");
+    let rivers = svg.find("<g id=\"rivers\"").expect("the map has rivers");
+    assert!(shade < rivers);
+    assert!(svg.contains("<filter id=\"hill-shading-blur\""));
+    assert!(svg.contains("id=\"hill-shade-1\""), "a slope is in shadow");
+    parse_and_draw(&svg);
+    // Without the land, or with the option off, there is no shading.
+    let svg = render_with(&[LayerName::Rivers], StyleName::Default);
+    assert!(!svg.contains("hill-shading"));
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Landmass, LayerName::Rivers];
+    c.render.hill_shading = false;
+    let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert!(!svg.contains("hill-shading"));
+}
+
+#[test]
+fn coast_echo_lines_follow_the_coast_in_the_sea() {
+    let svg = render_with(&[LayerName::Ocean, LayerName::Landmass], StyleName::Default);
+    let echo = svg
+        .find("id=\"coast-echo\"")
+        .expect("the sea has echo lines");
+    let land = svg.find("<g id=\"landmass\"").expect("the map has land");
+    assert!(echo < land, "the land covers the inner side of the lines");
+    let doc = roxmltree::Document::parse(&svg).unwrap();
+    let mask = doc
+        .descendants()
+        .find(|e| e.attribute("id") == Some("coastal-echo"))
+        .expect("the mask of the lines is in the defs");
+    // Two strokes for each line, and each stroke uses a feature path.
+    let strokes = mask
+        .descendants()
+        .filter(|e| e.has_tag_name("g") && e.attribute("stroke").is_some());
+    assert_eq!(strokes.count(), 2 * super::layers::shading::ECHO.len());
+    assert!(svg.contains("<path id=\"feature-"));
+    parse_and_draw(&svg);
+    let mut c = base_config();
+    c.render.layers = vec![LayerName::Ocean, LayerName::Landmass];
+    c.render.coast_echo = false;
+    let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
+    assert!(!svg.contains("coast-echo") && !svg.contains("coastal-echo"));
+}

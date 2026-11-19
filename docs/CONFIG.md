@@ -629,12 +629,15 @@ Render options for all variants.
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
+| `coast_echo` | boolean |  |  | Coast echo lines of `colour` mode. `true`: thin lines in the sea follow the coast. Each line is further from the last line and fainter. `print-safe` mode does not use it. |
 | `coastline` | [`CoastlineDetail`](#coastlinedetail) |  |  | Coastline detail. `smooth` cuts the corners of the cell edges. `fractal` adds the fractal detail of Azgaar's Fantasy Map Generator. Default: `smooth` in `print-safe` mode, `fractal` in `colour` mode. |
 | `emblems` | [`EmblemOptions`](#emblemoptions) |  |  | Options of the layer `emblems`. |
 | `extras` | [`Extras`](#extras) |  |  | Extras such as the scale bar and the compass. |
 | `font_sizes_pt` | [`FontSizes`](#fontsizes) |  |  | Font sizes, in points. |
 | `fonts` | [`Fonts`](#fonts) |  |  | Font families. The SVG names each family exactly as given here. The SVG never embeds a font. |
 | `fonts_allowed` | array of string |  | `["Caladea","Inter","IM Fell English","IM Fell English SC"]` | Font families that the SVG can use. A family in `fonts` that is not in this list is an error. |
+| `hand_drawn` | boolean |  |  | The hand-drawn look of `print-safe` mode. `true`: the lines have a small seeded wobble, rivers and coasts taper, and the dash patterns are less regular. No line becomes thinner than `min_line_width_pt`. `false`: the lines are exact. `colour` mode does not use it. |
+| `hill_shading` | boolean |  |  | Hill shading of `colour` mode. `true`: the land is darker on the slopes that turn away from a light in the north-west, and lighter on the slopes that turn to it. `print-safe` mode does not use it. |
 | `labels` | [`LabelRules`](#labelrules) |  |  | Rules for the labels of all variants. |
 | `layers` | array of [`LayerName`](#layername) |  | see the type | Layers to draw. In `print-safe` mode the layers are drawn in this order, from bottom to top. In `colour` mode the renderer draws them in the layer order of Azgaar's Fantasy Map Generator. A layer that is only for `colour` mode draws nothing in `print-safe` mode. |
 | `min_line_width_pt` | number |  | `0.5` | Smallest permitted line width, in points. |

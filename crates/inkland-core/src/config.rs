@@ -1424,6 +1424,22 @@ pub struct Render {
     /// Default: `smooth` in `print-safe` mode, `fractal` in `colour` mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coastline: Option<CoastlineDetail>,
+    /// The hand-drawn look of `print-safe` mode. `true`: the lines have a
+    /// small seeded wobble, rivers and coasts taper, and the dash patterns
+    /// are less regular. No line becomes thinner than `min_line_width_pt`.
+    /// `false`: the lines are exact. `colour` mode does not use it.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub hand_drawn: bool,
+    /// Hill shading of `colour` mode. `true`: the land is darker on the
+    /// slopes that turn away from a light in the north-west, and lighter on
+    /// the slopes that turn to it. `print-safe` mode does not use it.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub hill_shading: bool,
+    /// Coast echo lines of `colour` mode. `true`: thin lines in the sea
+    /// follow the coast. Each line is further from the last line and
+    /// fainter. `print-safe` mode does not use it.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub coast_echo: bool,
     /// Font families. The SVG names each family exactly as given here. The
     /// SVG never embeds a font.
     #[serde(default)]
@@ -1491,6 +1507,9 @@ impl Default for Render {
             style: StyleName::default(),
             style_overrides: BTreeMap::new(),
             coastline: None,
+            hand_drawn: true,
+            hill_shading: true,
+            coast_echo: true,
             fonts: Fonts::default(),
             fonts_allowed: default_fonts_allowed(),
             font_sizes_pt: FontSizes::default(),
@@ -2303,5 +2322,35 @@ mod tests {
         let c: Config = serde_json::from_value(v).unwrap();
         let again: Config = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
         assert_eq!(c, again);
+    }
+
+    #[test]
+    fn the_hand_drawn_look_is_on_by_default_and_can_be_turned_off() {
+        let c: Config = serde_json::from_value(minimal()).unwrap();
+        assert!(c.render.hand_drawn);
+        // The default is not written back.
+        let v = serde_json::to_value(&c).unwrap();
+        assert!(v["render"].get("hand_drawn").is_none());
+        let mut off = minimal();
+        off["render"] = json!({ "hand_drawn": false });
+        let c: Config = serde_json::from_value(off).unwrap();
+        assert!(!c.render.hand_drawn);
+        assert_eq!(
+            serde_json::to_value(&c).unwrap()["render"]["hand_drawn"],
+            false
+        );
+    }
+
+    #[test]
+    fn the_colour_effects_are_on_by_default_and_can_be_turned_off() {
+        let c: Config = serde_json::from_value(minimal()).unwrap();
+        assert!(c.render.hill_shading && c.render.coast_echo);
+        let mut off = minimal();
+        off["render"] = json!({ "hill_shading": false, "coast_echo": false });
+        let c: Config = serde_json::from_value(off).unwrap();
+        assert!(!c.render.hill_shading && !c.render.coast_echo);
+        let v = serde_json::to_value(&c).unwrap();
+        assert_eq!(v["render"]["hill_shading"], false);
+        assert_eq!(v["render"]["coast_echo"], false);
     }
 }

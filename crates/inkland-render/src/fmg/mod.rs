@@ -319,8 +319,21 @@ pub fn render(
 ) -> String {
     let ctx = Ctx::new(world, config, variant, page, labels);
     let mut body = String::new();
+    // The hill shading needs the land, and it goes below the first layer
+    // that is above it.
+    let mut shaded = !ctx.has(LayerName::Landmass);
     for layer in &ctx.layers {
+        if !shaded && layers::above_hill_shading(*layer) {
+            layers::shading::hills(&mut body, &ctx);
+            shaded = true;
+        }
         layers::write(&mut body, &ctx, *layer);
+        if *layer == LayerName::Ocean {
+            layers::shading::echo(&mut body, &ctx);
+        }
+    }
+    if !shaded {
+        layers::shading::hills(&mut body, &ctx);
     }
     layers::write_extras(&mut body, &ctx);
     let body = dedupe_attrs(&body);

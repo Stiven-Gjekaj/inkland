@@ -16,8 +16,9 @@
 //! one side of a leg, at a distance that a search finds so that the length
 //! is in the tolerance. The search tries the longest leg first, and on each
 //! leg the middle first, then the quarter points. The points of a pinned road move in
-//! their cells to cut the zigzag between cell sites, and the length is the
-//! length of that line. A road that is too long cannot become
+//! their cells to cut the zigzag between cell sites. The drawn line is a
+//! smooth curve through these points (`curves::road_line`), and the
+//! length is the length of that curve. A road that is too long cannot become
 //! shorter; the report gives its real length, and its check fails.
 //!
 //! Then a network of generated roads joins the capitals of each landmass
@@ -122,10 +123,6 @@ fn dist(a: [f64; 2], b: [f64; 2]) -> f64 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt()
 }
 
-fn line_length(points: &[[f64; 2]]) -> f64 {
-    points.windows(2).map(|w| dist(w[0], w[1])).sum()
-}
-
 /// The points of a pinned road. Each point moves in its cell toward the
 /// middle of its two neighbours, so that the line has no zigzag between
 /// the cell sites. The ends and the cells of places do not move.
@@ -165,9 +162,17 @@ fn taut_line(grid: &Grid, cells: &[usize], fixed: &dyn Fn(usize) -> bool) -> Vec
     points
 }
 
-/// The length of a pinned road along its taut points.
+/// The length of a pinned road along the drawn curve of its taut points.
 fn path_length(input: &Input, cells: &[usize]) -> f64 {
-    line_length(&taut_points(input, cells))
+    drawn_length(input.config.seed, &taut_points(input, cells))
+}
+
+/// The length of the drawn curve through the points of a road.
+pub fn drawn_length(seed: u64, points: &[[f64; 2]]) -> f64 {
+    crate::curves::line_length(&crate::curves::road_line(
+        crate::curves::wander_seed(seed),
+        points,
+    ))
 }
 
 /// The passes of `taut_points`.
@@ -336,7 +341,8 @@ pub fn keep_corridors(
         let needed = match search_through(grid, &stops, &step) {
             None => true,
             Some(cells) => pin.target_length.is_some_and(|t| {
-                line_length(&taut_line(grid, &cells, &fixed)) > t * (1.0 + pin.tolerance)
+                drawn_length(config.seed, &taut_line(grid, &cells, &fixed))
+                    > t * (1.0 + pin.tolerance)
             }),
         };
         if !needed {
@@ -636,9 +642,13 @@ pub(crate) fn finish(
     } else {
         cells.iter().map(|&c| grid.points[c]).collect()
     };
+    // The length along the drawn curve, at each point of the road.
+    let curve = crate::curves::road_line(crate::curves::wander_seed(input.config.seed), &points);
     let mut along = vec![0.0; cells.len()];
     for i in 1..cells.len() {
-        along[i] = along[i - 1] + dist(points[i - 1], points[i]);
+        let a = (i - 1) * crate::curves::SAMPLES;
+        let b = i * crate::curves::SAMPLES;
+        along[i] = along[i - 1] + crate::curves::line_length(&curve[a..=b]);
     }
     let length = along.last().copied().unwrap_or(0.0);
 
@@ -865,13 +875,16 @@ mod tests {
                 "{cells} cells: length {}",
                 r.length
             );
-            // The length is the length of the drawn line.
-            let drawn: f64 = r
-                .points
+            // The length is the length of the drawn curve, and the curve is
+            // longer than the straight segments between the points.
+            use crate::curves::{line_length, road_line, wander_seed};
+            let curve = road_line(wander_seed(book(cells).seed), &r.points);
+            let drawn: f64 = curve
                 .windows(2)
                 .map(|p| ((p[0][0] - p[1][0]).powi(2) + (p[0][1] - p[1][1]).powi(2)).sqrt())
                 .sum();
             assert!((drawn - r.length).abs() < 1e-9);
+            assert!(line_length(&r.points) < r.length);
             assert_eq!(*r.points.first().unwrap(), [150.0, 120.0]);
             assert_eq!(*r.points.last().unwrap(), [22.0, 180.0]);
         }

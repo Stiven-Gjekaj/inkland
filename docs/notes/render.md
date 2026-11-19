@@ -32,7 +32,7 @@ These notes describe `render.mode: "colour"`. The code is in
 | biomes, states, provinces, cultures, religions | `draw-*.ts`, `isoline-fills.ts` | Cell areas with a water gap stroke, through the land mask. States have a blurred halo. |
 | zones | `draw-zones.ts`, `hatches.ts` | The zones of `World::zones`, filled with the FMG hatch patterns. |
 | borders | `draw-borders.ts` | Straight lines along the cell edges. |
-| routes | `draw-routes.ts` | Catmull-Rom curves (alpha 0.1). Shared stretches of the network are drawn once. |
+| routes | `draw-routes.ts` | The drawn curves of the core (`curves::road_line`): a centripetal Catmull-Rom spline with a small seeded wander. Shared stretches of the network are drawn once. |
 | rivers | `draw-rivers.ts`, `river-generator.ts` | Meandering and the width outline of FMG, with the width factor and source width of each river. |
 | relief | `draw-relief-icons.ts`, `relief-generator.ts` | Poisson-disc placement with the FMG rules and biome pools; the 5 icon sets. Icons under a label are left out. |
 | burg icons | `draw-burg-icons.ts` | Icon and anchor groups by kind. |
@@ -51,6 +51,22 @@ These notes describe `render.mode: "colour"`. The code is in
 | scale bar, vignette, legend | `draw-scalebar.ts`, `draw-vignette.ts`, `draw-legend.ts` | The legend lists the states, cultures, religions, or biomes. |
 | labels | `labels-renderer.ts`, `label-groups.ts` | The inkland placer, with the fonts, colours, and case of the label groups. |
 
+## Effects of inkland
+
+FMG does not have these effects. The code is in
+`crates/inkland-render/src/fmg/layers/shading.rs`.
+
+- `render.hill_shading` (default `true`): the land is darker on the
+  slopes that turn away from a light in the north-west, and lighter on
+  the slopes that turn to it. Each cell of the second grid gets the
+  gradient of a least-squares plane through its neighbours. The shade has
+  6 dark steps and 3 light steps, blurred, through the land mask. It goes
+  above the land colours and below the rivers.
+- `render.coast_echo` (default `true`): 4 thin lines in the sea follow
+  the coast at 0.7, 1.65, 2.85, and 4.3 mm, each fainter than the last.
+  The colour is the colour of the sea, darker. A mask of strokes of the
+  coast holds the lines, so the lines of two near islands join.
+
 ## What differs from FMG
 
 - Labels keep the placer and the font sizes of inkland. A CSS
@@ -66,6 +82,9 @@ These notes describe `render.mode: "colour"`. The code is in
   `"applicable": false` in colour mode.
 - The texture and the ocean pattern are data URIs in the SVG, so the file
   has all that it needs.
+- Roads are smooth curves with a small seeded wander, not the
+  Catmull-Rom curves of FMG. Both modes draw the same curve, and the
+  report measures the length of the road along it.
 - Not done: the trade animation (the SVG is still) and the fogging layer.
 
 ## Print-safe mode
@@ -78,3 +97,23 @@ These notes describe `render.mode: "colour"`. The code is in
   drawings. `emblems` has a drawing with hatching when
   `render.emblems.hatching` is `true`. The other new layers draw nothing.
 - The river width comes from `River::width`, the FMG width.
+- Roads are the same curves as in colour mode, with the dashes of a road
+  or a trail.
+- `render.hand_drawn` (default `true`) gives the lines a hand-drawn look:
+  - A seeded wobble of up to 0.16 mm moves each coast, water line, river,
+    border, and road a little to each side. The ends of an open line do
+    not move.
+  - Rivers and coasts are in pieces of about 4 mm, each with its own
+    width. A river becomes wider from 45 percent of its mouth width at
+    its source to its mouth width. A coast is from 70 to 130 percent of
+    its width along its length.
+  - Each dash and each gap of a road or a border changes by up to 30
+    percent. Each line has its own pattern.
+  - No line is thinner than `min_line_width_pt`, and the print checks
+    pass. The code is in `crates/inkland-render/src/hand.rs`.
+  - Set it to `false` for exact lines.
+- The water lines follow the coast at 0.7, 1.5, 2.6, and 4.0 mm, so the
+  gaps grow out to sea. They come from the distance to the land on a
+  raster of the map (at least 0.2 mm a pixel), with marching squares. The
+  lines of two near islands join. The code is in
+  `crates/inkland-render/src/water.rs`.

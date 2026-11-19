@@ -3,7 +3,7 @@
 //! `path-utils.ts`).
 
 use super::super::Ctx;
-use super::super::geom::{catmull_rom, catmull_rom_into, n};
+use super::super::geom::{catmull_rom, catmull_rom_into, line_path, n};
 use inkland_core::config::RoadKind;
 use inkland_core::rivers::Mouth;
 use std::collections::BTreeSet;
@@ -50,12 +50,21 @@ pub fn borders(s: &mut String, ctx: &Ctx) {
     s.push_str("</g>\n");
 }
 
-/// Roads and trails: Catmull-Rom curves through the cells of each route
-/// (`drawRoutes`, `Routes.getPath`). The generated network draws each
-/// shared stretch once.
+/// Roads and trails: the drawn curves of the core, with their seeded
+/// wander (`curves::road_line`), through the cells of each route. FMG
+/// draws a Catmull-Rom curve here (`drawRoutes`, `Routes.getPath`). The
+/// generated network draws each shared stretch once.
 pub fn routes(s: &mut String, ctx: &Ctx) {
     let w = ctx.world;
     let cfg = ctx.config;
+    let seed = inkland_core::curves::wander_seed(cfg.seed);
+    let curve = |pts: &[[f64; 2]]| -> String {
+        let line: Vec<[f64; 2]> = inkland_core::curves::road_line(seed, pts)
+            .into_iter()
+            .map(|p| ctx.p(p))
+            .collect();
+        line_path(&line)
+    };
     let mut pinned_edges: BTreeSet<(usize, usize)> = BTreeSet::new();
     let mut named: Vec<(String, RoadKind, String)> = Vec::new();
     for r in &w.roads {
@@ -67,9 +76,8 @@ pub fn routes(s: &mut String, ctx: &Ctx) {
         for e in r.cells.windows(2) {
             pinned_edges.insert((e[0].min(e[1]), e[0].max(e[1])));
         }
-        let pts: Vec<[f64; 2]> = r.points.iter().map(|&p| ctx.p(p)).collect();
-        if pts.len() >= 2 {
-            named.push((format!("route-{id}"), r.kind, catmull_rom(&pts, 0.1)));
+        if r.points.len() >= 2 {
+            named.push((format!("route-{id}"), r.kind, curve(&r.points)));
         }
     }
     named.sort_by(|a, b| a.0.cmp(&b.0));
@@ -102,11 +110,10 @@ pub fn routes(s: &mut String, ctx: &Ctx) {
         let list: Vec<(u32, u32)> = edges.iter().map(|&(a, b)| (a as u32, b as u32)).collect();
         let mut d = String::new();
         for line in inkland_core::borders::chain_edges(&list) {
-            let pts: Vec<[f64; 2]> = line
-                .iter()
-                .map(|&c| ctx.p(w.grid.points[c as usize]))
-                .collect();
-            d.push_str(&catmull_rom(&pts, 0.1));
+            let pts: Vec<[f64; 2]> = line.iter().map(|&c| w.grid.points[c as usize]).collect();
+            if pts.len() >= 2 {
+                d.push_str(&curve(&pts));
+            }
         }
         if !d.is_empty() {
             network.push((kind, d));

@@ -246,6 +246,9 @@ exit code 3 and a specific error code.
    blocked. Cells of other pinned roads cost less, so roads share a path.
 2. Path: A* from `from` through each `via` to `to`.
 3. Length control: the router computes the path length in config units.
+   The length is the length of the drawn road: a smooth curve through the
+   points of the path, with a small seeded wander (`curves::road_line`).
+   The renderers draw this curve in both modes.
    - If the path is too short, the router adds detour cost or a meander
      until the length is in `target * (1 +- tolerance)`.
    - If the shortest path is still too long, the router cannot shorten it.

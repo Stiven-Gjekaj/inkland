@@ -586,12 +586,17 @@ pub fn network(input: &Input, river_of: &[u32], roads: &mut Vec<Road>) -> Vec<Ro
             road.group = group_name;
             road.feature = feature;
             road.name = route_name(group_name, &route_cells, soc, &net.burg, &mut rng);
-            road.length = points
-                .windows(2)
-                .map(|w: &[[f64; 2]]| {
-                    ((w[0][0] - w[1][0]).powi(2) + (w[0][1] - w[1][1]).powi(2)).sqrt()
-                })
-                .sum();
+            road.length = if group_name == "searoutes" {
+                points
+                    .windows(2)
+                    .map(|w: &[[f64; 2]]| {
+                        ((w[0][0] - w[1][0]).powi(2) + (w[0][1] - w[1][1]).powi(2)).sqrt()
+                    })
+                    .sum()
+            } else {
+                // A road is drawn as a curve through its points.
+                crate::roads::drawn_length(input.config.seed, &points)
+            };
             road.points = points;
             if group_name == "searoutes" {
                 road.crossings.clear();
