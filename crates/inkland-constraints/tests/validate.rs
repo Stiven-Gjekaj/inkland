@@ -810,3 +810,13 @@ fn a_claim_needs_a_capital_and_a_valid_polygon() {
     );
     assert_eq!(codes(&pin(true, square)), vec![]);
 }
+
+#[test]
+fn relief_hide_in_names_region_pins() {
+    let c = with(json!({
+        "pins": { "regions": [{ "id": "fen", "kind": "marsh", "box": [10, 10, 60, 60] }] },
+        "variants": [{ "name": "old", "page": { "w_mm": 100, "h_mm": 100 },
+                       "relief": { "hide_in": ["fen", "moor"] } }]
+    }));
+    one(&c, ErrorCode::RefUnknown, "/variants/0/relief/hide_in/1");
+}

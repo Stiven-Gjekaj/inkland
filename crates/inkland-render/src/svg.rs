@@ -106,7 +106,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
                 "depth-lines" => write_depth_lines(&mut s, world, config, &page, min),
                 "water-lines" => write_water_lines(&mut s, world, &page, min, hand),
                 "coast" => write_coast(&mut s, world, config, &page, coast_w, hand),
-                "relief" => write_relief(&mut s, world, config, &page, min, &labels),
+                "relief" => write_relief(&mut s, world, config, variant, &page, min, &labels),
                 "rivers" => write_rivers(&mut s, world, config, variant, &page, hand),
                 "borders" => write_borders(&mut s, world, config, &page, hand),
                 "roads" => write_roads(&mut s, world, config, &page, hand),
@@ -355,15 +355,22 @@ fn write_relief(
     s: &mut String,
     world: &World,
     config: &Config,
+    variant: &Variant,
     page: &Page,
     min: f64,
     labels: &crate::labels::Labels,
 ) {
     use crate::decor::Symbol;
-    // A symbol under a label is left out, so that the text stays clear.
-    let symbols: Vec<_> = crate::decor::relief(world, page, config.seed, &config.render.relief)
+    // A symbol under a label is left out, so that the text stays clear. The
+    // regions in `hide_in` of the relief options of the variant show none.
+    let hidden = config.relief_hidden_areas(variant);
+    let symbols: Vec<_> = crate::decor::relief(world, page, config.seed, config.relief_of(variant))
         .into_iter()
         .filter(|(_, p, _)| !labels.covers(*p, 1.0))
+        .filter(|(_, p, _)| {
+            let w = page.to_world(*p);
+            !hidden.iter().any(|a| a.contains(w))
+        })
         .collect();
     let _ = writeln!(
         s,

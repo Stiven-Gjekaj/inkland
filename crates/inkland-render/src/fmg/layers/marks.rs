@@ -188,8 +188,7 @@ pub fn relief_icons(ctx: &Ctx) -> Vec<ReliefIcon> {
     let mut out = Vec::new();
     let terrain = ctx
         .config
-        .render
-        .relief
+        .relief_of(ctx.variant)
         .terrain
         .then(|| crate::decor::relief_terrain(w));
     if let Some(t) = &terrain {
@@ -335,6 +334,16 @@ pub fn relief_icons(ctx: &Ctx) -> Vec<ReliefIcon> {
                 }
             }
         }
+    }
+    // The regions in `hide_in` of the relief options of the variant show no
+    // symbols. The middle of an icon, in map pixels, is a world point times
+    // `up`.
+    let hidden = ctx.config.relief_hidden_areas(ctx.variant);
+    if !hidden.is_empty() {
+        out.retain(|i| {
+            let p = [(i.x + i.s / 2.0) / up, (i.y + i.s / 2.0) / up];
+            !hidden.iter().any(|a| a.contains(p))
+        });
     }
     out
 }

@@ -1598,6 +1598,11 @@ pub struct Variant {
     /// `render.extras`.
     #[serde(default)]
     pub extras: Extras,
+    /// The relief symbols of this variant. A value here replaces
+    /// `render.relief` for this variant, for example to leave out a forest
+    /// or a marsh on the map of another age.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relief: Option<ReliefOptions>,
 }
 
 /// A page size.
@@ -1800,6 +1805,11 @@ pub struct ReliefOptions {
     /// placement of Azgaar's Fantasy Map Generator. Default `true`.
     #[serde(skip_serializing_if = "is_true")]
     pub terrain: bool,
+    /// Both render modes. The ids of region pins. The relief symbols inside
+    /// these regions are left out, for example the marsh of a fen that a
+    /// map of an older age does not show.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub hide_in: Vec<String>,
 }
 
 impl Default for ReliefOptions {
@@ -1808,6 +1818,7 @@ impl Default for ReliefOptions {
             density: 1.0,
             hide: Vec::new(),
             terrain: true,
+            hide_in: Vec::new(),
         }
     }
 }
@@ -1888,6 +1899,23 @@ impl LabelRules {
 }
 
 impl Config {
+    /// The relief options of a variant: its own, or `render.relief`.
+    pub fn relief_of<'a>(&'a self, variant: &'a Variant) -> &'a ReliefOptions {
+        variant.relief.as_ref().unwrap_or(&self.render.relief)
+    }
+
+    /// The shapes of the regions in `hide_in` of the relief options of a
+    /// variant.
+    pub fn relief_hidden_areas(&self, variant: &Variant) -> Vec<crate::geom::Shape> {
+        let ids = &self.relief_of(variant).hide_in;
+        self.pins
+            .regions
+            .iter()
+            .filter(|r| ids.contains(&r.id))
+            .filter_map(crate::geom::Shape::of)
+            .collect()
+    }
+
     /// The names that the config writes, in lower case. A label with
     /// another name has a generated name (`LabelRules`).
     pub fn written_names(&self) -> std::collections::BTreeSet<String> {
@@ -2425,6 +2453,7 @@ fn default_variants() -> Vec<Variant> {
             margin_mm: 0.0,
         },
         extras: Extras::default(),
+        relief: None,
     }]
 }
 

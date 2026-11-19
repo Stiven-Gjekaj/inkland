@@ -1152,3 +1152,69 @@ fn relief_icons_of(c: &Config) -> Vec<super::layers::marks::ReliefIcon> {
     let ctx = Ctx::new(world(), c, &c.variants[0], &page, &labels);
     super::layers::marks::relief_icons(&ctx)
 }
+
+#[test]
+fn a_variant_can_leave_out_the_relief_of_a_region_in_both_modes() {
+    // The region only names an area for the relief options here.
+    let mut c = base_config();
+    c.pins.regions = serde_json::from_value(json!([
+        { "id": "fen", "kind": "marsh", "box": [100, 50, 300, 250] }
+    ]))
+    .unwrap();
+    let inside = |p: [f64; 2]| p[0] >= 100.0 && p[0] <= 300.0 && p[1] >= 50.0 && p[1] <= 250.0;
+    // Colour mode: the relief icons.
+    let up = {
+        let page = crate::page::Page::new(&c, &c.variants[0]);
+        super::geom::Px::new(&page, c.frame.width, c.frame.height).unit_px
+    };
+    let colour_in = |c: &Config| {
+        relief_icons_of(c)
+            .iter()
+            .filter(|i| inside([(i.x + i.s / 2.0) / up, (i.y + i.s / 2.0) / up]))
+            .count()
+    };
+    assert!(colour_in(&c) > 0, "the area has relief");
+    let mut hidden = c.clone();
+    hidden.variants[0].relief = Some(inkland_core::config::ReliefOptions {
+        hide_in: vec!["fen".into()],
+        ..Default::default()
+    });
+    assert_eq!(colour_in(&hidden), 0);
+    assert!(
+        !relief_icons_of(&hidden).is_empty(),
+        "the rest keeps its relief"
+    );
+    // Print-safe mode: the relief symbols, by the first point of each path.
+    let print_in = |c: &Config| {
+        let mut c = c.clone();
+        c.render.mode = RenderMode::PrintSafe;
+        c.render.layers = vec![LayerName::Relief];
+        let svg = crate::svg::render(world(), &c, &c.variants[0]).svg;
+        let page = crate::page::Page::new(&c, &c.variants[0]);
+        let g = &svg[svg.find("<g id=\"relief\"").unwrap()..];
+        let g = &g[..g.find("</g>").unwrap()];
+        g.split("d=\"M")
+            .skip(1)
+            .filter_map(|d| {
+                let mut it = d.split(|ch: char| {
+                    ch == ' '
+                        || ch == 'L'
+                        || ch == 'a'
+                        || ch == 'Q'
+                        || ch == 'h'
+                        || ch == 'v'
+                        || ch == 'M'
+                        || ch == ','
+                });
+                let x: f64 = it.next()?.parse().ok()?;
+                let y: f64 = it.next()?.parse().ok()?;
+                Some(page.to_world([x, y]))
+            })
+            // A path starts up to 1.6 mm from the middle of its symbol, so
+            // count only well inside the region.
+            .filter(|&p| p[0] >= 110.0 && p[0] <= 290.0 && p[1] >= 60.0 && p[1] <= 240.0)
+            .count()
+    };
+    assert!(print_in(&c) > 0, "the area has relief in print-safe mode");
+    assert_eq!(print_in(&hidden), 0);
+}
