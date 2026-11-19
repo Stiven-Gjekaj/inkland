@@ -83,3 +83,16 @@ These notes describe `render.mode: "colour"`. The code is in
 - The river width comes from `River::width`, the FMG width.
 - Roads are the same curves as in colour mode, with the dashes of a road
   or a trail.
+- `render.hand_drawn` (default `true`) gives the lines a hand-drawn look:
+  - A seeded wobble of up to 0.16 mm moves each coast, water line, river,
+    border, and road a little to each side. The ends of an open line do
+    not move.
+  - Rivers and coasts are in pieces of about 4 mm, each with its own
+    width. A river becomes wider from 45 percent of its mouth width at
+    its source to its mouth width. A coast is from 70 to 130 percent of
+    its width along its length.
+  - Each dash and each gap of a road or a border changes by up to 30
+    percent. Each line has its own pattern.
+  - No line is thinner than `min_line_width_pt`, and the print checks
+    pass. The code is in `crates/inkland-render/src/hand.rs`.
+  - Set it to `false` for exact lines.
