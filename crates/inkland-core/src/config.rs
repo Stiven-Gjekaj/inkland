@@ -155,6 +155,13 @@ pub struct World {
     /// frame as land except the pinned seas. Default `false`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub fill_land: bool,
+    /// `true`: the water of the template and the brushes gets deep: each
+    /// height below sea level becomes 0.4 of it. The hills of the seabed
+    /// then do not show as pale shallows in open ocean. The pinned `sea`
+    /// and `lake` regions keep their own depth, and their `shelf` makes the
+    /// shallow water along a coast. Default `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub deep_sea: bool,
     /// The most rivers that generation keeps, besides the pinned rivers.
     /// It keeps the rivers with the most water. 0: only the pinned rivers.
     /// Default: all rivers.
@@ -827,6 +834,7 @@ impl Default for World {
             sea_level: default_sea_level(),
             river_limit: None,
             fill_land: false,
+            deep_sea: false,
             lake_elevation_limit: default_lake_elevation_limit(),
             climate: Climate::default(),
             cultures: default_cultures(),

@@ -199,6 +199,13 @@ impl World {
             sea_level,
             crate::noise::Fractal::seed_of(tree.part_seed(Layer::Terrain, "edges")),
         );
+        if config.world.deep_sea {
+            // The seabed of the template sinks, so that its hills do not
+            // show as shallows in open ocean.
+            for h in base_heights.iter_mut().filter(|h| **h < sea_level) {
+                *h = (*h * 0.4).trunc();
+            }
+        }
         if config.world.fill_land {
             // Water becomes low land: a deeper sea gives a little higher
             // land, so the land keeps some form. The sea regions below
@@ -1008,6 +1015,40 @@ mod pin_tests {
         let (x, y) = (at[0].as_f64().unwrap(), at[1].as_f64().unwrap());
         assert!((x - 200.0).powi(2) + (y - 150.0).powi(2) <= 40.0 * 40.0);
         assert!(World::build(&make(true)).is_ok());
+    }
+
+    #[test]
+    fn deep_sea_sinks_the_seabed_of_the_template() {
+        let make = |deep: bool| -> Config {
+            serde_json::from_value(json!({
+                "version": 1, "seed": 8, "frame": { "width": 400, "height": 300 },
+                "world": { "cells": 3000, "template": "archipelago", "deep_sea": deep }
+            }))
+            .unwrap()
+        };
+        let shallow = |w: &World| {
+            (0..w.base.grid.len())
+                .filter(|&c| {
+                    // Open ocean: a later stage sets the water next to the
+                    // coast just below sea level.
+                    let f = &w.base.features;
+                    f.get(f.of_cell[c]).kind == FeatureKind::Ocean
+                        && w.base.heights[c] > 8.0
+                        && !w.base.grid.neighbors(c).any(|m| f.is_land(m))
+                })
+                .count()
+        };
+        let plain = World::build(&make(false)).unwrap();
+        assert!(shallow(&plain) > 100, "the archipelago has ocean shallows");
+        let deep = World::build(&make(true)).unwrap();
+        assert_eq!(shallow(&deep), 0);
+        // The land does not change.
+        let land = |w: &World| {
+            (0..w.base.grid.len())
+                .filter(|&c| w.base.features.is_land(c))
+                .count()
+        };
+        assert_eq!(land(&plain), land(&deep));
     }
 
     #[test]

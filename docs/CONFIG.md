@@ -880,6 +880,7 @@ Generation options.
 | `climate` | [`Climate`](#climate) |  |  | Climate options. |
 | `culture_set` | string |  | `"european"` | Name of the culture set: `world`, `european`, `oriental`, `english`, `antique`, `high-fantasy`, `dark-fantasy`, or `random`. |
 | `cultures` | integer |  | `6` | Number of cultures. |
+| `deep_sea` | boolean |  |  | `true`: the water of the template and the brushes gets deep: each height below sea level becomes 0.4 of it. The hills of the seabed then do not show as pale shallows in open ocean. The pinned `sea` and `lake` regions keep their own depth, and their `shelf` makes the shallow water along a coast. Default `false`. |
 | `default_ruler` | boolean |  |  | `false`: no default ruler across the largest landmass. |
 | `edges` | [`FrameEdges`](#frameedges) |  |  | Land or sea along each frame edge, applied after the brushes and before the pins. Default: the template decides. |
 | `emblem_shape` | string |  |  | The shield shape of the coats of arms: `culture` (the shield of the culture of each item, as Azgaar's Fantasy Map Generator does), `state` (the shield of the state), `random` (a random shield for each culture), or one shield name for all, for example `heater`, `spanish`, `round`, or `banner`. |
