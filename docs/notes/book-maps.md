@@ -155,3 +155,58 @@ is a white box behind it, so the lines do not cross the text. A label on a
 path, such as a river name, has no box. `render.labels.halo: false` draws
 no boxes. The print check `no_text_stroke` fails when any text has a
 stroke, because a PDF printer turns stroked text into a Type 3 font.
+
+## A rough coast with places on it
+
+A rough sea or land outline keeps each pinned place where the config puts
+it: the noise fades to 0 near each point pin and each place of an overlay.
+So a coast town stays on the coast, and a large `roughness` is safe.
+
+## The main river
+
+```json
+{ "id": "river-dunn", "name": "The River Dunn", "main": true, ... }
+```
+
+`main: true` on a pinned river gives it at least the water flow and the
+width of the largest other river, so it is drawn at least as wide.
+
+## Relief for each map
+
+```json
+"variants": [
+  { "name": "ostrey-then", "relief": { "density": 0.6, "hide_in": ["low-fen"] }, ... }
+]
+```
+
+- `relief` on a variant replaces `render.relief` for that map.
+- `hide_in` lists region pins whose relief symbols the map leaves out, in
+  both render modes. One shared terrain can then show a marsh or a forest
+  on the map of one age only.
+
+## Fields on farmland
+
+In `print-safe` mode, small fields with furrows stand on open grassland in
+the lowland near the places. `"hide": ["field"]` in the relief options
+leaves them out.
+
+## A state on two shores
+
+A state with a seat on other land (two pins with the same `capital_of`)
+gets a label on each part. The label of a seat part has the key of the
+seat pin in the overlay label options, for example `state:east-lassiter`.
+
+## Sea labels
+
+- A label with `at` gets the size that the placer gives it without `at`.
+- A sea label that finds no place, for example in a narrow strait, goes on
+  the deepest water of its sea, smaller if needed.
+- `world.deep_sea: true` sinks the seabed of the template, so its hills do
+  not show as shallows in open ocean.
+
+## Fonts of the styles
+
+Georgia and Times New Roman have no free license, so inkland cannot bundle
+them. A style that names one writes a list, for example
+`Georgia, Caladea, serif`: a system with Georgia uses it, and the preview
+uses the bundled Caladea.
