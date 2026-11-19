@@ -332,6 +332,11 @@ pub fn clamp_regions(
         let range = inside.iter().skip(1).fold(first.range, |[lo, hi], r| {
             [lo.max(r.range[0]), hi.min(r.range[1])]
         });
+        // The first grid made the cells of a `land` region land. Water
+        // there now is a port channel, which stays.
+        if heights[c] < sea_level && inside.iter().all(|r| r.lift) {
+            continue;
+        }
         let h = if inside.iter().all(|r| r.land_only) {
             land_height(heights[c], sea_level, inside.iter().any(|r| r.lift))
         } else {
@@ -360,7 +365,14 @@ pub fn apply_points(
     sea_level: f64,
 ) -> Result<(), Error> {
     let n = grid.len();
-    let in_land_region = |c: usize| forced_land(regions, grid.points[c]);
+    // A `land` region without a height only asks for land, so a channel
+    // can cut its coast. Other land regions keep the channel out.
+    let in_land_region = |c: usize| {
+        let rule = ruling_at(regions, grid.points[c]);
+        !rule.is_empty()
+            && rule.iter().all(|r| !r.pin.kind.is_water())
+            && !rule.iter().all(|r| r.lift)
+    };
 
     // Cells that a port channel must not make water.
     let mut keep_land = vec![false; n];
@@ -685,6 +697,22 @@ mod tests {
                 assert_eq!(h, 2.0, "deep {h} at {x}");
             }
         }
+    }
+
+    #[test]
+    fn a_port_channel_can_cut_through_a_land_region() {
+        let c: Config = serde_json::from_value(json!({
+            "version": 1, "seed": 4, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": { "steps": [] } },
+            "pins": {
+                "points": [{ "id": "haven", "kind": "town", "at": [80, 100], "port": true }],
+                "regions": [{ "id": "maeris", "kind": "land", "box": [60, 40, 240, 160] }]
+            }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        let port = w.pin_cells[0];
+        assert!(w.grid.neighbors(port).any(|m| w.heights[m] < 20.0));
     }
 
     fn regions(v: serde_json::Value) -> Vec<RegionPin> {
