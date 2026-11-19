@@ -47,6 +47,69 @@ pub fn chaikin(points: &[[f64; 2]], closed: bool, rounds: usize) -> Vec<[f64; 2]
     pts
 }
 
+/// The terrain of the cells of the second grid, for the relief symbols of
+/// both render modes (`render.relief.terrain`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReliefTerrain {
+    /// A ridge cell: a hill or mountain cell that is higher than all of its
+    /// neighbors but two, so it is on a crest line.
+    pub ridge: Vec<bool>,
+    /// A foot cell: a land cell next to a ridge cell, not itself a ridge.
+    pub foot: Vec<bool>,
+    /// How high a land cell is, 0 at 15 above sea level to 1 at 55 above.
+    pub crest: Vec<f64>,
+    /// Fractal noise from -1 to 1 with features of about 7 cells, so that
+    /// forests grow in groups.
+    pub clump: Vec<f64>,
+}
+
+/// The height above sea level, from which a crest cell is a ridge.
+pub const RIDGE_HEIGHT: f64 = 15.0;
+
+/// The terrain of a world for the relief symbols. The noise of the groups
+/// comes from the `decoration` layer of the seed tree.
+pub fn relief_terrain(world: &World) -> ReliefTerrain {
+    let g = &world.grid;
+    let n = g.len();
+    let sea = world.sea_level;
+    let land = |c: usize| world.features.is_land(c);
+    let mut ridge = vec![false; n];
+    for (c, r) in ridge.iter_mut().enumerate() {
+        let h = world.heights[c];
+        if !land(c) || h < sea + RIDGE_HEIGHT {
+            continue;
+        }
+        let (mut count, mut lower) = (0, 0);
+        for m in g.neighbors(c) {
+            count += 1;
+            if world.heights[m] < h {
+                lower += 1;
+            }
+        }
+        *r = count > 0 && lower + 2 >= count;
+    }
+    let foot: Vec<bool> = (0..n)
+        .map(|c| land(c) && !ridge[c] && g.neighbors(c).any(|m| ridge[m]))
+        .collect();
+    let crest: Vec<f64> = (0..n)
+        .map(|c| ((world.heights[c] - sea - RIDGE_HEIGHT) / 40.0).clamp(0.0, 1.0))
+        .collect();
+    let spacing = (world.width * world.height / n.max(1) as f64).sqrt();
+    let seed = inkland_core::noise::Fractal::seed_of(
+        SeedTree::new(world.seed).part_seed(Layer::Decoration, "relief-clumps"),
+    );
+    let noise = inkland_core::noise::Fractal::new(seed, 3, 7.0 * spacing);
+    let clump = (0..n)
+        .map(|c| (2.0 * noise.at(g.points[c])).clamp(-1.0, 1.0))
+        .collect();
+    ReliefTerrain {
+        ridge,
+        foot,
+        crest,
+        clump,
+    }
+}
+
 /// The width factor of a river for `render.river_contrast`: with the
 /// contrast `k`, a river with the share `r` of the water of the largest
 /// river gets `(1 + k) * r ^ (0.6 k)`. The largest river is `1 + k` times
@@ -384,6 +447,37 @@ mod tests {
         assert!(river_scale(&w, small, 1.0) < 1.0);
         assert!(river_scale(&w, small, 2.0) < river_scale(&w, small, 1.0));
         assert_eq!(river_scale(&w, small, 0.0), 1.0);
+    }
+
+    #[test]
+    fn relief_terrain_finds_ridges_with_feet_and_clumps() {
+        use inkland_core::config::Config;
+        let c: Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 6, "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 4000, "template": "high-island" }
+        }))
+        .unwrap();
+        let w = World::build(&c).unwrap();
+        let t = relief_terrain(&w);
+        let ridges: Vec<usize> = (0..w.grid.len()).filter(|&k| t.ridge[k]).collect();
+        assert!(ridges.len() > 5);
+        for &k in &ridges {
+            assert!(w.heights[k] >= w.sea_level + RIDGE_HEIGHT);
+            assert!(!t.foot[k]);
+        }
+        // Each foot cell touches a ridge.
+        assert!(
+            (0..w.grid.len())
+                .filter(|&k| t.foot[k])
+                .all(|k| w.grid.neighbors(k).any(|m| t.ridge[m]))
+        );
+        assert!(t.crest.iter().all(|v| (0.0..=1.0).contains(v)));
+        let (lo, hi) = t
+            .clump
+            .iter()
+            .fold((1.0f64, -1.0f64), |(a, b), &v| (a.min(v), b.max(v)));
+        assert!(lo < -0.3 && hi > 0.3);
+        assert_eq!(relief_terrain(&w), t);
     }
 
     #[test]
