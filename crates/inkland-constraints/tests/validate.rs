@@ -232,6 +232,12 @@ fn river_contrast_above_2_is_refused() {
 }
 
 #[test]
+fn border_noise_above_1_is_refused() {
+    let c = with(json!({ "world": { "border_noise": 1.5 } }));
+    one(&c, ErrorCode::ValueOutOfRange, "/world/border_noise");
+}
+
+#[test]
 fn depth_line_of_zero_is_refused() {
     let c = with(json!({ "render": { "depth_lines": [6, 0] } }));
     one(&c, ErrorCode::ValueOutOfRange, "/render/depth_lines/1");

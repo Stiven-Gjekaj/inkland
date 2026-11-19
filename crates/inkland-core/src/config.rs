@@ -189,6 +189,16 @@ pub struct World {
     #[serde(default = "default_growth_rate")]
     #[schemars(range(min = 0.1, max = 2.0))]
     pub growth_rate: f64,
+    /// How much the state borders wander. 0 to 1. Fractal noise from the
+    /// seed adds a cost to the growth of the states, so that a border does
+    /// not follow a straight line. 0: the costs of Azgaar's Fantasy Map
+    /// Generator. Default 0.5.
+    #[serde(
+        default = "default_border_noise",
+        skip_serializing_if = "is_default_border_noise"
+    )]
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub border_noise: f64,
     /// Number of states. A point pin with `capital_of` is the capital of
     /// its state; generation adds the other capitals as cities. 0 and no
     /// `capital_of`: the world has no states and no capitals. With
@@ -808,6 +818,7 @@ impl Default for World {
             culture_set: default_culture_set(),
             size_variety: default_size_variety(),
             growth_rate: default_growth_rate(),
+            border_noise: default_border_noise(),
             states: default_states(),
             towns: Towns::default(),
             provinces_ratio: default_provinces_ratio(),
@@ -2150,6 +2161,14 @@ impl LayerName {
 fn default_unit_name() -> String {
     "mile".to_owned()
 }
+fn default_border_noise() -> f64 {
+    0.5
+}
+
+fn is_default_border_noise(v: &f64) -> bool {
+    *v == default_border_noise()
+}
+
 fn default_cells() -> u32 {
     10_000
 }

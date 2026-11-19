@@ -313,6 +313,13 @@ impl<'a> Validator<'a> {
                 ),
             );
         }
+        if !(0.0..=1.0).contains(&w.border_noise) {
+            self.err(
+                ErrorCode::ValueOutOfRange,
+                "/world/border_noise",
+                "border_noise must be 0 to 1",
+            );
+        }
         if !(1..=99).contains(&w.sea_level) {
             self.err(
                 ErrorCode::ValueOutOfRange,

@@ -5,6 +5,7 @@
 
 pub mod annotations;
 pub mod biomes;
+pub mod border_cost;
 pub mod borders;
 pub mod burgs;
 pub mod climate;
