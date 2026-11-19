@@ -138,6 +138,21 @@ An area tells what the land is like, not how high it is:
 Give 0 (or `false`) to each of these options to get the look of the
 versions before them.
 
+## The largest river
+
+With `render.river_contrast`, the river with the most water is much wider
+than the others. Generation chooses it from the terrain, so it can be in a
+land that the story does not care about. Before you finish a map:
+
+1. Find the widest river on the map. In `world.json`, each river in
+   `rivers` has its `name`, its water flow (`flux`), and its `width`.
+   `inkland query --world world.json --at X,Y` gives the name of the
+   river nearest to a point.
+2. Pin the main river of the story in `pins.rivers`, and give it
+   `"main": true`. It is then at least as wide as the largest other river.
+3. If a generated river is still too wide, give `render.river_contrast` a
+   lower value, or keep fewer generated rivers with `world.river_limit`.
+
 ## The heights of the relief symbols
 
 The heights below are on the scale 0 to 100. The values are for the
