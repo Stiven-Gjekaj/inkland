@@ -1075,6 +1075,15 @@ impl<'a> Validator<'a> {
                     ));
                 }
             }
+            for (key, opts) in &o.labels {
+                if opts.angle.is_some_and(|a| a != 0 && a != 90) {
+                    self.err(
+                        ErrorCode::ValueOutOfRange,
+                        format!("/overlays/{n}/labels/{}/angle", esc(key)),
+                        "angle must be 0 or 90",
+                    );
+                }
+            }
             for key in o.labels.keys() {
                 if !item_ref_ok(key, &label_exists) {
                     bad.push((

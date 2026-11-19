@@ -867,3 +867,23 @@ fn relief_hide_in_names_region_or_area_pins() {
     }));
     one(&c, ErrorCode::RefUnknown, "/variants/0/relief/hide_in/1");
 }
+
+#[test]
+fn a_label_angle_is_0_or_90() {
+    let c = with(json!({
+        "pins": { "regions": [{ "id": "fen", "kind": "marsh", "box": [10, 10, 60, 60] }] },
+        "overlays": { "book": { "labels": {
+            "region:fen": { "angle": 45 }
+        } } }
+    }));
+    one(
+        &c,
+        ErrorCode::ValueOutOfRange,
+        "/overlays/book/labels/region:fen/angle",
+    );
+    let ok = with(json!({
+        "pins": { "regions": [{ "id": "fen", "kind": "marsh", "box": [10, 10, 60, 60] }] },
+        "overlays": { "book": { "labels": { "region:fen": { "angle": 90 } } } }
+    }));
+    assert_eq!(codes(&ok), vec![]);
+}

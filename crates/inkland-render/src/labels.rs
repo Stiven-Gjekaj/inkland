@@ -1779,10 +1779,30 @@ pub fn place_with(
         }
     }
 
+    // The kind and the key of the label options of a request.
+    let key_of = |id: &str| -> Option<(String, String)> {
+        let (kind, key) = id.strip_prefix("label-")?.split_once('-')?;
+        let key = match kind {
+            "state" => state_keys.get(key)?.as_str(),
+            _ => key,
+        };
+        Some((kind.to_owned(), key.to_owned()))
+    };
+    let angle_of =
+        |id: &str| key_of(id).and_then(|(kind, key)| opts(&kind, &key).and_then(|o| o.angle));
+
     // Keep only the turns and the curves that the config lets labels have.
+    // A label with an `angle` in its options keeps only that turn.
     let max_angle = config.render.labels.max_angle;
     let curves = config.render.labels.curved;
     for r in &mut requests {
+        if let Some(a) = angle_of(&r.id) {
+            r.candidates.retain(|c| match &c.geometry {
+                Geometry::Point { angle, .. } => angle.unsigned_abs() == u32::from(a),
+                Geometry::Path { .. } => c.river.is_some(),
+            });
+            continue;
+        }
         r.candidates.retain(|c| match &c.geometry {
             Geometry::Point { angle, .. } => f64::from(angle.unsigned_abs()) <= max_angle,
             // A curved area label has no river. A river label follows its
@@ -1858,15 +1878,29 @@ pub fn place_with(
         };
         let f = FontMetrics::of(&r.family);
         let [x, y] = page.to_page(at);
-        let y = y + f.cap(size) / 2.0;
         let w = f.width(&r.text, size, 0.0);
+        let up = opts(kind, key).and_then(|o| o.angle) == Some(90);
+        // The baseline lies half the cap height off the middle: below it
+        // for a level label, right of it for a label that reads up.
+        let (x, y, b, angle) = if up {
+            let half = (f.cap(size) + 0.6 * f.descent(size)) / 2.0;
+            let b = Obb {
+                c: [x, y],
+                u: [0.0, -1.0],
+                h: [w / 2.0, half],
+            };
+            (x + f.cap(size) / 2.0, y, b, -90)
+        } else {
+            let y = y + f.cap(size) / 2.0;
+            (x, y, text_box(x, y, "middle", w, f, size, 0.0), 0)
+        };
         r.candidates = vec![Candidate {
-            boxes: vec![text_box(x, y, "middle", w, f, size, 0.0)],
+            boxes: vec![b],
             geometry: Geometry::Point {
                 x,
                 y,
                 anchor: "middle",
-                angle: 0,
+                angle,
             },
             size,
             spacing: 0.0,
@@ -2601,6 +2635,60 @@ mod tests {
         // It stands in the strait.
         let at = page.to_world([x, 0.0]);
         assert!((190.0..=210.0).contains(&at[0]), "at x {}", at[0]);
+    }
+
+    #[test]
+    fn a_sea_label_in_a_strait_can_turn_with_its_options() {
+        let (w, mut c) = world(
+            3,
+            "pangea",
+            json!({
+                "world": { "cells": 2500, "template": "pangea", "fill_land": true },
+                "pins": { "regions": [
+                    { "id": "strait", "kind": "sea", "name": "The Sea of Serenity",
+                      "box": [190, 0, 210, 300] }
+                ] },
+                "overlays": { "book": { "labels": { "region:strait": { "angle": 90 } } } }
+            }),
+        );
+        c.render.labels.max_angle = 0.0;
+        c.render.labels.curved = false;
+        let level = place(
+            &w,
+            &c,
+            &c.variants[0].clone(),
+            &Page::new(&c, &c.variants[0]),
+        );
+        c.variants[0].overlay = Some("book".to_owned());
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let labels = place(&w, &c, &v, &page);
+        let find = |ls: &Labels| {
+            ls.placed
+                .iter()
+                .find(|l| l.id == "label-region-strait")
+                .cloned()
+                .unwrap_or_else(|| panic!("unplaced: {:?}", ls.unplaced))
+        };
+        let (l, flat) = (find(&labels), find(&level));
+        let Geometry::Point { angle, x, .. } = l.geometry else {
+            panic!("not a straight label");
+        };
+        assert_eq!(angle, -90);
+        assert!(l.size > flat.size, "{} {}", l.size, flat.size);
+        let at = page.to_world([x, 0.0]);
+        assert!((185.0..=215.0).contains(&at[0]), "at x {}", at[0]);
+        // The other labels stay level.
+        assert!(
+            labels
+                .placed
+                .iter()
+                .filter(|o| o.id != l.id)
+                .all(|o| match o.geometry {
+                    Geometry::Point { angle, .. } => angle == 0,
+                    Geometry::Path { .. } => true,
+                })
+        );
     }
 
     #[test]

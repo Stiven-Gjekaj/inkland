@@ -374,6 +374,7 @@ Label options.
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
+| `angle` | integer |  |  | The turn of the label, in degrees: 0 (level) or 90 (it reads from the bottom up). It replaces `render.labels.max_angle` for this label, for example for a sea in a narrow strait that runs north and south. With `at`, the label goes there at this turn. Default: the placer chooses, in the limit of `max_angle`. |
 | `at` | array of 2 number |  |  | The middle of the label `[x, y]`, in units. The label goes here, level, before the other labels, which keep clear of it. Default: the placer finds a free place. |
 | `hide` | boolean |  | `false` | `true`: do not show the label. |
 | `size_pt` | number |  |  | Font size, in points. Default: the size of the label kind. |

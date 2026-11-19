@@ -1656,6 +1656,14 @@ pub struct LabelOptions {
     /// placer finds a free place.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<Point>,
+    /// The turn of the label, in degrees: 0 (level) or 90 (it reads from
+    /// the bottom up). It replaces `render.labels.max_angle` for this label,
+    /// for example for a sea in a narrow strait that runs north and south.
+    /// With `at`, the label goes there at this turn. Default: the placer
+    /// chooses, in the limit of `max_angle`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0, max = 90))]
+    pub angle: Option<u8>,
 }
 
 /// One map to render.
