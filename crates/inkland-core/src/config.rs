@@ -162,6 +162,11 @@ pub struct World {
     /// shallow water along a coast. Default `false`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub deep_sea: bool,
+    /// `false`: generation adds no roads or trails between the places.
+    /// Only the pinned roads and the roads of the overlays stay. The sea
+    /// routes between the ports stay. Default `true`.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub generated_roads: bool,
     /// The most rivers that generation keeps, besides the pinned rivers.
     /// It keeps the rivers with the most water. 0: only the pinned rivers.
     /// Default: all rivers.
@@ -835,6 +840,7 @@ impl Default for World {
             river_limit: None,
             fill_land: false,
             deep_sea: false,
+            generated_roads: true,
             lake_elevation_limit: default_lake_elevation_limit(),
             climate: Climate::default(),
             cultures: default_cultures(),

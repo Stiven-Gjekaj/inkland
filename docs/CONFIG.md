@@ -886,6 +886,7 @@ Generation options.
 | `emblem_shape` | string |  |  | The shield shape of the coats of arms: `culture` (the shield of the culture of each item, as Azgaar's Fantasy Map Generator does), `state` (the shield of the state), `random` (a random shield for each culture), or one shield name for all, for example `heater`, `spanish`, `round`, or `banner`. |
 | `fill_land` | boolean |  |  | `true`: all water of the template and the brushes becomes low land, 1 to 3 above sea level. Only the pinned `sea` and `lake` regions, and the lakes that rivers make, are water. Use it to keep the whole frame as land except the pinned seas. Default `false`. |
 | `finance` | array of [`FinanceEntry`](#financeentry) |  |  | Changes to the finance of the states: taxes, the market fee, the budget that sets the state orders, and the tariffs. |
+| `generated_roads` | boolean |  |  | `false`: generation adds no roads or trails between the places. Only the pinned roads and the roads of the overlays stay. The sea routes between the ports stay. Default `true`. |
 | `goods` | array of [`GoodEntry`](#goodentry) |  |  | Changes to the goods catalogue of Azgaar's Fantasy Map Generator, in order. Empty: the default catalogue of 71 goods. |
 | `growth_rate` | number |  | `1.0` | How far cultures and states grow. 0.1 to 2. Cultures and states stop at a total cost that this value multiplies. |
 | `jitter` | number |  |  | How far each point of the first grid can move from its lattice position, as a fraction of half the distance between neighbor points. 0 to 0.9. 0 gives a regular lattice. |

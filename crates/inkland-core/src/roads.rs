@@ -409,6 +409,9 @@ pub fn build(input: &Input) -> Result<Routes, Error> {
 
     // The generated network of FMG: sea routes, roads, and trails.
     let sea = crate::routes::network(input, &router.river_of, &mut roads);
+    if !input.config.world.generated_roads {
+        roads.retain(|r| r.pin.is_some());
+    }
     Ok(Routes { roads, sea })
 }
 
@@ -1047,6 +1050,20 @@ mod tests {
         assert_eq!(brann.len(), 1, "{:?}", r.crossings);
         assert_eq!(brann[0].kind, "bridge");
         assert!(brann[0].at_length > 0.0 && brann[0].at_length < r.length);
+    }
+
+    #[test]
+    fn generated_roads_false_keeps_only_the_pinned_roads() {
+        let mut c = config(json!([]), json!([]));
+        c.world.generated_roads = false;
+        let w = World::build(&c).unwrap();
+        assert!(w.roads.is_empty(), "{} roads", w.roads.len());
+
+        let mut c = book(4000);
+        c.world.generated_roads = false;
+        let w = World::build(&c).unwrap();
+        assert!(!w.roads.is_empty());
+        assert!(w.roads.iter().all(|r| r.pin.is_some()));
     }
 
     #[test]
