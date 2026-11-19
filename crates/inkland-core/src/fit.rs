@@ -68,8 +68,9 @@ struct Rough {
     islets: f64,
     /// The noise of the small islands.
     isle: Fractal,
-    /// The ports near the outline. The noise fades out near each of them,
-    /// so that the coast of a port stays where the config draws it.
+    /// The pinned places near the outline: the point pins and the places
+    /// of the overlays. The noise fades out near each of them, so that a
+    /// place on the coast stays on it, where the config draws the coast.
     ports: Vec<Point>,
 }
 
@@ -118,7 +119,7 @@ impl Rough {
     }
 
     /// How far the outline moves out at `p`, from `-amount` to `amount`.
-    /// Within 3 times the amount of a port, the shift fades to 0.
+    /// Within 3 times the amount of a pinned place, the shift fades to 0.
     fn shift(&self, p: Point) -> f64 {
         let reach = 3.0 * self.amount;
         let calm = self
@@ -161,7 +162,8 @@ fn coast_sides(shape: &Shape, [w, h]: [f64; 2]) -> Vec<(Point, Point)> {
 
 impl<'a> FitRegion<'a> {
     /// The regions of a config, as the terrain uses them. The noise of a
-    /// rough outline fades near each port.
+    /// rough outline fades near each pinned place: the point pins and the
+    /// places of the overlays, so that each era keeps its coast places.
     pub fn of_config(config: &'a crate::config::Config) -> Vec<FitRegion<'a>> {
         let mut regions = FitRegion::all(
             &config.pins.regions,
@@ -173,7 +175,7 @@ impl<'a> FitRegion<'a> {
             .pins
             .points
             .iter()
-            .filter(|p| p.port)
+            .chain(config.overlays.values().flat_map(|o| &o.add.places))
             .map(|p| p.at)
             .collect();
         for r in &mut regions {
@@ -824,6 +826,39 @@ mod tests {
         let w = crate::world::World::build(&c).unwrap();
         let port = w.pin_cells[0];
         assert!(w.grid.neighbors(port).any(|m| w.heights[m] < 20.0));
+    }
+
+    #[test]
+    fn a_rough_coast_stays_put_at_the_places_of_an_overlay() {
+        // A rough sea, and a place of an overlay on its coast. The place is
+        // not a port and not a point pin, but the coast keeps it.
+        let make = |with_place: bool| -> Config {
+            let mut v = json!({
+                "version": 1, "seed": 3, "frame": { "width": 300, "height": 300 },
+                "world": { "cells": 4000, "template": "pangea", "fill_land": true },
+                "pins": { "regions": [{ "id": "sea", "kind": "sea", "roughness": 25,
+                    "polygon": [[0, 0], [60, 0], [60, 300], [0, 300]] }] }
+            });
+            if with_place {
+                v["overlays"] = json!({ "today": { "add": { "places": [
+                    { "id": "harbour", "kind": "town", "at": [61, 150] }
+                ] } } });
+            }
+            serde_json::from_value(v).unwrap()
+        };
+        let shift_at = |c: &Config| {
+            let regions = FitRegion::of_config(c);
+            let r = regions[0].rough.as_ref().unwrap();
+            (r.shift([61.0, 150.0]), r.shift([61.0, 130.0]))
+        };
+        let (at, near) = shift_at(&make(false));
+        assert!(at.abs() > 0.5, "the coast is rough there: {at}");
+        let (at_place, near_place) = shift_at(&make(true));
+        assert_eq!(at_place, 0.0, "the coast stays at the place");
+        assert!(
+            near_place.abs() < near.abs(),
+            "the noise fades near the place"
+        );
     }
 
     #[test]

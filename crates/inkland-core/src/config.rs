@@ -1275,7 +1275,10 @@ pub struct RegionPin {
     /// The largest distance, in units, by which fractal noise moves the
     /// outline in or out. The coast becomes natural, with bays and capes.
     /// The largest bays are about 4 times this size. A side of the outline
-    /// on a frame edge does not move. 0: the outline is exact. Default: 0
+    /// on a frame edge does not move. Near each pinned place (a point pin
+    /// or a place of an overlay), the noise fades to 0 within 3 times this
+    /// value, so a place on the coast stays on it. 0: the outline is exact.
+    /// Default: 0
     /// for `sea` and `lake`; for the other kinds, 3 percent of the size of
     /// the shape (the square root of the area of its bounding box), at most
     /// 20, so that a box does not show as a rectangle.
