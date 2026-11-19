@@ -57,6 +57,10 @@ Files in the output directory:
   the `journeys`, the `measurers`, the `legends`, and the `notes`.
 - `<variant>.svg`: the map, in mm, black and white, with real `<text>`.
 - `<variant>.report.json`: pins, labels, checks, warnings, and `relief`.
+  The check `path_labels_fit` fails when the text of a label along a path
+  is longer than its path, turns more than 20 degrees from one letter to
+  the next, or has two letters that overlap in a bend. `labels.level_rivers`
+  lists the river labels that stand level beside their river.
   `relief.shown` gives the number of relief symbols of each kind on the
   map. `relief.hidden` gives, for each id in `hide_in`, the number of
   symbols of each kind that it leaves out. Two variants that share one

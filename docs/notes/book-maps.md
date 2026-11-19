@@ -317,3 +317,12 @@ In `colour` mode, `render.hill_shading` lights the slopes that turn to the
 north-west and darkens the slopes that turn away. The south-east side of
 each hill is darker. On pale land the dark side shows more than the light
 side. `"hill_shading": false` leaves the shading out.
+
+## River names
+
+A river name follows a smooth copy of its river, not the drawn line. The
+letters keep an even spacing, turn at most 12 degrees from one to the
+next, and stand clear of the river line. A river with no smooth part that
+is long enough for its name gets a level label above it, and the report
+lists it in `labels.level_rivers`. A fixed `at` in the label options still
+puts the name where you want it.
