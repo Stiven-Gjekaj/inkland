@@ -139,6 +139,13 @@ struct GenerateArgs {
     /// Also write a PNG preview to this file.
     #[arg(long)]
     preview: Option<PathBuf>,
+    /// The longer side of the PNG preview, in pixels. From 64 to 8192.
+    #[arg(
+        long,
+        default_value_t = PREVIEW_PX,
+        value_parser = clap::value_parser!(u32).range(PREVIEW_MIN_PX as i64..=PREVIEW_MAX_PX as i64)
+    )]
+    preview_width: u32,
     /// Render only this variant.
     #[arg(long)]
     variant: Option<String>,
@@ -325,8 +332,13 @@ fn import(map: &Path, out: &Path, verbose: bool) -> Result<Value, Vec<Error>> {
     Ok(summary)
 }
 
-/// The longer side of the PNG preview, in pixels.
+/// The default longer side of the PNG preview, in pixels.
 const PREVIEW_PX: u32 = 1024;
+/// The smallest permitted longer side of the PNG preview, in pixels.
+const PREVIEW_MIN_PX: u32 = 64;
+/// The largest permitted longer side of the PNG preview, in pixels. At this
+/// size, the pixel buffer of a square map is 256 MiB.
+const PREVIEW_MAX_PX: u32 = 8192;
 
 /// Write the files of `generate`. Return the summary for stdout.
 fn write_output(
@@ -378,7 +390,7 @@ fn write_output(
                 let stem = preview.file_stem().unwrap_or_default().to_string_lossy();
                 preview.with_file_name(format!("{stem}-{}.png", v.name))
             };
-            let (png, warnings) = inkland::preview_png(&v.svg, PREVIEW_PX, config)
+            let (png, warnings) = inkland::preview_png(&v.svg, args.preview_width, config)
                 .map_err(|e| vec![Error::new(ErrorCode::Internal, "", e)])?;
             write(&path, &png)?;
             entry["preview"] = Value::from(path.display().to_string());
