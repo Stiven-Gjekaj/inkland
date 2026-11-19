@@ -1405,6 +1405,10 @@ pub struct RiverPin {
     /// Where the river ends: a point in water, a port place, or a region of
     /// kind `sea`, `lake`, or `marsh`.
     pub mouth: Anchor,
+    /// `true`: the main river. Its water flow and its width are at least
+    /// those of the largest other river, so it is drawn at least as wide.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub main: bool,
 }
 
 /// A position: a point, a pinned place, or a pinned region.

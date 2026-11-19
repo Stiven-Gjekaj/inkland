@@ -415,6 +415,13 @@ impl World {
         if let Some(max) = config.world.river_limit {
             crate::rivers::limit(&mut rivers, &mut lakes, max as usize);
         }
+        let main: Vec<usize> = rivers
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.course.is_some_and(|k| config.pins.rivers[k].main))
+            .map(|(i, _)| i)
+            .collect();
+        crate::rivers::make_main(&mut rivers, &main);
         let mut heights = flow.heights;
         // Pins win: the new heights stay in the ranges of the regions.
         crate::fit::clamp_regions(

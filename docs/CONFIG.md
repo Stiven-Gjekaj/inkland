@@ -717,6 +717,7 @@ A river with a fixed source, course, and mouth. A river has no height: generatio
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `id` | string | yes |  | Identifier: lower-case letters and digits, words joined by `-`. Unique across all pins. |
+| `main` | boolean |  |  | `true`: the main river. Its water flow and its width are at least those of the largest other river, so it is drawn at least as wide. |
 | `mouth` | [`Anchor`](#anchor) | yes |  | Where the river ends: a point in water, a port place, or a region of kind `sea`, `lake`, or `marsh`. |
 | `name` | string |  |  | Name of the river. |
 | `source` | [`Anchor`](#anchor) | yes |  | Where the river starts: a point, a place, or a region. |

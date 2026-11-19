@@ -69,6 +69,31 @@ const FMG_SPACING: f64 = 10.119_288_512_538_814;
 
 /// The least flux of a river cell. The cell count does not change it; the
 /// argument stays for the callers.
+/// Make each river in `main` (indices) at least as large as the largest
+/// other river: its water flow, its width, and its source width
+/// (`main` on a river pin).
+pub fn make_main(rivers: &mut [River], main: &[usize]) {
+    let others = |f: fn(&River) -> f64| {
+        rivers
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !main.contains(i))
+            .map(|(_, r)| f(r))
+            .fold(0.0f64, f64::max)
+    };
+    let (flux, width, source) = (
+        others(|r| r.flux),
+        others(|r| r.width),
+        others(|r| r.source_width),
+    );
+    for &i in main {
+        let r = &mut rivers[i];
+        r.flux = r.flux.max(flux);
+        r.width = r.width.max(width);
+        r.source_width = r.source_width.max(source);
+    }
+}
+
 /// Keep the pinned rivers and the `max` generated rivers with the most
 /// water (`world.river_limit`). A kept river whose parent goes has no
 /// parent, and the lakes forget the rivers that go.
@@ -1239,6 +1264,38 @@ mod tests {
     use super::*;
     use crate::rand::Rand;
     use crate::seed::{Layer, SeedTree};
+
+    #[test]
+    fn a_main_river_is_at_least_as_large_as_each_other_river() {
+        let c = |main: bool| -> crate::config::Config {
+            serde_json::from_value(serde_json::json!({
+                "version": 1, "seed": 9, "frame": { "width": 300, "height": 200 },
+                "world": { "cells": 4000, "template": "continents" },
+                "pins": {
+                    "regions": [{ "id": "sea", "kind": "sea", "box": [0, 0, 20, 200] }],
+                    "rivers": [{ "id": "brann", "name": "The Brann", "main": main,
+                                 "source": [120, 90], "mouth": { "region": "sea" } }]
+                }
+            }))
+            .unwrap()
+        };
+        let pinned = |w: &crate::world::World| {
+            let k = w.rivers.iter().position(|r| r.course.is_some()).unwrap();
+            let r = &w.rivers[k];
+            let others = w.rivers.iter().enumerate().filter(|(i, _)| *i != k);
+            let wider = others.clone().any(|(_, o)| o.width > r.width);
+            let more = others.clone().any(|(_, o)| o.flux > r.flux);
+            (wider, more)
+        };
+        let plain = crate::world::World::build(&c(false)).unwrap();
+        assert_eq!(
+            pinned(&plain),
+            (true, true),
+            "a short pinned river is small"
+        );
+        let main = crate::world::World::build(&c(true)).unwrap();
+        assert_eq!(pinned(&main), (false, false));
+    }
 
     #[test]
     fn the_river_limit_keeps_the_pins_and_the_largest_rivers() {
