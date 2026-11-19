@@ -450,6 +450,26 @@ fn a_river_point_in_two_regions_with_no_common_height_names_both() {
 }
 
 #[test]
+fn a_river_point_follows_the_region_with_the_higher_priority() {
+    let c = with(json!({ "pins": {
+        "regions": [
+            { "id": "peaks", "kind": "mountains", "box": [200, 0, 300, 100] },
+            { "id": "lowland", "kind": "plains", "box": [150, 50, 250, 150], "height": [21, 34],
+              "priority": 1 }
+        ],
+        "rivers": [{ "id": "dunn", "source": [280, 20], "through": [[220, 70]],
+                     "mouth": [399, 299] }]
+    }}));
+    assert!(
+        codes(&c)
+            .iter()
+            .all(|(e, _)| *e != ErrorCode::RiverNotDownhill),
+        "{:?}",
+        codes(&c)
+    );
+}
+
+#[test]
 fn road_target_shorter_than_the_straight_line_is_infeasible() {
     let c = with(json!({ "pins": {
         "points": [

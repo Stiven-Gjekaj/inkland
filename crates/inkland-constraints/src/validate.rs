@@ -1450,16 +1450,18 @@ impl<'a> Validator<'a> {
         let regions = self.regions();
         let shaped = self.shaped_regions();
         let sea_level = f64::from(c.world.sea_level);
-        // The range at a point: the regions that hold it set it. Each end
-        // keeps the name of what sets it.
+        // The range at a point: of the regions that hold it, the ones with
+        // the highest priority set it, as in generation. Each end keeps the
+        // name of what sets it.
         let range_at = |p: Point| -> Span {
             let inside: Vec<&RegionPin> = shaped
                 .iter()
                 .filter(|(_, _, s)| s.contains(p))
                 .map(|(_, r, _)| *r)
                 .collect();
+            let top = inside.iter().map(|r| r.priority).max();
             let mut span = Span::open();
-            for r in inside {
+            for r in inside.into_iter().filter(|r| Some(r.priority) == top) {
                 span.limit(r.height_range(), &format!("the region {:?}", r.id));
             }
             span
