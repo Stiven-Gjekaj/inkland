@@ -122,7 +122,7 @@ pub fn template_steps(config: &Config) -> Result<Vec<crate::heightmap::Step>, St
     match &config.world.template {
         Template::Named(name) => parse_steps(templates::steps(*name).lines()),
         Template::Steps { steps } => parse_steps(steps.iter().map(String::as_str)),
-        Template::Raster { .. } => Ok(Vec::new()),
+        Template::Raster { .. } | Template::Image { .. } => Ok(Vec::new()),
     }
 }
 
@@ -171,7 +171,14 @@ impl World {
             .map_err(|e| Error::new(ErrorCode::TemplateInvalid, "/world/template", e))?;
         let mut height_rng = Rand::new(tree.part_rng(Layer::Terrain, "heightmap"));
         let mut hm = Heightmap::new(&base_grid, sea_level);
-        if let Template::Raster { raster } = &config.world.template {
+        if let Template::Image { heights: None, .. } = &config.world.template {
+            return Err(Error::new(
+                ErrorCode::TemplateInvalid,
+                "/world/template/image",
+                "the image of the template is not read; the program that reads the config file reads it",
+            ));
+        }
+        if let Some(raster) = config.world.template.raster() {
             let size = u64::from(raster.cols) * u64::from(raster.rows);
             if raster.cols < 2 || raster.rows < 2 || raster.values.len() as u64 != size {
                 return Err(Error::new(
@@ -234,7 +241,7 @@ impl World {
         }
         // The heights of a raster (for example an imported map) hold their
         // lakes already.
-        if !matches!(config.world.template, Template::Raster { .. }) {
+        if !config.world.template.is_raster() {
             crate::lakes::add_depression_lakes(
                 &base_grid,
                 &mut base_heights,
@@ -755,6 +762,38 @@ mod tests {
         assert!(w.features.is_land(port));
         assert!(w.grid.neighbors(port).any(|m| !w.features.is_land(m)));
         assert_eq!(World::build(&c).unwrap(), w);
+    }
+
+    #[test]
+    fn an_image_template_gives_the_same_world_as_its_raster() {
+        let raster = crate::config::Raster {
+            cols: 4,
+            rows: 3,
+            values: vec![5, 30, 40, 50, 5, 35, 45, 60, 5, 30, 40, 50],
+        };
+        let mut c = config(9, "continents", 2000);
+        c.world.template = Template::Raster {
+            raster: raster.clone(),
+        };
+        let from_raster = World::build(&c).unwrap();
+        c.world.template = Template::Image {
+            image: "heights.png".into(),
+            heights: Some(raster),
+        };
+        let from_image = World::build(&c).unwrap();
+        assert_eq!(from_image.heights, from_raster.heights);
+    }
+
+    #[test]
+    fn an_image_template_that_is_not_read_is_refused() {
+        let mut c = config(9, "continents", 2000);
+        c.world.template = Template::Image {
+            image: "heights.png".into(),
+            heights: None,
+        };
+        let e = World::build(&c).unwrap_err();
+        assert_eq!(e.code, ErrorCode::TemplateInvalid);
+        assert_eq!(e.path, "/world/template/image");
     }
 
     #[test]

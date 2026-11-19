@@ -205,6 +205,12 @@ fn negative_roughness_and_coast_detail_out_of_range_are_refused() {
 }
 
 #[test]
+fn image_template_that_is_not_read_is_refused() {
+    let c = with(json!({ "world": { "template": { "image": "heights.png" } } }));
+    one(&c, ErrorCode::TemplateInvalid, "/world/template/image");
+}
+
+#[test]
 fn edge_width_of_zero_is_refused() {
     let c = with(json!({ "world": { "edges": { "north": "sea", "width": 0 } } }));
     one(&c, ErrorCode::ValueOutOfRange, "/world/edges/width");

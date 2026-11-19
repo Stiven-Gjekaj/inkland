@@ -874,6 +874,38 @@ pub enum Template {
         /// to its site. The lake stages do not change these heights.
         raster: Raster,
     },
+    /// A PNG image of heights, as a raster. The path is relative to the
+    /// folder of the config file. Black is height 0 and white is height
+    /// 100. A colour image gives the brightness of each pixel. The image
+    /// covers the full frame: its top row is at the low y edge. Like a
+    /// `raster`, the lake stages do not change these heights. A change of
+    /// the image does not change the config hash.
+    Image {
+        /// The path of the PNG file.
+        image: String,
+        /// The decoded heights. The program that reads the config file
+        /// reads the image and sets them.
+        #[serde(skip)]
+        #[schemars(skip)]
+        heights: Option<Raster>,
+    },
+}
+
+impl Template {
+    /// The raster of heights of the template: the `raster`, or the decoded
+    /// heights of an `image`.
+    pub fn raster(&self) -> Option<&Raster> {
+        match self {
+            Template::Raster { raster } => Some(raster),
+            Template::Image { heights, .. } => heights.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// `true` for a template of heights: a `raster` or an `image`.
+    pub fn is_raster(&self) -> bool {
+        matches!(self, Template::Raster { .. } | Template::Image { .. })
+    }
 }
 
 /// A raster of heights that covers the full frame.
@@ -2277,6 +2309,30 @@ mod tests {
         assert_eq!((raster.cols, raster.rows), (2, 2));
         let again: Config = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
         assert_eq!(c, again);
+    }
+
+    #[test]
+    fn template_accepts_an_image_and_writes_only_its_path() {
+        let mut v = minimal();
+        v["world"] = json!({ "template": { "image": "heights.png" } });
+        let mut c: Config = serde_json::from_value(v).unwrap();
+        assert_eq!(
+            c.world.template,
+            Template::Image {
+                image: "heights.png".into(),
+                heights: None
+            }
+        );
+        if let Template::Image { heights, .. } = &mut c.world.template {
+            *heights = Some(Raster {
+                cols: 2,
+                rows: 2,
+                values: vec![0, 1, 2, 3],
+            });
+        }
+        let out = serde_json::to_value(&c).unwrap();
+        assert_eq!(out["world"]["template"], json!({ "image": "heights.png" }));
+        assert!(c.world.template.raster().is_some());
     }
 
     #[test]

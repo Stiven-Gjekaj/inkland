@@ -331,8 +331,15 @@ impl<'a> Validator<'a> {
                 );
             }
         }
-        if let inkland_core::config::Template::Raster { raster } = &w.template {
+        if let Some(raster) = w.template.raster() {
             self.raster(raster);
+        }
+        if let inkland_core::config::Template::Image { heights: None, .. } = &w.template {
+            self.err(
+                ErrorCode::TemplateInvalid,
+                "/world/template/image",
+                "the image of the template is not read; the program that reads the config file reads it",
+            );
         }
         let shape = w.emblem_shape.as_str();
         if !["culture", "state", "random"].contains(&shape)
