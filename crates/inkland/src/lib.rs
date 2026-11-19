@@ -884,6 +884,27 @@ mod tests {
     }
 
     #[test]
+    fn report_holds_an_island_over_a_sea_and_a_rough_sea_in_range() {
+        let c = config(json!({
+            "frame": { "width": 300, "height": 200 },
+            "world": { "cells": 3000, "template": "pangea" },
+            "pins": {
+                "regions": [
+                    { "id": "bay", "kind": "sea", "box": [0, 0, 120, 200], "roughness": 8 },
+                    { "id": "isle", "kind": "hills", "height": [22, 28],
+                      "circle": { "at": [50, 100], "r": 10 }, "priority": 1 }
+                ]
+            }
+        }));
+        let out = generate(&c, None).unwrap();
+        let regions = &out.variants[0].report["pins"]["regions"];
+        for r in regions.as_array().unwrap() {
+            assert_eq!(r["in_range"], true, "{r}");
+            assert!(r["cells"].as_u64().unwrap() > 0, "{r}");
+        }
+    }
+
+    #[test]
     fn report_gives_each_pinned_river() {
         let c = config(json!({
             "frame": { "width": 400, "height": 300 },
