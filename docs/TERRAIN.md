@@ -137,3 +137,37 @@ An area tells what the land is like, not how high it is:
 
 Give 0 (or `false`) to each of these options to get the look of the
 versions before them.
+
+## The heights of the relief symbols
+
+The heights below are on the scale 0 to 100. The values are for the
+default `world.sea_level` of 20. With another sea level, add the
+difference.
+
+`print-safe` mode:
+
+| Height | Symbol |
+|---|---|
+| 65 to 100 | mountain |
+| 42 to 64 | hill |
+| 20 to 41 | the symbol of the biome: tree, marsh, dune, or none |
+
+`colour` mode:
+
+| Height | Symbol |
+|---|---|
+| 71 to 100 | mountain, with snow at -1 C or colder |
+| 50 to 70 | hill |
+| 20 to 49 | the symbol of the biome |
+
+With `render.relief.terrain` (the default), the ridges come first, in
+both modes. A ridge cell is a land cell that is a local top: it is
+at least 1 higher than the mean of its neighbours, and at most 2 of its neighbours
+are higher or as high. It must also be at height 35 or more, and in the
+highest 15 percent of the land of the map. Each ridge cell gets a
+mountain, and each cell next to a ridge gets a hill. So a small upland
+of heights 36 to 46 shows peaks, and land below 35 shows no mountain.
+
+To get hills and no peaks, keep the land below 35, or below the highest
+15 percent of the map. To get peaks, give the region a range that goes
+above 35, with a top above the rest of the land.
