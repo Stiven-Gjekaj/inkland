@@ -1327,8 +1327,8 @@ pub struct RegionPin {
     pub edge: f64,
     /// Height range `[min, max]` on the height scale 0 to 100 (sea level 20).
     /// Default: the range of the kind: `sea` and `lake` 5 to 15, `marsh` 20
-    /// to 23, `plains` 21 to 35, `forest` 21 to 45, `desert` 21 to 50,
-    /// `hills` 35 to 60, `mountains` 70 to 100, `land` 20 to 100.
+    /// to 23, `plains` 21 to 42, `forest` 21 to 45, `desert` 21 to 50,
+    /// `hills` 42 to 62, `mountains` 70 to 100, `land` 20 to 100.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<[f64; 2]>,
     /// Only for `sea` and `lake`. `false`: a `sea` must connect to the ocean
@@ -1435,8 +1435,8 @@ impl RegionKind {
         match self {
             RegionKind::Sea | RegionKind::Lake => [5.0, 15.0],
             RegionKind::Marsh => [20.0, 23.0],
-            RegionKind::Plains => [21.0, 35.0],
-            RegionKind::Hills => [35.0, 60.0],
+            RegionKind::Plains => [21.0, 42.0],
+            RegionKind::Hills => [42.0, 62.0],
             RegionKind::Mountains => [70.0, 100.0],
             RegionKind::Forest => [21.0, 45.0],
             RegionKind::Desert => [21.0, 50.0],
@@ -2671,6 +2671,14 @@ mod tests {
         let c: Config = serde_json::from_value(v).unwrap();
         assert_eq!(c.pins.regions[0].height_range(), [70.0, 100.0]);
         assert_eq!(c.pins.regions[1].height_range(), [35.0, 50.0]);
+    }
+
+    #[test]
+    fn a_hills_region_is_high_enough_for_hill_symbols_by_default() {
+        // Print-safe mode draws a hill from 22 above sea level (20).
+        let [lo, hi] = RegionKind::Hills.default_height();
+        assert!(lo >= 42.0, "{lo}");
+        assert!(hi < RegionKind::Mountains.default_height()[0]);
     }
 
     #[test]

@@ -625,7 +625,7 @@ mod tests {
         let r = region_rows(&c);
         assert_eq!(
             r[0].cells,
-            vec!["hills", "hills", "box 150, 100 to 260, 200", "35-60"]
+            vec!["hills", "hills", "box 150, 100 to 260, 200", "42-62"]
         );
         let roads = route_rows(&c, Some(&w));
         assert_eq!(roads[0].cells[2], "ostrey to mill");
