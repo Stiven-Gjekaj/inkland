@@ -106,9 +106,11 @@ pub fn variant_report(
 /// `world` is the world with the overlay applied.
 pub fn overlay_section(
     world: &inkland_core::world::World,
+    config: &Config,
     overlay: &inkland_core::config::Overlay,
     name: &str,
 ) -> serde_json::Value {
+    let ratio = inkland_core::journeys::distance_unit_ratio(&config.units.name);
     let roads: Vec<serde_json::Value> = overlay
         .add
         .roads
@@ -120,6 +122,8 @@ pub fn overlay_section(
                     .roads
                     .iter()
                     .find(|r| r.overlay.as_deref() == Some(pin.id.as_str())),
+                &world.transports,
+                ratio,
             )
         })
         .collect();
@@ -332,14 +336,51 @@ fn nearest(points: &[[f64; 2]], p: [f64; 2]) -> f64 {
 }
 
 /// The report of each pinned road: target and real length, stops, legs,
-/// and river crossings, all in units.
+/// and river crossings, all in units, and the travel time on the road.
 fn road_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_json::Value> {
+    let ratio = inkland_core::journeys::distance_unit_ratio(&config.units.name);
     config
         .pins
         .roads
         .iter()
         .enumerate()
-        .map(|(k, pin)| road_entry(pin, world.roads.iter().find(|r| r.pin == Some(k))))
+        .map(|(k, pin)| {
+            road_entry(
+                pin,
+                world.roads.iter().find(|r| r.pin == Some(k)),
+                &world.transports,
+                ratio,
+            )
+        })
+        .collect()
+}
+
+/// The travel time over `length` units with each land transport that
+/// moves. `ratio` is the number of units in one kilometer. `hours` is the
+/// time in motion. `days` is `hours` divided by the hours of travel that
+/// one day of the transport sustains.
+fn travel_times(
+    transports: &[inkland_core::journeys::Transport],
+    ratio: f64,
+    length: f64,
+) -> Vec<serde_json::Value> {
+    use inkland_core::journeys::Domain;
+    use inkland_core::journeys::transports::resolve_hours_per_day;
+    use inkland_core::num::round;
+    transports
+        .iter()
+        .filter(|t| t.domain == Domain::Land && t.speed > 0.0)
+        .map(|t| {
+            let hours_per_day = resolve_hours_per_day(t);
+            let hours = length / (t.speed * ratio);
+            serde_json::json!({
+                "transport": t.name,
+                "speed_kmh": t.speed,
+                "hours_per_day": hours_per_day,
+                "hours": round(hours, 2),
+                "days": round(hours / hours_per_day, 2),
+            })
+        })
         .collect()
 }
 
@@ -347,6 +388,8 @@ fn road_pins(world: &inkland_core::world::World, config: &Config) -> Vec<serde_j
 fn road_entry(
     pin: &inkland_core::config::RoadPin,
     road: Option<&inkland_core::roads::Road>,
+    transports: &[inkland_core::journeys::Transport],
+    ratio: f64,
 ) -> serde_json::Value {
     use inkland_core::num::round;
     let Some(r) = road else {
@@ -384,6 +427,7 @@ fn road_entry(
             "at_length": round(x.at_length, 3),
             "kind": x.kind,
         })).collect::<Vec<_>>(),
+        "travel": travel_times(transports, ratio, r.length),
     })
 }
 
@@ -417,4 +461,63 @@ fn world_checks(world: &inkland_core::world::World, config: &Config) -> Vec<serd
         }));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use inkland_core::journeys::{Domain, Transport};
+
+    fn transport(name: &str, speed: f64, domain: Domain, hours_per_day: f64) -> Transport {
+        Transport {
+            id: 0,
+            name: name.to_owned(),
+            speed,
+            domain,
+            hours_per_day,
+        }
+    }
+
+    #[test]
+    fn travel_times_give_hours_and_days_for_each_moving_land_transport() {
+        let list = vec![
+            transport("Walk", 5.0, Domain::Land, 8.0),
+            transport("Cart", 4.0, Domain::Land, 10.0),
+            transport("Boat", 6.0, Domain::Water, 12.0),
+            transport("Wing", 50.0, Domain::Air, 8.0),
+            transport("Stuck", 0.0, Domain::Land, 8.0),
+            transport("Rest", 0.0, Domain::Stay, 24.0),
+        ];
+        // One unit is one kilometer.
+        let out = travel_times(&list, 1.0, 80.0);
+        let names: Vec<&str> = out
+            .iter()
+            .map(|v| v["transport"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["Walk", "Cart"]);
+        assert_eq!(out[0]["speed_kmh"], 5.0);
+        assert_eq!(out[0]["hours_per_day"], 8.0);
+        assert_eq!(out[0]["hours"], 16.0);
+        assert_eq!(out[0]["days"], 2.0);
+        assert_eq!(out[1]["hours"], 20.0);
+        assert_eq!(out[1]["days"], 2.0);
+    }
+
+    #[test]
+    fn travel_times_turn_the_units_into_kilometers() {
+        let list = vec![transport("Walk", 1.609344, Domain::Land, 8.0)];
+        // 1.609344 km/h is one mile an hour: 24 miles take 24 hours.
+        let ratio = inkland_core::journeys::distance_unit_ratio("mile");
+        let out = travel_times(&list, ratio, 24.0);
+        assert_eq!(out[0]["hours"], 24.0);
+        assert_eq!(out[0]["days"], 3.0);
+    }
+
+    #[test]
+    fn an_out_of_range_travel_day_takes_the_fallback_of_the_domain() {
+        let list = vec![transport("Walk", 4.0, Domain::Land, 0.0)];
+        let out = travel_times(&list, 1.0, 32.0);
+        assert_eq!(out[0]["hours_per_day"], 8.0);
+        assert_eq!(out[0]["days"], 1.0);
+    }
 }

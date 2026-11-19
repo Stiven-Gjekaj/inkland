@@ -325,7 +325,7 @@ pub fn generate_with_world(
         let mut report = inkland_io::report::variant_report(&world, config, &v.name, &hash);
         if let Some(name) = &v.overlay {
             let o = &config.overlays[name];
-            let section = inkland_io::report::overlay_section(w, o, name);
+            let section = inkland_io::report::overlay_section(w, config, o, name);
             let bad = section["roads"].as_array().map_or(0, |r| {
                 r.iter().filter(|x| x["within_tolerance"] == false).count()
             });
