@@ -892,6 +892,13 @@ impl<'a> Validator<'a> {
         }
         let rivers: BTreeSet<&str> = c.pins.rivers.iter().map(|r| r.id.as_str()).collect();
         let base_roads: BTreeSet<&str> = c.pins.roads.iter().map(|r| r.id.as_str()).collect();
+        let capitals: BTreeSet<&str> = c
+            .pins
+            .points
+            .iter()
+            .filter(|p| p.capital_of.is_some())
+            .map(|p| p.id.as_str())
+            .collect();
         for (name, o) in &c.overlays {
             let n = esc(name);
             let mut all_places = self.base_places();
@@ -915,27 +922,48 @@ impl<'a> Validator<'a> {
                 "feature" => features.contains(id),
                 _ => false,
             };
-            let mut bad: Vec<(String, String)> = Vec::new();
+            // A label key can also name a state by the id of its capital
+            // pin: a point pin with `capital_of`.
+            let label_exists = |kind: &str, id: &str| match kind {
+                "state" => capitals.contains(id),
+                _ => exists(kind, id),
+            };
+            let mut bad: Vec<(String, String, bool)> = Vec::new();
             for (j, item) in o.remove.iter().enumerate() {
                 if !item_ref_ok(item, &exists) {
-                    bad.push((format!("/overlays/{n}/remove/{j}"), item.clone()));
+                    bad.push((format!("/overlays/{n}/remove/{j}"), item.clone(), false));
                 }
             }
-            for key in o.rename.keys().chain(o.labels.keys()) {
+            for key in o.rename.keys() {
                 if !item_ref_ok(key, &exists) {
-                    let field = if o.rename.contains_key(key) {
-                        "rename"
-                    } else {
-                        "labels"
-                    };
-                    bad.push((format!("/overlays/{n}/{field}/{}", esc(key)), key.clone()));
+                    bad.push((
+                        format!("/overlays/{n}/rename/{}", esc(key)),
+                        key.clone(),
+                        false,
+                    ));
                 }
             }
-            for (path, item) in bad {
+            for key in o.labels.keys() {
+                if !item_ref_ok(key, &label_exists) {
+                    bad.push((
+                        format!("/overlays/{n}/labels/{}", esc(key)),
+                        key.clone(),
+                        true,
+                    ));
+                }
+            }
+            for (path, item, label) in bad {
+                let kinds = if label {
+                    "place, region, river, road, feature, or state (the id of its capital pin)"
+                } else {
+                    "place, region, river, road, or feature"
+                };
                 self.err(
                     ErrorCode::RefUnknown,
                     path,
-                    format!("{item:?} does not name an item; use \"<kind>:<id>\" with kind place, region, river, road, or feature"),
+                    format!(
+                        "{item:?} does not name an item; use \"<kind>:<id>\" with kind {kinds}"
+                    ),
                 );
             }
         }

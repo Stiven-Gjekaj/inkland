@@ -1283,7 +1283,9 @@ pub struct Overlay {
     /// New names, from `"<kind>:<id>"` to the name.
     #[serde(default)]
     pub rename: BTreeMap<String, String>,
-    /// Label options, from `"<kind>:<id>"` to the options.
+    /// Label options, from `"<kind>:<id>"` to the options. The key of a
+    /// state label is `"state:<id>"`, with the id of the point pin that is
+    /// the capital of the state, for example `"state:solmere"`.
     #[serde(default)]
     pub labels: BTreeMap<String, LabelOptions>,
 }
@@ -1557,11 +1559,29 @@ pub struct LabelRules {
     /// a generated name. Default `false`.
     pub check_generated: bool,
     /// `print-safe` mode: `true` draws a white box behind each label that
-    /// is not on a path, so that the lines under it do not cross the text.
+    /// does not follow a river or a line, so that the lines under it do not
+    /// cross the text. A curved area label gets boxes along its curve.
     /// `false`: no box. The text never has a stroke, because a PDF printer
     /// turns stroked text into a Type 3 font. `colour` mode draws the halo
     /// of its style. Default `true`.
     pub halo: bool,
+    /// The largest turn of an area label (a state, a region, a lake, a sea,
+    /// an island, or an overlay feature), in degrees, in both render modes.
+    /// A straight label turns 0 or 90 degrees. A curved label has no part
+    /// at a larger angle to the level than this. `0` gives only level,
+    /// straight labels. Default 90.
+    #[schemars(range(min = 0.0, max = 90.0))]
+    pub max_angle: f64,
+    /// `true`: an area label can follow a smooth curve along the middle of
+    /// its area, with its letters spaced to fill part of the curve.
+    /// `false`: only straight area labels. Default `true`.
+    pub curved: bool,
+    /// `false`: a place whose label the config leaves out has no symbol
+    /// either. The config leaves out a label with a generated name when
+    /// `generated` is `false`, and a label with `hide` in the label options
+    /// of an overlay. A label that has no free place keeps its symbol.
+    /// Default `true`.
+    pub unlabelled_symbols: bool,
 }
 
 impl Default for LabelRules {
@@ -1570,6 +1590,9 @@ impl Default for LabelRules {
             generated: true,
             check_generated: false,
             halo: true,
+            max_angle: 90.0,
+            curved: true,
+            unlabelled_symbols: true,
         }
     }
 }

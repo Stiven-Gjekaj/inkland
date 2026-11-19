@@ -215,6 +215,9 @@ pub struct Labels {
     /// The generated places (not pinned, not capitals) whose symbols a
     /// required label covers. Their symbols and labels are left out.
     pub hidden_places: Vec<u32>,
+    /// The places whose label the config leaves out and whose symbol it
+    /// leaves out too (`render.labels.unlabelled_symbols`).
+    pub no_symbol: Vec<u32>,
 }
 
 impl Labels {
@@ -398,7 +401,11 @@ const MAX_ANCHORS: usize = 40;
 /// fits in the run of the area, as the original program fits state labels.
 /// Smaller sizes and tighter letters are candidates of tier 1, for a label
 /// that finds no free place. `halo` is the reach of the halo, as a part of
-/// the font size.
+/// the font size. `inside` tells if a world point is in the area.
+///
+/// An area with no grid cell on the map, for example a sea far from a
+/// coast, gets its anchors on a lattice of points in `bounds`, a world
+/// rectangle round the area.
 #[allow(clippy::too_many_arguments)]
 fn area_candidates(
     world: &World,
@@ -406,6 +413,8 @@ fn area_candidates(
     inner: [f64; 4],
     area: &[bool],
     members: &[usize],
+    inside: &dyn Fn([f64; 2]) -> bool,
+    bounds: Option<[f64; 4]>,
     text: &str,
     f: &FontMetrics,
     size: f64,
@@ -414,23 +423,32 @@ fn area_candidates(
 ) -> Vec<Candidate> {
     let g = &world.grid;
     let depth = depths(world, area, members);
-    let max_depth = depth.iter().copied().max().unwrap_or(0).max(1);
+    let mut max_depth = depth.iter().copied().max().unwrap_or(0).max(1);
     let in_area = |q: [f64; 2]| {
         let w = page.to_world(q);
         let [x0, y0, x1, y1] = page.view;
-        w[0] >= x0 && w[0] <= x1 && w[1] >= y0 && w[1] <= y1 && area[g.find_cell(w[0], w[1])]
+        w[0] >= x0 && w[0] <= x1 && w[1] >= y0 && w[1] <= y1 && inside(w)
     };
+    let on_map =
+        |q: [f64; 2]| q[0] >= inner[0] && q[0] <= inner[2] && q[1] >= inner[1] && q[1] <= inner[3];
     let mut cells: Vec<(u32, usize)> = members
         .iter()
         .copied()
         .filter(|&c| depth[c] > 0)
-        .filter(|&c| {
-            let q = page.to_page(g.points[c]);
-            q[0] >= inner[0] && q[0] <= inner[2] && q[1] >= inner[1] && q[1] <= inner[3]
-        })
+        .filter(|&c| on_map(page.to_page(g.points[c])))
         .map(|c| (depth[c], c))
         .collect();
     cells.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut cells: Vec<(u32, [f64; 2])> = cells
+        .into_iter()
+        .map(|(d, c)| (d, page.to_page(g.points[c])))
+        .collect();
+    if cells.is_empty()
+        && let Some(b) = bounds
+    {
+        cells = lattice_spots(page, b, &|q| on_map(q) && in_area(q));
+        max_depth = cells.first().map_or(1, |s| s.0.max(1));
+    }
     let n = text.chars().count();
     let least = pt(MIN_LABEL_PT).min(size);
     let mut sizes: Vec<f64> = Vec::new();
@@ -443,8 +461,7 @@ fn area_candidates(
     // Anchor cells: the deepest cells first, each at least `ANCHOR_GAP` from
     // the anchors before it, so the candidates spread over the area.
     let mut anchors: Vec<(u32, [f64; 2])> = Vec::new();
-    for &(d, c) in &cells {
-        let q = page.to_page(g.points[c]);
+    for &(d, q) in &cells {
         if anchors
             .iter()
             .all(|(_, a)| (a[0] - q[0]).powi(2) + (a[1] - q[1]).powi(2) >= ANCHOR_GAP * ANCHOR_GAP)
@@ -536,20 +553,7 @@ fn area_candidates(
                         h: [half, (ch + dd) / 2.0 + pad],
                     };
                     // The part of the label outside the area costs more.
-                    let mut outside = 0;
-                    for i in 0..5 {
-                        for j in 0..3 {
-                            let s = -b.h[0] + 2.0 * b.h[0] * f64::from(i) / 4.0;
-                            let t = -b.h[1] + b.h[1] * f64::from(j);
-                            let p = [
-                                b.c[0] + b.u[0] * s - b.u[1] * t,
-                                b.c[1] + b.u[1] * s + b.u[0] * t,
-                            ];
-                            if !in_area(p) {
-                                outside += 1;
-                            }
-                        }
-                    }
+                    let outside = box_points(&b).filter(|&p| !in_area(p)).count() as u32;
                     // Skip a candidate that is almost the same as one before it.
                     if out.iter().any(|o| match o.geometry {
                         Geometry::Point { x, y, angle, .. } => {
@@ -575,6 +579,7 @@ fn area_candidates(
                         spacing,
                         cost: 3.0 * f64::from(outside) / 15.0
                             + 0.5 * (1.0 - f64::from(d) / f64::from(max_depth))
+                            + STRAIGHT_COST
                             + if turn == 0 { 0.0 } else { 0.4 }
                             + if tight { 0.3 } else { 0.0 }
                             + 2.0 * (1.0 - size / sizes[0]),
@@ -585,7 +590,363 @@ fn area_candidates(
             }
         }
     }
+    let in_map = |p: [f64; 2]| on_map(p) && in_area(p);
+    out.extend(curve_candidates(
+        &anchors, max_depth, &in_map, text, f, &sizes, halo, spread,
+    ));
     out
+}
+
+/// The extra cost of a straight area label, so that a curve that fits as
+/// well goes first, as in the original program.
+const STRAIGHT_COST: f64 = 0.2;
+/// The most anchors that get curved candidates.
+const CURVE_ANCHORS: usize = 12;
+/// The directions of the long axis of a curved label, in degrees from the
+/// page x axis.
+const CURVE_AXES: [f64; 11] = [
+    0.0, -15.0, 15.0, -30.0, 30.0, -45.0, 45.0, -60.0, 60.0, -75.0, 75.0,
+];
+/// The number of points across the area that set the shape of a curve.
+const CURVE_STATIONS: usize = 7;
+/// The largest bend of a curve, in degrees: the most that its direction
+/// changes from one end to the other.
+const CURVE_BEND: f64 = 40.0;
+
+/// The length of a line through `q` along the unit vector `axis`, in each
+/// direction, while the line stays in the area. `in_area` takes a page
+/// point.
+fn reach(q: [f64; 2], axis: [f64; 2], in_area: &dyn Fn([f64; 2]) -> bool, limit: f64) -> f64 {
+    let mut t = 0.0;
+    while t + 0.5 <= limit {
+        let next = t + 0.5;
+        if !in_area([q[0] + axis[0] * next, q[1] + axis[1] * next]) {
+            break;
+        }
+        t = next;
+    }
+    t
+}
+
+/// The parabola `o = c0 + c1 t + c2 t^2` nearest to the points `(t, o)`,
+/// by least squares. `None` if the points do not set one.
+fn parabola(pts: &[(f64, f64)]) -> Option<[f64; 3]> {
+    // The sums of t^k and of o t^k.
+    let mut st = [0.0f64; 5];
+    let mut so = [0.0f64; 3];
+    for &(t, o) in pts {
+        let mut tk = 1.0;
+        for (k, v) in st.iter_mut().enumerate() {
+            *v += tk;
+            if k < 3 {
+                so[k] += o * tk;
+            }
+            tk *= t;
+        }
+    }
+    let m = [
+        [st[0], st[1], st[2]],
+        [st[1], st[2], st[3]],
+        [st[2], st[3], st[4]],
+    ];
+    let det = |a: [[f64; 3]; 3]| {
+        a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+            - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+            + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
+    };
+    let d = det(m);
+    if d.abs() < 1e-12 {
+        return None;
+    }
+    let mut out = [0.0; 3];
+    for (k, v) in out.iter_mut().enumerate() {
+        let mut a = m;
+        for r in 0..3 {
+            a[r][k] = so[r];
+        }
+        *v = det(a) / d;
+    }
+    Some(out)
+}
+
+/// The lengths along a line, from its first point.
+fn lengths(pts: &[[f64; 2]]) -> Vec<f64> {
+    let mut acc = vec![0.0];
+    for w in pts.windows(2) {
+        let d = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
+        acc.push(acc[acc.len() - 1] + d);
+    }
+    acc
+}
+
+/// The direction of each segment of a line, in degrees from the page x
+/// axis, from -180 to 180.
+fn headings(pts: &[[f64; 2]]) -> Vec<f64> {
+    pts.windows(2)
+        .map(|w| libm::atan2(w[1][1] - w[0][1], w[1][0] - w[0][0]).to_degrees())
+        .collect()
+}
+
+/// The largest angle of a line to the page x axis, in degrees. A line
+/// that reads from left to right has angles below 90.
+pub fn max_tilt(pts: &[[f64; 2]]) -> f64 {
+    headings(pts).iter().fold(0.0, |m, a| m.max(a.abs()))
+}
+
+/// Candidates that bend along the middle of an area (`fit-state-label.ts`
+/// of the original program). Through each anchor, a line along one of
+/// `CURVE_AXES` crosses the area. The middle of the area across that line,
+/// at `CURVE_STATIONS` points, gives a smooth curve. The text follows the
+/// curve, centred on it, with letters spaced to fill part of it. The
+/// candidates are `Geometry::Path` with no river.
+#[allow(clippy::too_many_arguments)]
+fn curve_candidates(
+    anchors: &[(u32, [f64; 2])],
+    max_depth: u32,
+    in_area: &dyn Fn([f64; 2]) -> bool,
+    text: &str,
+    f: &FontMetrics,
+    sizes: &[f64],
+    halo: f64,
+    spread: (f64, f64),
+) -> Vec<Candidate> {
+    let n = text.chars().count();
+    let mut out: Vec<Candidate> = Vec::new();
+    for &(d, q) in anchors.iter().take(CURVE_ANCHORS) {
+        for deg in CURVE_AXES {
+            let a = deg.to_radians();
+            let axis = [libm::cos(a), libm::sin(a)];
+            let across = [-axis[1], axis[0]];
+            let back = reach(q, [-axis[0], -axis[1]], in_area, 200.0);
+            let ahead = reach(q, axis, in_area, 200.0);
+            let run = back + ahead;
+            if f.width(
+                text,
+                sizes[sizes.len() - 1],
+                spread.0 * sizes[sizes.len() - 1],
+            ) > FIT * run
+            {
+                continue;
+            }
+            // The middle of the area across the axis, at each station of the
+            // inner 90 % of the run.
+            let mut mids: Vec<[f64; 2]> = Vec::new();
+            for i in 0..CURVE_STATIONS {
+                let t = -back + run * (0.05 + 0.9 * i as f64 / (CURVE_STATIONS - 1) as f64);
+                let c = [q[0] + axis[0] * t, q[1] + axis[1] * t];
+                if !in_area(c) {
+                    mids.clear();
+                    break;
+                }
+                let up = reach(c, [-across[0], -across[1]], in_area, 60.0);
+                let down = reach(c, across, in_area, 60.0);
+                let m = (down - up) / 2.0;
+                mids.push([c[0] + across[0] * m, c[1] + across[1] * m]);
+            }
+            if mids.len() < CURVE_STATIONS {
+                continue;
+            }
+            // One smooth arc: the parabola nearest to the middles, in the
+            // frame of the axis, with its bend limited to `CURVE_BEND`.
+            let local: Vec<(f64, f64)> = mids
+                .iter()
+                .map(|m| {
+                    let d = [m[0] - q[0], m[1] - q[1]];
+                    (
+                        d[0] * axis[0] + d[1] * axis[1],
+                        d[0] * across[0] + d[1] * across[1],
+                    )
+                })
+                .collect();
+            let Some([c0, c1, mut c2]) = parabola(&local) else {
+                continue;
+            };
+            let (t0, t1) = (local[0].0, local[local.len() - 1].0);
+            let arc = |c2: f64| -> Vec<[f64; 2]> {
+                (0..=12)
+                    .map(|i| {
+                        let t = t0 + (t1 - t0) * f64::from(i) / 12.0;
+                        let o = c0 + c1 * t + c2 * t * t;
+                        [
+                            q[0] + axis[0] * t + across[0] * o,
+                            q[1] + axis[1] * t + across[1] * o,
+                        ]
+                    })
+                    .collect()
+            };
+            let bend_of = |pts: &[[f64; 2]]| {
+                let heads = headings(pts);
+                let (lo, hi) = heads
+                    .iter()
+                    .fold((f64::MAX, f64::MIN), |(lo, hi), &h| (lo.min(h), hi.max(h)));
+                hi - lo
+            };
+            let mut pts = arc(c2);
+            for _ in 0..8 {
+                if bend_of(&pts) <= CURVE_BEND {
+                    break;
+                }
+                c2 /= 2.0;
+                pts = arc(c2);
+            }
+            let bend = bend_of(&pts);
+            if pts[pts.len() - 1][0] < pts[0][0] {
+                pts.reverse();
+            }
+            if bend > CURVE_BEND || max_tilt(&pts) >= 90.0 {
+                continue;
+            }
+            let acc = lengths(&pts);
+            let len = acc[acc.len() - 1];
+            let fit = sizes
+                .iter()
+                .position(|&s| f.width(text, s, spread.0 * s) <= FIT * len)
+                .unwrap_or(sizes.len() - 1);
+            let size = sizes[fit];
+            let pad = pad_of(size, halo);
+            let w0 = f.width(text, size, 0.0);
+            let spacing = if n > 1 {
+                ((0.7 * len - w0) / (n - 1) as f64).clamp(spread.0 * size, spread.1 * size)
+            } else {
+                0.0
+            };
+            let w = w0 + spacing * n.saturating_sub(1) as f64;
+            if w > len {
+                continue;
+            }
+            // The boxes of the text, centred on the middle of the curve.
+            let (ch, dd) = (f.cap(size), 0.6 * f.descent(size));
+            let s0 = (len - w) / 2.0;
+            let parts = ((w / (1.2 * size)).ceil() as usize).max(1);
+            let boxes: Vec<Obb> = (0..parts)
+                .map(|i| {
+                    let p = point_at(&pts, &acc, s0 + w * i as f64 / parts as f64);
+                    let r = point_at(&pts, &acc, s0 + w * (i + 1) as f64 / parts as f64);
+                    let l = ((r[0] - p[0]).powi(2) + (r[1] - p[1]).powi(2))
+                        .sqrt()
+                        .max(1e-9);
+                    Obb {
+                        c: [(p[0] + r[0]) / 2.0, (p[1] + r[1]) / 2.0],
+                        u: [(r[0] - p[0]) / l, (r[1] - p[1]) / l],
+                        h: [l / 2.0 + pad, (ch + dd) / 2.0 + pad],
+                    }
+                })
+                .collect();
+            let total = boxes.len() * 15;
+            let outside = boxes
+                .iter()
+                .flat_map(box_points)
+                .filter(|&p| !in_area(p))
+                .count();
+            // Skip a curve that is almost the same as one before it.
+            let mid = point_at(&pts, &acc, len / 2.0);
+            if out.iter().any(|o| match &o.geometry {
+                Geometry::Path { points, .. } => {
+                    let oa = lengths(points);
+                    let om = point_at(points, &oa, oa[oa.len() - 1] / 2.0);
+                    (o.size - size).abs() < 1e-9
+                        && (om[0] - mid[0]).abs() < 1.0
+                        && (om[1] - mid[1]).abs() < 1.0
+                }
+                Geometry::Point { .. } => false,
+            }) {
+                continue;
+            }
+            out.push(Candidate {
+                geometry: Geometry::Path {
+                    points: pts,
+                    // A negative offset puts the baseline below the curve, so
+                    // that the glyphs are centred on it.
+                    offset: -(ch - dd) / 2.0,
+                },
+                boxes,
+                size,
+                spacing,
+                cost: 3.0 * outside as f64 / total as f64
+                    + 0.5 * (1.0 - f64::from(d) / f64::from(max_depth))
+                    + 0.2 * deg.abs() / 75.0
+                    + 0.1 * bend / CURVE_BEND
+                    + 2.0 * (1.0 - size / sizes[0]),
+                tier: 0,
+                river: None,
+            });
+        }
+    }
+    out
+}
+
+/// Fifteen points on a box: five along it on each of its two long sides
+/// and on its middle line.
+fn box_points(b: &Obb) -> impl Iterator<Item = [f64; 2]> + '_ {
+    (0..5).flat_map(move |i| {
+        (0..3).map(move |j| {
+            let s = -b.h[0] + 2.0 * b.h[0] * f64::from(i) / 4.0;
+            let t = -b.h[1] + b.h[1] * f64::from(j);
+            [
+                b.c[0] + b.u[0] * s - b.u[1] * t,
+                b.c[1] + b.u[1] * s + b.u[0] * t,
+            ]
+        })
+    })
+}
+
+/// The points of a square lattice in the part of the world rectangle `b`
+/// in the view, on the page, with their depth in the area, deepest first.
+/// `keep` tells if a page point is in the area. The depth is 1 for a point
+/// next to a point outside the area or on the edge of the lattice, and
+/// more inside, as `depths` gives it for cells.
+fn lattice_spots(
+    page: &Page,
+    b: [f64; 4],
+    keep: &dyn Fn([f64; 2]) -> bool,
+) -> Vec<(u32, [f64; 2])> {
+    const STEPS: usize = 24;
+    let [vx0, vy0, vx1, vy1] = page.view;
+    let (x0, y0, x1, y1) = (b[0].max(vx0), b[1].max(vy0), b[2].min(vx1), b[3].min(vy1));
+    if x1 <= x0 || y1 <= y0 {
+        return Vec::new();
+    }
+    let step = (x1 - x0).max(y1 - y0) / STEPS as f64;
+    let nx = ((x1 - x0) / step).floor() as usize + 1;
+    let ny = ((y1 - y0) / step).floor() as usize + 1;
+    // The lattice is centred in the rectangle.
+    let ox = x0 + ((x1 - x0) - step * (nx - 1) as f64) / 2.0;
+    let oy = y0 + ((y1 - y0) - step * (ny - 1) as f64) / 2.0;
+    let at = |i: usize, j: usize| page.to_page([ox + step * i as f64, oy + step * j as f64]);
+    let ins: Vec<bool> = (0..nx * ny).map(|k| keep(at(k % nx, k / nx))).collect();
+    let mut depth = vec![0u32; nx * ny];
+    let mut queue = VecDeque::new();
+    let around = |k: usize| {
+        let (i, j) = (k % nx, k / nx);
+        [
+            (i > 0).then(|| k - 1),
+            (i + 1 < nx).then(|| k + 1),
+            (j > 0).then(|| k - nx),
+            (j + 1 < ny).then(|| k + nx),
+        ]
+    };
+    for k in 0..nx * ny {
+        if ins[k] && around(k).iter().any(|m| m.is_none_or(|m| !ins[m])) {
+            depth[k] = 1;
+            queue.push_back(k);
+        }
+    }
+    while let Some(k) = queue.pop_front() {
+        for m in around(k).into_iter().flatten() {
+            if ins[m] && depth[m] == 0 {
+                depth[m] = depth[k] + 1;
+                queue.push_back(m);
+            }
+        }
+    }
+    let mut out: Vec<(u32, usize)> = (0..nx * ny)
+        .filter(|&k| depth[k] > 0)
+        .map(|k| (depth[k], k))
+        .collect();
+    out.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    out.into_iter()
+        .map(|(d, k)| (d, at(k % nx, k / nx)))
+        .collect()
 }
 
 /// The point at length `s` along a line with cumulative lengths `acc`.
@@ -745,12 +1106,14 @@ pub fn feature_points(config: &Config, variant: &Variant, page: &Page) -> Vec<[f
 
 /// The boxes that labels must not touch: place symbols and extras. The
 /// second list gives the place of each box that a required label can hide:
-/// the symbol of a generated place that is not a capital.
+/// the symbol of a generated place that is not a capital. The places in
+/// `skip` have no symbol.
 fn fixed_obstacles(
     world: &World,
     config: &Config,
     variant: &Variant,
     page: &Page,
+    skip: &[u32],
 ) -> (Vec<Obb>, Vec<Option<u32>>) {
     let symbols = symbol_points(world, page);
     let [x0, y0, x1, y1] = page.view;
@@ -761,6 +1124,7 @@ fn fixed_obstacles(
         .places
         .iter()
         .filter(|p| p.at[0] >= x0 && p.at[0] <= x1 && p.at[1] >= y0 && p.at[1] <= y1)
+        .filter(|p| !skip.contains(&p.id))
     {
         let [x, y] = page.to_page(p.at);
         let r = symbol_radius(p.kind, p.capital);
@@ -881,6 +1245,8 @@ pub fn place_with(
             .map(str::to_owned)
     };
     let mut requests: Vec<Request> = Vec::new();
+    let symbols = config.render.labels.unlabelled_symbols;
+    let mut no_symbol: Vec<u32> = Vec::new();
 
     // Places.
     for p in &world.society.places {
@@ -889,6 +1255,9 @@ pub fn place_with(
         }
         let key = p.pin.clone().unwrap_or_else(|| p.id.to_string());
         if !shown("place", &key) {
+            if !symbols {
+                no_symbol.push(p.id);
+            }
             continue;
         }
         let group = place_group(p.kind, p.capital);
@@ -1043,6 +1412,8 @@ pub fn place_with(
             inner,
             &feature_mask,
             members,
+            &|p: [f64; 2]| feature_mask[world.grid.find_cell(p[0], p[1])],
+            None,
             &name,
             f,
             size,
@@ -1065,11 +1436,21 @@ pub fn place_with(
         });
     }
 
-    // States.
+    // States. The label options of a state have the key of its capital pin,
+    // for example `state:solmere`.
     let g = &world.grid;
+    let mut state_keys: BTreeMap<String, String> = BTreeMap::new();
     for st in &world.society.states {
         if st.name.trim().is_empty() {
             continue;
+        }
+        let capital = world.society.places.iter().find(|p| p.id == st.capital);
+        let key = capital.and_then(|p| p.pin.clone());
+        if let Some(k) = &key {
+            if !shown("state", k) {
+                continue;
+            }
+            state_keys.insert(st.id.to_string(), k.clone());
         }
         let area: Vec<bool> = (0..g.len())
             .map(|c| world.society.cell_state[c] == st.id && world.features.is_land(c))
@@ -1078,17 +1459,15 @@ pub fn place_with(
             continue;
         }
         let look = style("state");
-        let size = look.size.unwrap_or_else(|| pt(sizes.state));
+        let size = match &key {
+            Some(k) => size_of("state", k, &look, sizes.state),
+            None => look.size.unwrap_or_else(|| pt(sizes.state)),
+        };
         let name = look.text(&st.name);
         let f = FontMetrics::of(&look.family);
         // A state whose capital is outside the view can show only a small
         // part in the view. Its label is optional.
-        let capital_in_view = world
-            .society
-            .places
-            .iter()
-            .find(|p| p.id == st.capital)
-            .is_some_and(|p| in_view(p.at));
+        let capital_in_view = capital.is_some_and(|p| in_view(p.at));
         requests.push(Request {
             place: None,
             candidates: area_candidates(
@@ -1097,6 +1476,8 @@ pub fn place_with(
                 inner,
                 &area,
                 &members_of(&area),
+                &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
+                None,
                 &name,
                 f,
                 size,
@@ -1125,28 +1506,50 @@ pub fn place_with(
         let Some(shape) = Shape::of(pin) else {
             continue;
         };
-        let area: Vec<bool> = (0..g.len()).map(|c| shape.contains(g.points[c])).collect();
-        if !(0..g.len()).any(|c| area[c] && in_view(g.points[c])) {
+        // The label of a sea or a lake uses only water cells.
+        let water = pin.kind.is_water();
+        let wet = |c: usize| !water || !world.features.is_land(c);
+        let area: Vec<bool> = (0..g.len())
+            .map(|c| shape.contains(g.points[c]) && wet(c))
+            .collect();
+        let inside = |p: [f64; 2]| shape.contains(p) && wet(g.find_cell(p[0], p[1]));
+        // The grid has no cells in deep water, so a sea far from a coast can
+        // have no cell. The shape, not its cells, tells if it is in the view.
+        let bounds = shape.bbox();
+        if bounds[0] > vx1 || bounds[2] < vx0 || bounds[1] > vy1 || bounds[3] < vy0 {
             continue;
         }
         let look = style("region");
         let size = size_of("region", &pin.id, &look, sizes.region);
         let name = look.text(name);
         let f = FontMetrics::of(&look.family);
+        let mut candidates = area_candidates(
+            world,
+            page,
+            inner,
+            &area,
+            &members_of(&area),
+            &inside,
+            Some(bounds),
+            &name,
+            f,
+            size,
+            look.halo,
+            (0.05, 0.5),
+        );
+        if water {
+            candidates.retain(|cand| {
+                cand.boxes.iter().all(|b| {
+                    box_points(b).all(|q| {
+                        let p = page.to_world(q);
+                        !world.features.is_land(g.find_cell(p[0], p[1]))
+                    })
+                })
+            });
+        }
         requests.push(Request {
             place: None,
-            candidates: area_candidates(
-                world,
-                page,
-                inner,
-                &area,
-                &members_of(&area),
-                &name,
-                f,
-                size,
-                look.halo,
-                (0.05, 0.5),
-            ),
+            candidates,
             id: format!("label-region-{}", pin.id),
             kind: Kind::Region,
             group: "region",
@@ -1195,6 +1598,8 @@ pub fn place_with(
                     inner,
                     &area,
                     &members_of(&area),
+                    &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
+                    None,
                     &name,
                     f,
                     size,
@@ -1218,12 +1623,32 @@ pub fn place_with(
         }
     }
 
+    // Keep only the turns and the curves that the config lets labels have.
+    let max_angle = config.render.labels.max_angle;
+    let curves = config.render.labels.curved;
+    for r in &mut requests {
+        r.candidates.retain(|c| match &c.geometry {
+            Geometry::Point { angle, .. } => f64::from(angle.unsigned_abs()) <= max_angle,
+            // A curved area label has no river. A river label follows its
+            // river.
+            Geometry::Path { points, .. } => {
+                c.river.is_some() || (curves && max_tilt(points) <= max_angle)
+            }
+        });
+    }
+
     // Leave out the labels with a generated name, when the config asks.
     let mut out = Labels::default();
     if !config.render.labels.generated {
         let written = config.written_names();
         requests.retain(|r| {
             let keep = written.contains(&r.text.trim().to_lowercase());
+            if !keep
+                && !symbols
+                && let Some(p) = r.place
+            {
+                no_symbol.push(p);
+            }
             if !keep {
                 out.unplaced.push(Unplaced {
                     id: r.id.clone(),
@@ -1242,14 +1667,26 @@ pub fn place_with(
         let Some((kind, key)) = r.id.strip_prefix("label-").and_then(|k| k.split_once('-')) else {
             continue;
         };
+        let key = match kind {
+            "state" => match state_keys.get(key) {
+                Some(k) => k.as_str(),
+                None => continue,
+            },
+            _ => key,
+        };
         let Some(at) = opts(kind, key).and_then(|o| o.at) else {
             continue;
         };
-        // The size of the first candidate, or, for an item with no
-        // candidate in the view, the size of its kind and its options.
-        let size = match r.candidates.first() {
-            Some(first) => first.size,
-            None => {
+        // The size of the options, else the size of the first candidate,
+        // or, for an item with no candidate in the view, the size of its
+        // kind.
+        let size = match (
+            opts(kind, key).and_then(|o| o.size_pt),
+            r.candidates.first(),
+        ) {
+            (Some(s), _) => pt(s),
+            (None, Some(first)) => first.size,
+            (None, None) => {
                 let default_pt = match r.group {
                     "state" => sizes.state,
                     "region" | "ocean" => sizes.region,
@@ -1301,7 +1738,9 @@ pub fn place_with(
         }
     }
 
-    let (mut obstacles, mut hideable) = fixed_obstacles(world, config, variant, page);
+    no_symbol.sort_unstable();
+    let (mut obstacles, mut hideable) = fixed_obstacles(world, config, variant, page, &no_symbol);
+    out.no_symbol = no_symbol;
     let mut index = Index::default();
     for (i, o) in obstacles.iter().enumerate() {
         index.insert(i, o.bounds());
@@ -1531,7 +1970,7 @@ mod tests {
         let page = Page::new(c, &c.variants[0]);
         let labels = place(w, c, &c.variants[0], &page);
         let [mx, my, mw, mh] = page.map_rect();
-        let (fixed, hideable) = fixed_obstacles(w, c, &c.variants[0], &page);
+        let (fixed, hideable) = fixed_obstacles(w, c, &c.variants[0], &page, &labels.no_symbol);
         // The symbols that a required label hides are not drawn.
         let fixed: Vec<Obb> = fixed
             .into_iter()
@@ -1636,6 +2075,294 @@ mod tests {
         }
     }
 
+    /// A world with a named sea in deep water, far from the land.
+    fn deep_sea(extra: serde_json::Value) -> (World, Config) {
+        let mut v = json!({
+            "pins": {
+                "points": [{ "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150] }],
+                "regions": [
+                    { "id": "land", "kind": "plains", "circle": { "at": [200, 150], "r": 60 } },
+                    { "id": "cold", "kind": "sea", "name": "The Cold Sea",
+                      "box": [10, 10, 130, 60] }
+                ]
+            }
+        });
+        for (k, val) in extra.as_object().unwrap() {
+            v[k] = val.clone();
+        }
+        let (w, c) = world(5, "atoll", v);
+        let shape = Shape::of(&c.pins.regions[1]).unwrap();
+        assert!(
+            !w.grid.points.iter().any(|&p| shape.contains(p)),
+            "the sea has grid cells, so the test does not test the deep sea"
+        );
+        (w, c)
+    }
+
+    #[test]
+    fn a_sea_with_no_grid_cell_gets_its_label() {
+        let (w, c) = deep_sea(json!({}));
+        let labels = check_no_overlap(&w, &c);
+        let l = labels
+            .placed
+            .iter()
+            .find(|l| l.id == "label-region-cold")
+            .unwrap_or_else(|| panic!("no label; unplaced: {:?}", labels.unplaced));
+        let page = Page::new(&c, &c.variants[0]);
+        // The middle of the text: its point, or the middle of its curve.
+        let mid = match &l.geometry {
+            Geometry::Point { x, y, .. } => [*x, *y],
+            Geometry::Path { points, .. } => {
+                let acc = lengths(points);
+                point_at(points, &acc, acc[acc.len() - 1] / 2.0)
+            }
+        };
+        let at = page.to_world(mid);
+        assert!(
+            Shape::of(&c.pins.regions[1]).unwrap().contains(at),
+            "{at:?}"
+        );
+    }
+
+    #[test]
+    fn a_sea_with_no_grid_cell_goes_to_its_position() {
+        let (w, c) = deep_sea(json!({
+            "overlays": { "today": { "labels": { "region:cold": { "at": [70, 40] } } } },
+            "variants": [{ "name": "full", "overlay": "today",
+                           "page": { "w_mm": 167, "h_mm": 250, "margin_mm": 5 } }]
+        }));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let labels = place(&w, &c, &v, &page);
+        let l = labels
+            .placed
+            .iter()
+            .find(|l| l.id == "label-region-cold")
+            .unwrap();
+        let Geometry::Point { x, .. } = l.geometry else {
+            panic!("the label is not at a point");
+        };
+        assert!((x - page.to_page([70.0, 40.0])[0]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_sea_label_that_cannot_fit_is_listed() {
+        let big = inkland_core::config::FontSizes {
+            region: 400.0,
+            ..Default::default()
+        };
+        let (w, c) = deep_sea(json!({ "render": {
+            "font_sizes_pt": serde_json::to_value(&big).unwrap()
+        }}));
+        let labels = check_no_overlap(&w, &c);
+        let u = labels
+            .unplaced
+            .iter()
+            .find(|u| u.id == "label-region-cold")
+            .unwrap();
+        assert!(u.required);
+        assert_eq!(u.reason, "outside");
+    }
+
+    #[test]
+    fn a_sea_label_at_the_frame_edge_stays_on_the_water() {
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({ "pins": {
+                "points": [{ "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150] }],
+                "regions": [
+                    { "id": "land", "kind": "plains", "polygon": [[80, 0], [400, 0], [400, 300], [0, 300], [0, 30], [80, 30]] },
+                    { "id": "west", "kind": "sea", "name": "The Western Ocean",
+                      "box": [0, 0, 80, 30] }
+                ]
+            }}),
+        );
+        let page = Page::new(&c, &c.variants[0]);
+        let labels = check_no_overlap(&w, &c);
+        // In this corner, the land and the extras leave no free water: the
+        // label goes in the list, not on the land.
+        let Some(l) = labels.placed.iter().find(|l| l.id == "label-region-west") else {
+            assert!(labels.unplaced.iter().any(|u| u.id == "label-region-west"));
+            return;
+        };
+        for b in &l.boxes {
+            for q in box_points(b) {
+                let p = page.to_world(q);
+                let cell = w.grid.find_cell(p[0], p[1]);
+                assert!(!w.features.is_land(cell), "the label is on land at {p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_state_label_takes_the_options_of_its_capital_pin() {
+        let (w, c) = world(
+            3,
+            "pangea",
+            json!({
+                "pins": {
+                    "points": [{ "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150],
+                                 "capital_of": "Ostria" }]
+                },
+                "overlays": { "today": { "labels": {
+                    "state:ostrey": { "at": [120, 60], "size_pt": 9 }
+                } } },
+                "variants": [{ "name": "full", "overlay": "today",
+                               "page": { "w_mm": 167, "h_mm": 250, "margin_mm": 5 } }]
+            }),
+        );
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let labels = place(&w, &c, &v, &page);
+        let l = labels.placed.iter().find(|l| l.text == "Ostria").unwrap();
+        assert_eq!(l.kind, Kind::State);
+        assert!((l.size - pt(9.0)).abs() < 1e-9, "{}", l.size);
+        let Geometry::Point { x, angle, .. } = l.geometry else {
+            panic!("the label is not at a point");
+        };
+        assert_eq!(angle, 0);
+        assert!((x - page.to_page([120.0, 60.0])[0]).abs() < 1e-9);
+
+        // `hide` leaves the label out.
+        let mut c = c;
+        let o = c.overlays.get_mut("today").unwrap();
+        o.labels.get_mut("state:ostrey").unwrap().hide = true;
+        let labels = place(&w, &c, &v, &page);
+        assert!(labels.placed.iter().all(|l| l.text != "Ostria"));
+    }
+
+    #[test]
+    fn a_max_angle_of_zero_gives_level_labels() {
+        let (w, mut c) = world(3, "pangea", json!({}));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let turned = |l: &Labels| {
+            l.placed
+                .iter()
+                .filter(|p| matches!(p.geometry, Geometry::Point { angle, .. } if angle != 0))
+                .count()
+        };
+        // A tall, narrow region gets a turned label by default.
+        c.pins.regions[0].rect = Some([180.0, 40.0, 200.0, 260.0]);
+        let all = place(&w, &c, &v, &page);
+        assert!(
+            turned(&all) > 0,
+            "no label turns, so the test tests nothing"
+        );
+        c.render.labels.max_angle = 0.0;
+        let level = place(&w, &c, &v, &page);
+        assert_eq!(turned(&level), 0);
+        assert!(level.placed.iter().any(|l| l.id == "label-region-hills"));
+    }
+
+    #[test]
+    fn a_place_with_a_left_out_label_can_lose_its_symbol() {
+        // The capital with no name in the config has a generated name.
+        let (w, mut c) = world(
+            3,
+            "pangea",
+            json!({ "pins": {
+                "points": [
+                    { "id": "ostrey", "kind": "city", "name": "Ostrey", "at": [200, 150] },
+                    { "id": "seat", "kind": "town", "at": [120, 90], "capital_of": "Varn" }
+                ]
+            }}),
+        );
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        let seat = w
+            .society
+            .places
+            .iter()
+            .find(|p| p.pin.as_deref() == Some("seat"))
+            .unwrap()
+            .id;
+        c.render.labels.generated = false;
+        let kept = place(&w, &c, &v, &page);
+        assert!(kept.unplaced.iter().any(|u| u.id == "label-place-seat"));
+        assert!(kept.no_symbol.is_empty());
+        c.render.labels.unlabelled_symbols = false;
+        let gone = check_no_overlap(&w, &c);
+        assert!(gone.no_symbol.contains(&seat));
+        let ostrey = w
+            .society
+            .places
+            .iter()
+            .find(|p| p.name == "Ostrey")
+            .unwrap();
+        assert!(!gone.no_symbol.contains(&ostrey.id));
+        // The overlay option `hide` also takes the symbol away.
+        c.render.labels.generated = true;
+        c.overlays.insert(
+            "today".into(),
+            serde_json::from_value(json!({ "labels": { "place:ostrey": { "hide": true } } }))
+                .unwrap(),
+        );
+        let mut v = v;
+        v.overlay = Some("today".into());
+        let hidden = place(&w, &c, &v, &page);
+        assert!(hidden.no_symbol.contains(&ostrey.id));
+        assert!(!hidden.no_symbol.contains(&seat));
+    }
+
+    /// The curved state and region labels of a set of labels.
+    fn curved(l: &Labels) -> Vec<&Placed> {
+        l.placed
+            .iter()
+            .filter(|p| matches!(p.kind, Kind::State | Kind::Region))
+            .filter(|p| matches!(p.geometry, Geometry::Path { .. }))
+            .collect()
+    }
+
+    #[test]
+    fn area_labels_can_bend_along_their_area() {
+        let (w, c) = world(3, "pangea", json!({}));
+        let labels = check_no_overlap(&w, &c);
+        let bent = curved(&labels);
+        assert!(!bent.is_empty(), "no area label bends");
+        for l in bent {
+            let Geometry::Path { points, offset } = &l.geometry else {
+                unreachable!()
+            };
+            // The text reads from left to right, centred on the curve.
+            assert!(points[0][0] < points[points.len() - 1][0], "{}", l.id);
+            assert!(max_tilt(points) < 90.0, "{}", l.id);
+            assert!(*offset < 0.0, "{}", l.id);
+            assert!(l.spacing > 0.0, "{}", l.id);
+        }
+    }
+
+    #[test]
+    fn curved_false_gives_straight_area_labels() {
+        let (w, mut c) = world(3, "pangea", json!({}));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        assert!(!curved(&place(&w, &c, &v, &page)).is_empty());
+        c.render.labels.curved = false;
+        let straight = place(&w, &c, &v, &page);
+        assert!(curved(&straight).is_empty());
+        assert!(straight.placed.iter().any(|l| l.kind == Kind::State));
+    }
+
+    #[test]
+    fn max_angle_limits_the_tilt_of_a_curve() {
+        let (w, mut c) = world(3, "pangea", json!({}));
+        let v = c.variants[0].clone();
+        let page = Page::new(&c, &v);
+        c.render.labels.max_angle = 20.0;
+        let some = place(&w, &c, &v, &page);
+        for l in curved(&some) {
+            let Geometry::Path { points, .. } = &l.geometry else {
+                unreachable!()
+            };
+            assert!(max_tilt(points) <= 20.0, "{}", l.id);
+        }
+        c.render.labels.max_angle = 0.0;
+        let level = place(&w, &c, &v, &page);
+        assert!(curved(&level).is_empty());
+    }
+
     #[test]
     fn generated_names_can_be_left_out() {
         // The capital names the state, so its label is a written name too.
@@ -1726,6 +2453,8 @@ mod tests {
             inner,
             &area,
             &members_of(&area),
+            &|p: [f64; 2]| area[w.grid.find_cell(p[0], p[1])],
+            None,
             "Long Name",
             f,
             size,

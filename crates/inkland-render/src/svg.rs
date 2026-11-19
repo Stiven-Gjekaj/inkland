@@ -141,7 +141,7 @@ pub fn render(world: &World, config: &Config, variant: &Variant) -> Rendered {
 /// follows a path in `<defs>`.
 fn write_labels(s: &mut String, labels: &crate::labels::Labels, halo: bool) {
     use crate::extras::xml;
-    use crate::labels::Geometry;
+    use crate::labels::{Geometry, Kind};
     let paths: Vec<_> = labels
         .placed
         .iter()
@@ -169,7 +169,11 @@ fn write_labels(s: &mut String, labels: &crate::labels::Labels, halo: bool) {
     if halo {
         let _ = writeln!(s, "<g id=\"label-halos\" fill=\"{PAPER}\" stroke=\"none\">");
         for l in &labels.placed {
-            if !matches!(l.geometry, Geometry::Point { .. }) {
+            // A label along a river or a line gets no box, so that its line
+            // stays whole. A curved area label gets boxes.
+            if matches!(l.geometry, Geometry::Path { .. })
+                && matches!(l.kind, Kind::River | Kind::Feature)
+            {
                 continue;
             }
             let mut d = String::new();
@@ -632,7 +636,7 @@ fn write_places(
         .places
         .iter()
         .filter(|p| p.at[0] >= x0 && p.at[0] <= x1 && p.at[1] >= y0 && p.at[1] <= y1)
-        .filter(|p| !labels.hidden_places.contains(&p.id))
+        .filter(|p| !labels.hidden_places.contains(&p.id) && !labels.no_symbol.contains(&p.id))
         .map(|p| {
             let id = match &p.pin {
                 Some(pin) => format!("place-{pin}"),
