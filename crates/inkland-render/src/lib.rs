@@ -7,6 +7,7 @@ pub mod decor;
 pub mod emblem;
 pub mod extras;
 pub mod fmg;
+pub mod hand;
 pub mod labels;
 pub mod metrics;
 mod metrics_data;
