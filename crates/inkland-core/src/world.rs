@@ -208,6 +208,9 @@ impl World {
             }
         }
 
+        let spacing = (w * h / base_grid.len().max(1) as f64).sqrt();
+        let areas = crate::character::Area::all(config, spacing);
+        crate::character::apply_heights(&base_grid, &mut base_heights, &areas, sea_level);
         let regions = FitRegion::of_config(config);
         apply_regions(&base_grid, &mut base_heights, &regions, sea_level);
         let points: Vec<FitPoint> = pins

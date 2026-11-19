@@ -8,6 +8,7 @@ pub mod biomes;
 pub mod border_cost;
 pub mod borders;
 pub mod burgs;
+pub mod character;
 pub mod climate;
 pub mod colors;
 pub mod config;
