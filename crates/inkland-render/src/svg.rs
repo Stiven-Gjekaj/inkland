@@ -444,7 +444,8 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page, ha
         let id = format!("border-province-{}", i + 1);
         let d = line(&id, l);
         if !d.is_empty() {
-            let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\"/>");
+            let dash = hand_dashes(hand, &id, &[0.3, 0.9]);
+            let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\"{dash}/>");
         }
     }
     s.push_str("</g>\n");
@@ -460,7 +461,8 @@ fn write_borders(s: &mut String, world: &World, config: &Config, page: &Page, ha
         let id = format!("border-state-{}", i + 1);
         let d = line(&id, l);
         if !d.is_empty() {
-            let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\"/>");
+            let dash = hand_dashes(hand, &id, &[2.0, 0.8, 0.4, 0.8]);
+            let _ = writeln!(s, "<path id=\"{id}\" d=\"{d}\"{dash}/>");
         }
     }
     s.push_str("</g>\n</g>\n");
@@ -474,8 +476,15 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page, hand
     let seed = inkland_core::curves::wander_seed(config.seed);
     let min = config.render.min_line_width_pt;
     let style = |kind: RoadKind| match kind {
-        RoadKind::Road => (n(line_mm(ROAD_PT.max(min))), "1.6 0.5"),
-        RoadKind::Trail => (n(line_mm(TRAIL_PT.max(min))), "0.5 0.6"),
+        RoadKind::Road => (n(line_mm(ROAD_PT.max(min))), [1.6, 0.5]),
+        RoadKind::Trail => (n(line_mm(TRAIL_PT.max(min))), [0.5, 0.6]),
+    };
+    // The dash pattern of a road: exact, or with the changes of a hand.
+    let dashes = |key: &str, base: [f64; 2]| -> String {
+        match hand {
+            Some(h) => dash_list(&h.dashes(key, &base)),
+            None => dash_list(&base),
+        }
     };
     let _ = writeln!(
         s,
@@ -502,7 +511,8 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page, hand
     }
     items.sort_by(|a, b| a.0.cmp(&b.0));
     for (id, d, kind) in items {
-        let (w, dash) = style(kind);
+        let (w, base) = style(kind);
+        let dash = dashes(&id, base);
         let _ = writeln!(
             s,
             "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{w}\" stroke-dasharray=\"{dash}\"/>"
@@ -536,7 +546,7 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page, hand
             }
         }
         let list: Vec<(u32, u32)> = edges.iter().map(|&(a, b)| (a as u32, b as u32)).collect();
-        let (w, dash) = style(kind);
+        let (w, base) = style(kind);
         let name = match kind {
             RoadKind::Road => "road-net",
             RoadKind::Trail => "trail-net",
@@ -549,6 +559,7 @@ fn write_roads(s: &mut String, world: &World, config: &Config, page: &Page, hand
             let id = format!("{name}-{}", i + 1);
             let d = hand_path(page, hand, &id, &road_line(seed, &pts), false);
             if !d.is_empty() {
+                let dash = dashes(&id, base);
                 let _ = writeln!(
                     s,
                     "<path id=\"{id}\" d=\"{d}\" stroke-width=\"{w}\" stroke-dasharray=\"{dash}\"/>"
@@ -800,6 +811,21 @@ fn hand_path(
     }
 }
 
+/// A dash pattern as the value of `stroke-dasharray`.
+fn dash_list(values: &[f64]) -> String {
+    values.iter().map(|&v| n(v)).collect::<Vec<_>>().join(" ")
+}
+
+/// The `stroke-dasharray` attribute of a line that a hand draws, with the
+/// changes of the hand to the base pattern. Without a hand, the line uses
+/// the pattern of its group, and the attribute is empty.
+fn hand_dashes(hand: Option<&Hand>, key: &str, base: &[f64]) -> String {
+    match hand {
+        Some(h) => format!(" stroke-dasharray=\"{}\"", dash_list(&h.dashes(key, base))),
+        None => String::new(),
+    }
+}
+
 /// The path data of a line in millimetres on the page. A closed line has
 /// its first point again at its end.
 fn mm_path_data(points: &[[f64; 2]], closed: bool) -> String {
@@ -1047,6 +1073,15 @@ mod tests {
         for w in &widths {
             assert!(w.parse::<f64>().unwrap() >= min_mm - 0.001, "{w}");
         }
+        // The dash patterns are less regular: each dashed line has its own.
+        let patterns = |svg: &str| -> std::collections::BTreeSet<String> {
+            let doc = roxmltree::Document::parse(svg).unwrap();
+            doc.descendants()
+                .filter_map(|e| e.attribute("stroke-dasharray"))
+                .map(str::to_string)
+                .collect()
+        };
+        assert!(patterns(&on).len() > patterns(&off).len() + 2);
         // Both pass the print checks.
         for svg in [&on, &off] {
             let opts = crate::checks::CheckOptions {
