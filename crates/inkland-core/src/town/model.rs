@@ -55,6 +55,22 @@ pub struct CurtainWall {
 #[derive(Debug)]
 pub struct Retry(pub &'static str);
 
+/// inkland: the land around a town, from the world map. All directions
+/// are in radians from the centre: 0 east, a quarter turn south.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Terrain {
+    /// The direction of the sea, or `None` for no sea.
+    pub coast: Option<f64>,
+    /// The direction in which a river flows through the town, or `None`.
+    pub river: Option<f64>,
+    /// The direction in which the land goes up, or `None` for flat land.
+    /// The castle stands on this side.
+    pub uphill: Option<f64>,
+    /// The directions of the roads to the places near the town. Empty: a
+    /// road from each gate, as in the original.
+    pub roads: Vec<f64>,
+}
+
 /// The town model.
 #[derive(Debug, Clone)]
 pub struct Model {
@@ -69,6 +85,10 @@ pub struct Model {
     /// inkland: the direction in which a river flows through the town, or
     /// `None` for no river.
     pub river_dir: Option<f64>,
+    /// inkland: the direction of the higher land, for the castle.
+    pub uphill: Option<f64>,
+    /// inkland: the directions of the roads out of the town.
+    pub road_dirs: Vec<f64>,
     /// inkland: the vertices of the river, from upstream.
     pub river: Vec<V>,
     /// inkland: the piers on the shore of the town.
@@ -155,7 +175,7 @@ impl Model {
         citadel: Option<bool>,
         walls: Option<bool>,
         lots: bool,
-        water: (Option<f64>, Option<f64>),
+        terrain: &Terrain,
     ) -> Result<Model, Retry> {
         let mut rng = Random::new(seed);
         let n_patches = n_patches.max(3);
@@ -169,8 +189,10 @@ impl Model {
             rng,
             n_patches,
             lots,
-            coast: water.0,
-            river_dir: water.1,
+            coast: terrain.coast,
+            river_dir: terrain.river,
+            uphill: terrain.uphill,
+            road_dirs: terrain.roads.clone(),
             river: Vec::new(),
             piers: Vec::new(),
             plaza_needed,
@@ -288,6 +310,19 @@ impl Model {
             let reach = centres.get(self.n_patches).map_or(50.0, |c| len(*c));
             (dir, reach * (0.45 + 0.2 * self.rng.float()))
         });
+        // inkland: on higher land the castle takes the patch most uphill
+        // of the first ring outside the town, not the first of the ring.
+        let is_sea =
+            |k: usize| sea.is_some_and(|(dir, shore)| k > 0 && poly::dot(centres[k], dir) > shore);
+        let land: Vec<usize> = (0..regions.len()).filter(|&k| !is_sea(k)).collect();
+        let castle_region = match self.uphill {
+            Some(a) => {
+                let up = [libm::cos(a), libm::sin(a)];
+                let ring: Vec<usize> = land.iter().copied().skip(self.n_patches).take(5).collect();
+                (!ring.is_empty()).then(|| poly::max_by(&ring, |&k| poly::dot(centres[k], up)))
+            }
+            None => land.get(self.n_patches).copied(),
+        };
         // A vertex for each triangle, so that the patches share them.
         let mut tri_vertex: BTreeMap<usize, V> = BTreeMap::new();
         let mut count = 0;
@@ -304,10 +339,7 @@ impl Model {
                 .collect();
             let id = self.new_patch(shape);
             self.patches.push(id);
-            if let Some((dir, shore)) = sea
-                && k > 0
-                && poly::dot(centres[k], dir) > shore
-            {
+            if is_sea(k) {
                 self.store[id].water = true;
                 continue;
             }
@@ -317,7 +349,7 @@ impl Model {
                 if self.plaza_needed {
                     self.plaza = Some(id);
                 }
-            } else if count == self.n_patches && self.citadel_needed {
+            } else if Some(k) == castle_region && self.citadel_needed {
                 self.citadel = Some(id);
                 self.store[id].within_city = true;
             }
@@ -823,8 +855,27 @@ impl Model {
                 return Err(Retry("unable to build a street"));
             };
             self.streets.push(street);
-            if self.border.gates.contains(&gate) {
-                let dir = poly::norm(self.v[gate], 1000.0);
+            // inkland: with the roads of the world, a gate gets a road only
+            // if a road of the world leaves on its side.
+            let world_roads: Vec<f64> = self.road_dirs.clone();
+            let road_dir = if world_roads.is_empty() {
+                Some(poly::norm(self.v[gate], 1000.0))
+            } else {
+                world_roads
+                    .iter()
+                    .map(|&a| [libm::cos(a), libm::sin(a)])
+                    .filter(|&d| {
+                        let border: Vec<V> = self.border.gates.clone();
+                        let best =
+                            poly::max_by(&border, |&g| poly::dot(poly::norm(self.v[g], 1.0), d));
+                        best == gate
+                    })
+                    .map(|d| poly::scale(d, 1000.0))
+                    .next()
+            };
+            if self.border.gates.contains(&gate)
+                && let Some(dir) = road_dir
+            {
                 let mut start = None;
                 let mut best = f64::INFINITY;
                 for &p in &topology.node2pt {

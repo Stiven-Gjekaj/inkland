@@ -26,7 +26,7 @@ pub use wards::Kind;
 use crate::error::{Error, ErrorCode};
 
 /// The options of a town.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TownOptions {
     /// The number of patches of the town: 6 for a small town, 10 for a
     /// large town, 15 for a small city, 24 for a large city, and 40 for a
@@ -52,6 +52,12 @@ pub struct TownOptions {
     /// inkland: the index of the name base for the names of the
     /// districts.
     pub names: usize,
+    /// inkland: the direction in which the land goes up, in radians, or
+    /// `None` for flat land. The castle stands on the high side.
+    pub uphill: Option<f64>,
+    /// inkland: the directions of the roads to the places near the town,
+    /// in radians. Empty: a road from each gate, as in the original.
+    pub roads: Vec<f64>,
 }
 
 /// A patch of a town: a ward and its buildings.
@@ -141,7 +147,64 @@ pub fn options_of(world: &crate::world::World, place: &crate::society::Place) ->
             .iter()
             .find(|c| c.id == place.culture)
             .map_or(0, |c| c.base),
+        uphill: uphill_of(world, place),
+        roads: roads_of(world, place),
     }
+}
+
+/// inkland: the direction in which the land goes up at a place: the mean
+/// of the directions to the neighbour cells, each weighted by the rise of
+/// its height. `None` on flat land.
+fn uphill_of(world: &crate::world::World, place: &crate::society::Place) -> Option<f64> {
+    let c = place.cell;
+    let at = world.grid.points[c];
+    let h = world.heights[c];
+    let mut sum = [0.0, 0.0];
+    for nb in world.grid.neighbors(c) {
+        let d = poly::sub(world.grid.points[nb], at);
+        let l = poly::len(d);
+        if l > 0.0 {
+            sum = poly::add(sum, poly::scale(d, (world.heights[nb] - h) / l));
+        }
+    }
+    // A rise of less than 2 height units over a cell is flat.
+    (poly::len(sum) >= 2.0).then(|| libm::atan2(sum[1], sum[0]))
+}
+
+/// inkland: the directions of the land roads of the world that go through
+/// the cell of a place, one for each way out of the cell. Two directions
+/// less than 30 degrees apart are one road.
+fn roads_of(world: &crate::world::World, place: &crate::society::Place) -> Vec<f64> {
+    let c = place.cell;
+    let at = world.grid.points[c];
+    let mut out: Vec<f64> = Vec::new();
+    for r in &world.roads {
+        let Some(i) = r.cells.iter().position(|&x| x == c) else {
+            continue;
+        };
+        // A cell 2 steps away gives a steadier direction than the next one.
+        let ends = [
+            r.cells
+                .get(i.wrapping_sub(2))
+                .or(r.cells.get(i.wrapping_sub(1))),
+            r.cells.get(i + 2).or(r.cells.get(i + 1)),
+        ];
+        for e in ends.into_iter().flatten() {
+            let d = poly::sub(world.grid.points[*e], at);
+            if poly::len(d) == 0.0 {
+                continue;
+            }
+            let a = libm::atan2(d[1], d[0]);
+            let near = out.iter().any(|&b| {
+                let x = (a - b).rem_euclid(std::f64::consts::TAU);
+                x.min(std::f64::consts::TAU - x) < 30f64.to_radians()
+            });
+            if !near {
+                out.push(a);
+            }
+        }
+    }
+    out
 }
 
 /// inkland: the direction of the sea from a port, from its cell to the
@@ -179,7 +242,12 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
         opts.citadel,
         opts.walls,
         opts.lots,
-        (opts.coast, opts.river),
+        &model::Terrain {
+            coast: opts.coast,
+            river: opts.river,
+            uphill: opts.uphill,
+            roads: opts.roads.clone(),
+        },
     )
     .map_err(|e| {
         Error::new(
@@ -279,6 +347,8 @@ mod tests {
             coast: None,
             river: None,
             names: 1,
+            uphill: None,
+            roads: Vec::new(),
         })
         .unwrap()
     }
@@ -327,6 +397,8 @@ mod tests {
                     coast: None,
                     river: None,
                     names: 1,
+                    uphill: None,
+                    roads: Vec::new(),
                 })
                 .unwrap_or_else(|e| panic!("seed {seed}, {n} patches: {e:?}"));
                 assert!(t.patches.iter().filter(|p| p.within_city).count() >= n);
@@ -383,6 +455,8 @@ mod tests {
                 coast: None,
                 river: None,
                 names: 1,
+                uphill: None,
+                roads: Vec::new(),
             })
             .unwrap()
         };
@@ -408,6 +482,8 @@ mod tests {
             coast,
             river,
             names: 1,
+            uphill: None,
+            roads: Vec::new(),
         })
         .unwrap()
     }
@@ -460,6 +536,72 @@ mod tests {
                 .find(|p| districts::contains(&p.shape, c))
                 .expect("a field is in a patch");
             assert_eq!(p.kind, Kind::Farm);
+        }
+    }
+
+    #[test]
+    fn the_roads_of_the_world_and_the_hills_shape_the_town() {
+        let make = |uphill: Option<f64>, roads: Vec<f64>| {
+            generate(&TownOptions {
+                patches: 20,
+                seed: 4242,
+                plaza: Some(true),
+                citadel: Some(true),
+                walls: Some(true),
+                lots: false,
+                coast: None,
+                river: None,
+                names: 1,
+                uphill,
+                roads,
+            })
+            .unwrap()
+        };
+        // One road of the world, to the east: one road out of the town,
+        // and it goes east.
+        let t = make(None, vec![0.0]);
+        assert_eq!(t.roads.len(), 1);
+        let far = t.roads[0]
+            .iter()
+            .copied()
+            .max_by(|a, b| poly::len(*a).total_cmp(&poly::len(*b)))
+            .unwrap();
+        assert!(far[0] > far[1].abs(), "the road goes east: {far:?}");
+        // The castle is on the high side: north, then south.
+        let castle = |t: &Town| {
+            let c = t.castle.as_ref().unwrap();
+            poly::centroid(&c.shape)
+        };
+        let north = castle(&make(Some(-std::f64::consts::FRAC_PI_2), Vec::new()));
+        let south = castle(&make(Some(std::f64::consts::FRAC_PI_2), Vec::new()));
+        assert!(north[1] < south[1], "{north:?} {south:?}");
+    }
+
+    #[test]
+    fn a_place_on_a_road_gets_the_directions_of_its_roads() {
+        let c: crate::config::Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 42, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": "continents", "states": 4, "towns": 30 }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        let p = w
+            .society
+            .places
+            .iter()
+            .find(|p| {
+                w.roads
+                    .iter()
+                    .any(|r| r.group == "roads" && r.cells.contains(&p.cell))
+            })
+            .expect("a place on a road");
+        let dirs = roads_of(&w, p);
+        assert!(!dirs.is_empty());
+        for (i, a) in dirs.iter().enumerate() {
+            for b in &dirs[i + 1..] {
+                let x = (a - b).rem_euclid(std::f64::consts::TAU);
+                assert!(x.min(std::f64::consts::TAU - x) >= 30f64.to_radians());
+            }
         }
     }
 

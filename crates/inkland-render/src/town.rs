@@ -537,6 +537,8 @@ mod tests {
             coast: None,
             river: None,
             names: 1,
+            uphill: None,
+            roads: Vec::new(),
         })
         .unwrap()
     }
