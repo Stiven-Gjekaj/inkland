@@ -132,6 +132,18 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
         );
     }
 
+    // inkland: the fields of the farms, under the roads.
+    if !town.fields.is_empty() {
+        let d: String = town.fields.iter().map(|f| path(f, true)).collect();
+        let fill = if style.colour { "#c2bba9" } else { "none" };
+        let _ = writeln!(
+            s,
+            "<path id=\"town-fields\" d=\"{d}\" fill=\"{fill}\" stroke=\"{}\" stroke-width=\"{}\" stroke-linejoin=\"round\"/>",
+            if style.colour { light } else { dark },
+            n(w(NORMAL_STROKE * 0.5))
+        );
+    }
+
     // The roads: a dark line with a paper line inside.
     let _ = writeln!(
         s,
