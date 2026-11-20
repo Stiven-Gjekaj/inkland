@@ -76,6 +76,10 @@ fn water_colour(colour: bool) -> &'static str {
 /// inkland: the width of a river, in town units.
 const RIVER: f64 = 4.0;
 
+/// inkland: the distance between the lines of the sea in black and white,
+/// in mm.
+const HATCH_MM: f64 = 1.2;
+
 /// inkland: the offset of the shadow of a building, in town units.
 const SHADOW: f64 = 0.7;
 /// inkland: the colour of the shadows, between the paper and the light
@@ -149,6 +153,50 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
             "<path id=\"town-sea\" d=\"{d}\" fill=\"{water}\" stroke=\"{water}\" stroke-width=\"{}\"/>",
             n(w(NORMAL_STROKE))
         );
+    }
+    if !town.water.is_empty() {
+        // In black and white, the sea has lines across it, clipped to the
+        // sea.
+        if !style.colour {
+            let _ = write!(s, "<clipPath id=\"town-sea-clip\">");
+            for p in &town.water {
+                let _ = write!(s, "<path d=\"{}\"/>", path(p, true));
+            }
+            s.push_str("</clipPath>\n");
+            let mut d = String::new();
+            let mut y = top + HATCH_MM / 2.0;
+            while y < top + size {
+                let _ = write!(d, "M0 {}H{}", n(y), n(size));
+                y += HATCH_MM;
+            }
+            let _ = writeln!(
+                s,
+                "<path id=\"town-sea-hatch\" d=\"{d}\" fill=\"none\" stroke=\"{dark}\" stroke-width=\"{}\" clip-path=\"url(#town-sea-clip)\"/>",
+                n(min)
+            );
+        }
+        // The shore: each edge of the sea that a land patch has too.
+        let mut d = String::new();
+        for sea in &town.water {
+            let m = sea.len();
+            for i in 0..m {
+                let (a, b) = (sea[i], sea[(i + 1) % m]);
+                let land = town.patches.iter().any(|p| {
+                    let l = p.shape.len();
+                    (0..l).any(|j| p.shape[j] == b && p.shape[(j + 1) % l] == a)
+                });
+                if land {
+                    d.push_str(&path(&[a, b], false));
+                }
+            }
+        }
+        if !d.is_empty() {
+            let _ = writeln!(
+                s,
+                "<path id=\"town-shore\" d=\"{d}\" fill=\"none\" stroke=\"{dark}\" stroke-width=\"{}\" stroke-linecap=\"round\"/>",
+                n(w(NORMAL_STROKE))
+            );
+        }
     }
     if let Some(river) = &town.river {
         let d = path(river, false);
@@ -587,6 +635,36 @@ mod tests {
         assert!(svg.contains(" feet</text>"));
         assert!(svg.contains("id=\"town-compass\""));
         assert!(svg.contains("id=\"town-fields\""));
+    }
+
+    #[test]
+    fn the_sea_has_a_shore_and_lines_in_black_and_white() {
+        let t = generate(&TownOptions {
+            patches: 15,
+            seed: 4242,
+            plaza: Some(true),
+            citadel: Some(false),
+            walls: Some(true),
+            lots: false,
+            coast: Some(0.0),
+            river: None,
+            names: 1,
+            uphill: None,
+            roads: Vec::new(),
+        })
+        .unwrap();
+        let print = town_svg(&t, "K", &style(false));
+        assert!(print.contains("id=\"town-sea-hatch\""));
+        assert!(print.contains("id=\"town-shore\""));
+        let colour = town_svg(&t, "K", &style(true));
+        assert!(!colour.contains("id=\"town-sea-hatch\""));
+        let opts = crate::checks::CheckOptions {
+            min_line_width_pt: 0.25,
+            fonts_allowed: vec!["IM Fell English".to_owned()],
+        };
+        for r in crate::checks::check_svg(&print, &opts) {
+            assert!(r.pass, "{} {:?}", r.name, r.details);
+        }
     }
 
     #[test]
