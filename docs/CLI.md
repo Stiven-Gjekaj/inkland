@@ -228,12 +228,36 @@ inkland adds these parts to the plan of the original:
 - A scale bar and a compass. A town unit is 3 metres. The scale bar is in
   feet if the world unit is a mile, a league, a yard, or a foot, and in
   metres for other units.
+- Roads out of the town toward the land roads of the world, and the castle
+  on the uphill side.
+- A moat outside the wall of a town with a river or the sea.
+- A temple with a cross plan, trees in the parks, and houses with L, U,
+  and courtyard shapes. The lots at the docks are long halls, and a
+  farmstead has a barn.
+- In colour, the buildings cast shadows. In black and white, the sea has
+  lines across it, and with `render.hand_drawn` the walls, the water, and
+  the roads have a pen line.
 
-The output on
-stdout gives `svg`, `id`, `name`, `patches`, `seed`, `plaza`, `citadel`,
-`walls`, and `buildings`. Without `--colour`, it also gives `checks`, the
-print checks of the SVG. A place that the world does not have is
-`REF_UNKNOWN`.
+A point pin can give the major buildings of its town in `town.buildings`.
+Each building has a `kind` and an optional `at`: a position from the
+centre as a part of the radius of the town. The generator puts these
+buildings first and builds the rest of the town around them:
+
+```json
+{ "id": "kingsholm", "kind": "city", "at": [200, 150],
+  "town": { "buildings": [
+    { "kind": "temple", "at": [0, -0.5] },
+    { "kind": "castle", "at": [1, 0] },
+    { "kind": "guild-hall" }
+  ] } }
+```
+
+A building that does not fit its position moves to the nearest free patch.
+
+The output on stdout gives `svg`, `id`, `name`, `patches`, `seed`,
+`plaza`, `citadel`, `walls`, `buildings`, and `warnings`, the pinned
+buildings that moved. Without `--colour`, it also gives `checks`, the print
+checks of the SVG. A place that the world does not have is `REF_UNKNOWN`.
 
 ## `inkland edit`
 

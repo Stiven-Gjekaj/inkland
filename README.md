@@ -83,7 +83,8 @@ The engine fits the world around the pins, and never moves them.
   and buildings, from a port of TownGeneratorOS by Watabou
   (`inkland town`). inkland adds lots along the streets, the sea and the
   river of the place, bridges, piers, named districts, fields, a scale
-  bar, and a compass.
+  bar, a compass, a moat, varied building shapes, and pinned buildings
+  from the config.
 
 </td>
 <td width="50%" valign="top">

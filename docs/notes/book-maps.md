@@ -335,7 +335,9 @@ buildings. The place sets the size, the plaza, the castle, and the walls,
 so the plan agrees with the world map. A port has the sea on the side of
 its haven, and a place on a river has the river through the town. The
 districts have names from the culture of the place. A scale bar and a
-compass are in the bottom corners. Without `--colour`, the plan is black
+compass are in the bottom corners. To put a temple, a castle, or a guild
+hall where the story needs it, give the point pin a `town.buildings`
+list. Without `--colour`, the plan is black
 and white and passes the print checks.
 
 Each place in `world.json` also has `town_link`, a link to the town on
