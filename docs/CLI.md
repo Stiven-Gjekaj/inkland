@@ -191,6 +191,34 @@ the world does not have is `REF_UNKNOWN`. The output on stdout gives `svg`
 arms in the JSON shape of Azgaar's Fantasy Map Generator). With
 `--hatching`, it also gives `checks`, the print checks of the SVG.
 
+## `inkland town`
+
+Write the town map of one place as an SVG file. The town comes from a port
+of TownGeneratorOS by Watabou: patches, walls, gates, towers, streets,
+wards, and buildings.
+
+```bash
+inkland town --world out/world.json --place kingsholm -o kingsholm.svg
+inkland town --world out/world.json --place 15 --colour --size-mm 180 -o town.svg
+```
+
+| Flag | Meaning |
+|---|---|
+| `--world FILE` | The `world.json` of a generated world. |
+| `--place ID` | A place: the id of its pin, its id, or its name. |
+| `--colour` | The colours of the original generator. Default: black and white, as `print-safe` mode. |
+| `--size-mm N` | The width of the map, in mm. A title band of 12 mm is above it. Default 150. |
+| `-o FILE`, `--out FILE` | The SVG file to write. |
+
+The place gives the town: the number of patches comes from its population,
+from 6 for a small town to 40 for a metropolis; the seed comes from the
+map seed and the place id; the plaza, the castle, and the walls are those
+of the place. The same world and place give the same map. The output on
+stdout gives `svg`, `id`, `name`, `patches`, `seed`, `plaza`, `citadel`,
+`walls`, and `buildings`. Without `--colour`, it also gives `checks`, the
+print checks of the SVG. A place that the world does not have is
+`REF_UNKNOWN`.
+
 ## `inkland edit`
 
 Apply an edit script to a world file or to a config file.

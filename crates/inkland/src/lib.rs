@@ -37,6 +37,64 @@ pub fn query_at(world: &World, config: &Config, p: [f64; 2]) -> Result<Value, Er
     inkland_io::query::query(world, config, p)
 }
 
+/// A drawn town map.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TownMapSvg {
+    /// The SVG file.
+    pub svg: String,
+    /// `burg-7`.
+    pub id: String,
+    pub name: String,
+    /// The number of patches, the seed, and the plaza, castle, and walls.
+    pub options: inkland_core::town::TownOptions,
+    /// The number of buildings.
+    pub buildings: usize,
+}
+
+/// Draw the town map of one place of a world as an SVG file, `size_mm`
+/// wide. `key` is the id of the pin of the place, its id, or its name.
+/// `colour`: the colours of the original generator; else black and white.
+/// The town comes from the port of TownGeneratorOS by Watabou (GPL-3.0).
+pub fn town_map(
+    world: &World,
+    config: &Config,
+    key: &str,
+    colour: bool,
+    size_mm: f64,
+) -> Result<TownMapSvg, Error> {
+    let places = &world.society.places;
+    let place = places
+        .iter()
+        .find(|p| p.pin.as_deref() == Some(key))
+        .or_else(|| {
+            places
+                .iter()
+                .find(|p| p.id.to_string() == key || p.name == key)
+        })
+        .ok_or_else(|| {
+            Error::new(
+                ErrorCode::RefUnknown,
+                "",
+                format!("the world has no place {key:?}"),
+            )
+        })?;
+    let options = inkland_core::town::options_of(world, place);
+    let town = inkland_core::town::generate(&options)?;
+    let style = inkland_render::town::TownStyle {
+        colour,
+        size_mm,
+        font: config.render.fonts.title.clone(),
+        min_line_pt: config.render.min_line_width_pt,
+    };
+    Ok(TownMapSvg {
+        svg: inkland_render::town::town_svg(&town, &place.name, &style),
+        id: format!("burg-{}", place.id),
+        name: place.name.clone(),
+        options,
+        buildings: town.patches.iter().map(|p| p.buildings.len()).sum(),
+    })
+}
+
 /// The item whose coat of arms to draw.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmblemOf {
@@ -895,6 +953,32 @@ mod tests {
             .find(|c| c["name"] == "black_and_white")
             .unwrap();
         assert_eq!(bw["pass"], false);
+    }
+
+    #[test]
+    fn a_town_map_of_a_place_passes_the_print_checks() {
+        let c = config(
+            json!({ "world": { "cells": 2000, "template": "continents", "states": 3, "towns": 20 } }),
+        );
+        let w = World::build(&c).unwrap();
+        let p = w
+            .society
+            .places
+            .iter()
+            .max_by(|a, b| a.population.total_cmp(&b.population))
+            .unwrap();
+        let t = town_map(&w, &c, &p.name, false, 150.0).unwrap();
+        assert_eq!(t.id, format!("burg-{}", p.id));
+        assert!(t.buildings > 50, "{}", t.buildings);
+        for check in check_svg(&t.svg, &c) {
+            assert_eq!(check["pass"], true, "{check}");
+        }
+        // The same place gives the same map, by its id too.
+        assert_eq!(
+            town_map(&w, &c, &p.id.to_string(), false, 150.0).unwrap(),
+            t
+        );
+        assert!(town_map(&w, &c, "no such place", false, 150.0).is_err());
     }
 
     #[test]

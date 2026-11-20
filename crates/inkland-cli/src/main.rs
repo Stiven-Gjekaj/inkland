@@ -89,6 +89,25 @@ enum Command {
         #[arg(short = 'o', long = "out")]
         out: PathBuf,
     },
+    /// Write the town map of one place as an SVG file. The town comes from
+    /// a port of TownGeneratorOS by Watabou.
+    Town {
+        /// The `world.json` of a generated world.
+        #[arg(long)]
+        world: PathBuf,
+        /// A place: the id of its pin, its id, or its name.
+        #[arg(long)]
+        place: String,
+        /// The colours of the original generator. Default: black and white.
+        #[arg(long)]
+        colour: bool,
+        /// The width of the map, in mm.
+        #[arg(long, default_value_t = 150.0)]
+        size_mm: f64,
+        /// The SVG file to write.
+        #[arg(short = 'o', long = "out")]
+        out: PathBuf,
+    },
     /// Apply an edit script to a world file or to a config file.
     #[command(group(clap::ArgGroup::new("input").required(true).args(["world", "config"])))]
     Edit {
@@ -216,6 +235,13 @@ fn main() {
             };
             read_text(&world, "world").and_then(|t| emblem(&t, &of, hatching, size_mm, &out))
         }
+        Command::Town {
+            world,
+            place,
+            colour,
+            size_mm,
+            out,
+        } => read_text(&world, "world").and_then(|t| town(&t, &place, colour, size_mm, &out)),
         Command::Edit {
             world,
             config,
@@ -518,6 +544,49 @@ fn emblem(
     });
     if hatching {
         v["checks"] = json!(inkland::check_svg(&e.svg, &config));
+    }
+    Ok(v)
+}
+
+fn town(
+    world_text: &str,
+    place: &str,
+    colour: bool,
+    size_mm: f64,
+    out: &Path,
+) -> Result<Value, Vec<Error>> {
+    if !(size_mm > 0.0 && size_mm.is_finite()) {
+        return Err(vec![Error::new(
+            ErrorCode::CliUsage,
+            "",
+            "--size-mm must be more than 0",
+        )]);
+    }
+    let (config, world) = inkland::read_world(world_text).map_err(|e| vec![e])?;
+    let t = inkland::town_map(&world, &config, place, colour, size_mm).map_err(|e| vec![e])?;
+    std::fs::write(out, &t.svg).map_err(|err| {
+        vec![
+            Error::new(
+                ErrorCode::IoWrite,
+                "",
+                format!("cannot write the SVG: {err}"),
+            )
+            .with("file", out.display().to_string()),
+        ]
+    })?;
+    let mut v = json!({
+        "svg": out.display().to_string(),
+        "id": t.id,
+        "name": t.name,
+        "patches": t.options.patches,
+        "seed": t.options.seed,
+        "plaza": t.options.plaza,
+        "citadel": t.options.citadel,
+        "walls": t.options.walls,
+        "buildings": t.buildings,
+    });
+    if !colour {
+        v["checks"] = json!(inkland::check_svg(&t.svg, &config));
     }
     Ok(v)
 }
