@@ -58,6 +58,18 @@ pub struct TownOptions {
     /// inkland: the directions of the roads to the places near the town,
     /// in radians. Empty: a road from each gate, as in the original.
     pub roads: Vec<f64>,
+    /// inkland: the pinned buildings. A castle pin gives a castle, and a
+    /// market pin gives a plaza.
+    pub pins: Vec<TownPin>,
+}
+
+/// inkland: a pinned building: a ward of a kind, at a position from the
+/// centre as a part of the radius of the town, or where the generator puts
+/// that kind.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TownPin {
+    pub kind: Kind,
+    pub at: Option<P>,
 }
 
 /// A patch of a town: a ward and its buildings.
@@ -113,6 +125,8 @@ pub struct Town {
     pub districts: Vec<District>,
     /// inkland: the fields of the farms.
     pub fields: Vec<Poly>,
+    /// inkland: the pinned buildings that moved, and why.
+    pub warnings: Vec<String>,
 }
 
 /// The options of the town map of a place: the number of patches from its
@@ -149,6 +163,7 @@ pub fn options_of(world: &crate::world::World, place: &crate::society::Place) ->
             .map_or(0, |c| c.base),
         uphill: uphill_of(world, place),
         roads: roads_of(world, place),
+        pins: Vec::new(),
     }
 }
 
@@ -235,11 +250,20 @@ fn river_of(world: &crate::world::World, place: &crate::society::Place) -> Optio
 
 /// Make the plan of a town.
 pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
+    let pinned = |k: Kind| opts.pins.iter().any(|p| p.kind == k);
     let m = model::Model::new(
         opts.patches,
         opts.seed,
-        opts.plaza,
-        opts.citadel,
+        if pinned(Kind::Market) {
+            Some(true)
+        } else {
+            opts.plaza
+        },
+        if pinned(Kind::Castle) {
+            Some(true)
+        } else {
+            opts.citadel
+        },
         opts.walls,
         opts.lots,
         &model::Terrain {
@@ -247,6 +271,7 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
             river: opts.river,
             uphill: opts.uphill,
             roads: opts.roads.clone(),
+            pins: opts.pins.clone(),
         },
     )
     .map_err(|e| {
@@ -301,6 +326,7 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
         piers: m.piers.clone(),
         districts: Vec::new(),
         fields: Vec::new(),
+        warnings: m.warnings.clone(),
     };
     town.districts = districts::districts(&town, opts.names, opts.seed);
     town.fields = fields::fields(&town, opts.seed);
@@ -349,6 +375,7 @@ mod tests {
             names: 1,
             uphill: None,
             roads: Vec::new(),
+            pins: Vec::new(),
         })
         .unwrap()
     }
@@ -399,6 +426,7 @@ mod tests {
                     names: 1,
                     uphill: None,
                     roads: Vec::new(),
+                    pins: Vec::new(),
                 })
                 .unwrap_or_else(|e| panic!("seed {seed}, {n} patches: {e:?}"));
                 assert!(t.patches.iter().filter(|p| p.within_city).count() >= n);
@@ -457,6 +485,7 @@ mod tests {
                 names: 1,
                 uphill: None,
                 roads: Vec::new(),
+                pins: Vec::new(),
             })
             .unwrap()
         };
@@ -484,6 +513,7 @@ mod tests {
             names: 1,
             uphill: None,
             roads: Vec::new(),
+            pins: Vec::new(),
         })
         .unwrap()
     }
@@ -554,6 +584,7 @@ mod tests {
                 names: 1,
                 uphill,
                 roads,
+                pins: Vec::new(),
             })
             .unwrap()
         };
@@ -603,6 +634,68 @@ mod tests {
                 assert!(x.min(std::f64::consts::TAU - x) >= 30f64.to_radians());
             }
         }
+    }
+
+    #[test]
+    fn pinned_buildings_stand_where_the_pins_put_them() {
+        let make = |pins: Vec<TownPin>| {
+            generate(&TownOptions {
+                patches: 24,
+                seed: 4242,
+                plaza: Some(false),
+                citadel: Some(false),
+                walls: Some(true),
+                lots: true,
+                coast: None,
+                river: None,
+                names: 1,
+                uphill: None,
+                roads: Vec::new(),
+                pins,
+            })
+            .unwrap()
+        };
+        let centre_of = |t: &Town, k: Kind| {
+            t.patches
+                .iter()
+                .filter(|p| p.kind == k)
+                .map(|p| poly::centroid(&p.shape))
+                .collect::<Vec<_>>()
+        };
+        let north = make(vec![TownPin {
+            kind: Kind::Cathedral,
+            at: Some([0.0, -0.6]),
+        }]);
+        let south = make(vec![TownPin {
+            kind: Kind::Cathedral,
+            at: Some([0.0, 0.6]),
+        }]);
+        let n = centre_of(&north, Kind::Cathedral);
+        let s = centre_of(&south, Kind::Cathedral);
+        assert!(n.iter().any(|c| c[1] < 0.0), "{n:?}");
+        assert!(s.iter().any(|c| c[1] > 0.0), "{s:?}");
+        assert!(north.warnings.is_empty(), "{:?}", north.warnings);
+        // A castle pin gives a castle on its side, and a market pin a plaza.
+        let t = make(vec![
+            TownPin {
+                kind: Kind::Castle,
+                at: Some([-1.0, 0.0]),
+            },
+            TownPin {
+                kind: Kind::Market,
+                at: None,
+            },
+        ]);
+        let castle = poly::centroid(&t.castle.as_ref().expect("a castle").shape);
+        assert!(castle[0] < 0.0, "{castle:?}");
+        assert!(t.patches.iter().any(|p| p.kind == Kind::Market));
+        // A pin far outside the town moves to the nearest free patch.
+        let far = make(vec![TownPin {
+            kind: Kind::Park,
+            at: Some([5.0, 0.0]),
+        }]);
+        assert_eq!(far.warnings.len(), 1, "{:?}", far.warnings);
+        assert!(far.patches.iter().any(|p| p.kind == Kind::Park));
     }
 
     #[test]

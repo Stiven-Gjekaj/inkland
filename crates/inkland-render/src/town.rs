@@ -763,6 +763,7 @@ mod tests {
             names: 1,
             uphill: None,
             roads: Vec::new(),
+            pins: Vec::new(),
         })
         .unwrap()
     }
@@ -834,6 +835,7 @@ mod tests {
             names: 1,
             uphill: None,
             roads: Vec::new(),
+            pins: Vec::new(),
         })
         .unwrap();
         let print = town_svg(&t, "K", &style(false));

@@ -69,6 +69,8 @@ pub struct Terrain {
     /// The directions of the roads to the places near the town. Empty: a
     /// road from each gate, as in the original.
     pub roads: Vec<f64>,
+    /// The pinned buildings.
+    pub pins: Vec<super::TownPin>,
 }
 
 /// The town model.
@@ -89,6 +91,10 @@ pub struct Model {
     pub uphill: Option<f64>,
     /// inkland: the directions of the roads out of the town.
     pub road_dirs: Vec<f64>,
+    /// inkland: the pinned buildings.
+    pub pins: Vec<super::TownPin>,
+    /// inkland: the pinned buildings that moved, and why.
+    pub warnings: Vec<String>,
     /// inkland: the vertices of the river, from upstream.
     pub river: Vec<V>,
     /// inkland: the piers on the shore of the town.
@@ -193,6 +199,8 @@ impl Model {
             river_dir: terrain.river,
             uphill: terrain.uphill,
             road_dirs: terrain.roads.clone(),
+            pins: terrain.pins.clone(),
+            warnings: Vec::new(),
             river: Vec::new(),
             piers: Vec::new(),
             plaza_needed,
@@ -224,6 +232,7 @@ impl Model {
     }
 
     fn build(&mut self) -> Result<(), Retry> {
+        self.warnings.clear();
         self.v.clear();
         self.store.clear();
         self.patches.clear();
@@ -315,7 +324,16 @@ impl Model {
         let is_sea =
             |k: usize| sea.is_some_and(|(dir, shore)| k > 0 && poly::dot(centres[k], dir) > shore);
         let land: Vec<usize> = (0..regions.len()).filter(|&k| !is_sea(k)).collect();
-        let castle_region = match self.uphill {
+        // A castle pin with a position gives the direction of the castle.
+        let castle_dir = self
+            .pins
+            .iter()
+            .find(|p| p.kind == Kind::Castle)
+            .and_then(|p| p.at)
+            .filter(|a| len(*a) > 1e-9)
+            .map(|a| libm::atan2(a[1], a[0]))
+            .or(self.uphill);
+        let castle_region = match castle_dir {
             Some(a) => {
                 let up = [libm::cos(a), libm::sin(a)];
                 let ring: Vec<usize> = land.iter().copied().skip(self.n_patches).take(5).collect();
@@ -948,12 +966,80 @@ impl Model {
         }
     }
 
+    /// inkland: give the pinned wards their patches, and take the patches
+    /// from `unassigned`. The result is the kinds that were placed.
+    fn place_pins(&mut self, unassigned: &mut Vec<usize>) -> Vec<Kind> {
+        let reach = self
+            .inner
+            .iter()
+            .flat_map(|&p| self.store[p].shape.iter())
+            .map(|&v| len(self.v[v]))
+            .fold(1.0, f64::max);
+        let mut placed = Vec::new();
+        for pin in self.pins.clone() {
+            let name = pin.kind.label().to_lowercase();
+            match pin.kind {
+                Kind::Castle => {
+                    if self.citadel.is_none() {
+                        self.warnings.push(format!(
+                            "the pinned {name} has no place at the edge of the town"
+                        ));
+                    }
+                    continue;
+                }
+                Kind::Market => {
+                    if pin.at.is_some_and(|a| len(a) > 0.25) {
+                        self.warnings
+                            .push(format!("the pinned {name} stays in the centre of the town"));
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+            let free: Vec<usize> = unassigned
+                .iter()
+                .copied()
+                .filter(|&p| self.store[p].ward.is_none())
+                .collect();
+            if free.is_empty() {
+                self.warnings
+                    .push(format!("no patch is free for the pinned {name}"));
+                continue;
+            }
+            let centre = |m: &Model, p: usize| poly::centroid(&m.shape_pts(p));
+            let best = match pin.at {
+                Some(at) => {
+                    let target = poly::scale(at, reach);
+                    let hit = free
+                        .iter()
+                        .copied()
+                        .find(|&p| super::districts::contains(&self.shape_pts(p), target));
+                    hit.unwrap_or_else(|| {
+                        self.warnings
+                            .push(format!("the pinned {name} moves to the nearest free patch"));
+                        poly::min_by(&free, |&p| dist(centre(self, p), target))
+                    })
+                }
+                None if wards::has_rate(pin.kind) => {
+                    poly::min_by(&free, |&p| wards::rate(self, pin.kind, p))
+                }
+                None => poly::min_by(&free, |&p| len(centre(self, p))),
+            };
+            self.store[best].ward = Some(wards::create(pin.kind, &mut self.rng));
+            unassigned.retain(|&x| x != best);
+            placed.push(pin.kind);
+        }
+        placed
+    }
+
     fn create_wards(&mut self) {
         let mut unassigned = self.inner.clone();
         if let Some(p) = self.plaza {
             self.store[p].ward = Some(Ward::new(Kind::Market, None));
             unassigned.retain(|&x| x != p);
         }
+        // inkland: the pinned buildings, before all other wards.
+        let pinned = self.place_pins(&mut unassigned);
         // Gate wards inside the town.
         let chance = if self.walled { 0.5 } else { 0.2 };
         for gate in self.border.gates.clone() {
@@ -969,6 +1055,12 @@ impl Model {
             }
         }
         let mut list = WARDS.to_vec();
+        // A pinned kind takes the place of one of its kind in the list.
+        for k in pinned {
+            if let Some(i) = list.iter().position(|&x| x == k) {
+                list.remove(i);
+            }
+        }
         for _ in 0..list.len() / 10 {
             let index = self.rng.int(0, list.len() as i64 - 1) as usize;
             list.swap(index, index + 1);
