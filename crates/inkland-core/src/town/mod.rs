@@ -72,6 +72,32 @@ pub struct Town {
     pub radius: f64,
 }
 
+/// The options of the town map of a place: the number of patches from its
+/// population, as the size of the city generator of FMG, at most 40; a
+/// seed from the map seed and the place id; and the plaza, the castle, and
+/// the walls of the place.
+pub fn options_of(world: &crate::world::World, place: &crate::society::Place) -> TownOptions {
+    use crate::military::POPULATION_SCALE;
+    let size = libm::ceil(
+        2.13 * libm::pow(
+            place.population * POPULATION_SCALE / crate::watabou::URBAN_DENSITY,
+            0.385,
+        ),
+    );
+    let patches = size.clamp(6.0, 40.0) as usize;
+    // As the seed of the town links: the map seed, then the id with 4
+    // digits, in the range of the generator.
+    let n: u128 = 2_147_483_647;
+    let seed = ((u128::from(world.seed) % n) * 10_000 + u128::from(place.id)) % n;
+    TownOptions {
+        patches,
+        seed: seed as i64,
+        plaza: Some(place.plaza),
+        citadel: Some(place.citadel),
+        walls: Some(place.walls),
+    }
+}
+
 /// Make the plan of a town.
 pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
     let m = model::Model::new(
@@ -182,6 +208,42 @@ mod tests {
                 .unwrap_or_else(|e| panic!("seed {seed}, {n} patches: {e:?}"));
                 assert!(t.patches.iter().filter(|p| p.within_city).count() >= n);
             }
+        }
+    }
+
+    #[test]
+    fn a_place_gives_the_options_of_its_town() {
+        let c: crate::config::Config = serde_json::from_value(serde_json::json!({
+            "version": 1, "seed": 42, "frame": { "width": 400, "height": 300 },
+            "world": { "cells": 3000, "template": "continents", "states": 4, "towns": 30 }
+        }))
+        .unwrap();
+        let w = crate::world::World::build(&c).unwrap();
+        let mut sizes = Vec::new();
+        for p in &w.society.places {
+            let o = options_of(&w, p);
+            assert!((6..=40).contains(&o.patches));
+            assert_eq!(o.walls, Some(p.walls));
+            assert_eq!(o.citadel, Some(p.citadel));
+            sizes.push(o.patches);
+        }
+        // A larger place gets a larger town.
+        let big = w
+            .society
+            .places
+            .iter()
+            .max_by(|a, b| a.population.total_cmp(&b.population))
+            .unwrap();
+        let small = w
+            .society
+            .places
+            .iter()
+            .min_by(|a, b| a.population.total_cmp(&b.population))
+            .unwrap();
+        assert!(options_of(&w, big).patches > options_of(&w, small).patches);
+        // Each town of the world builds.
+        for p in w.society.places.iter().take(10) {
+            generate(&options_of(&w, p)).unwrap();
         }
     }
 
