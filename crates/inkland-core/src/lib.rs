@@ -52,5 +52,6 @@ pub mod seed;
 pub mod society;
 pub mod stability;
 pub mod states;
+pub mod watabou;
 pub mod world;
 pub mod zones;
