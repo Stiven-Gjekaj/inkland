@@ -344,6 +344,22 @@ pub fn geometry(model: &mut Model, patch: usize, ward: &Ward) -> Vec<Poly> {
             let grid = 0.1 + model.rng.float() * 0.3;
             create_alleys(&mut model.rng, &block, min_sq, grid, 0.3, 0.25, true, 0)
         }
+        // inkland: with lots, a temple with a cross plan stands in a close,
+        // with a ring of buildings around it.
+        Kind::Cathedral if model.lots => {
+            let block = city_block(model, patch);
+            let t = 2.0 + model.rng.float() * 3.0;
+            let ring = poly::ring(&block, t);
+            match cross_plan(&block, t + ALLEY * 2.0) {
+                Some(c) => ring.into_iter().chain([c]).collect(),
+                // A courtyard too narrow for the temple: the temple stands
+                // alone in its yard.
+                None => match cross_plan(&block, ALLEY * 3.0) {
+                    Some(c) => vec![c],
+                    None => ring,
+                },
+            }
+        }
         Kind::Cathedral => {
             if model.rng.bool(0.4) {
                 let block = city_block(model, patch);
@@ -547,6 +563,60 @@ fn longest_edge(p: &[P]) -> usize {
     poly::min_by(&idx, |&i| -poly::len(poly::vector(p, i)))
 }
 
+/// inkland: a temple with a cross plan in the middle of a block, along the
+/// longest edge of the block, with `margin` of space on each side. `None`
+/// if the block is too small.
+pub fn cross_plan(block: &[P], margin: f64) -> Option<Poly> {
+    let n = block.len();
+    let longest = (0..n).max_by(|&a, &b| {
+        poly::len(poly::vector(block, a)).total_cmp(&poly::len(poly::vector(block, b)))
+    })?;
+    let u = poly::norm(poly::vector(block, longest), 1.0);
+    let v = poly::rotate90(u);
+    let inner = poly::shrink_eq(block, margin);
+    if inner.len() < 3 {
+        return None;
+    }
+    let c = poly::centroid(&inner);
+    // The largest cross that the extents of the block allow: its length
+    // along `u` and its transept across.
+    let span = |d: P| {
+        let t: Vec<f64> = inner
+            .iter()
+            .map(|&p| poly::dot(poly::sub(p, c), d))
+            .collect();
+        t.iter().copied().fold(f64::INFINITY, |a, b| a.min(b.abs()))
+    };
+    let mut s = f64::min(span(u) * 0.9, span(v) / 0.55 * 0.9);
+    for _ in 0..12 {
+        let w = 0.32 * s;
+        let (t0, t1, e, h) = (0.2 * s, 0.2 * s + w, 0.9 * s, 0.55 * s);
+        let local = [
+            [-s, -w / 2.0],
+            [t0, -w / 2.0],
+            [t0, -h],
+            [t1, -h],
+            [t1, -w / 2.0],
+            [e, -w / 2.0],
+            [e, w / 2.0],
+            [t1, w / 2.0],
+            [t1, h],
+            [t0, h],
+            [t0, w / 2.0],
+            [-s, w / 2.0],
+        ];
+        let shape: Poly = local
+            .iter()
+            .map(|&[a, b]| poly::add(c, poly::add(poly::scale(u, a), poly::scale(v, b))))
+            .collect();
+        if shape.iter().all(|&p| super::districts::contains(&inner, p)) {
+            return (s > 2.0).then_some(shape);
+        }
+        s *= 0.85;
+    }
+    None
+}
+
 /// Cut a block into buildings along two directions at right angles.
 pub fn ortho_building(rng: &mut Random, p: &[P], min_block_sq: f64, fill: f64) -> Vec<Poly> {
     fn slice(
@@ -677,6 +747,25 @@ fn filter_outskirts(model: &mut Model, patch: usize, geometry: Vec<Poly>) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cross_plan_fits_inside_its_block() {
+        let block = poly::rect(60.0, 40.0);
+        let c = cross_plan(&block, 3.0).expect("a temple");
+        assert_eq!(c.len(), 12);
+        for p in &c {
+            assert!(p[0].abs() <= 27.0 && p[1].abs() <= 17.0, "{p:?}");
+        }
+        // Along the longest edge: longer in x than in y.
+        let xs = c.iter().map(|p| p[0]);
+        let ys = c.iter().map(|p| p[1]);
+        let span = |it: &mut dyn Iterator<Item = f64>| {
+            let v: Vec<f64> = it.collect();
+            v.iter().cloned().fold(f64::MIN, f64::max) - v.iter().cloned().fold(f64::MAX, f64::min)
+        };
+        assert!(span(&mut xs.into_iter()) > span(&mut ys.into_iter()));
+        assert!(cross_plan(&poly::rect(6.0, 6.0), 3.0).is_none());
+    }
 
     #[test]
     fn a_block_gets_narrow_lots_along_its_edges() {
