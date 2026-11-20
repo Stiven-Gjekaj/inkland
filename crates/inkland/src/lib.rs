@@ -533,7 +533,7 @@ pub fn version_info() -> Value {
         "name": "inkland",
         "version": inkland_io::VERSION,
         "config_version": inkland_core::config::CONFIG_VERSION,
-        "license": "MIT OR Apache-2.0",
+        "license": "GPL-3.0-or-later",
         "third_party": [{
             "name": "Azgaar's Fantasy Map Generator",
             "url": "https://github.com/Azgaar/Fantasy-Map-Generator",

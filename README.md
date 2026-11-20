@@ -10,7 +10,7 @@ _A faithful remake of Azgaar's Fantasy Map Generator, with hard pins, print-safe
 ![Windows](https://img.shields.io/badge/windows-2f5d8a?style=for-the-badge&logo=windows&logoColor=f2e8d5)
 ![macOS](https://img.shields.io/badge/macos-4f7cac?style=for-the-badge&logo=apple&logoColor=f2e8d5)
 ![Linux](https://img.shields.io/badge/linux-7a5a3a?style=for-the-badge&logo=linux&logoColor=f2e8d5)
-[![MIT or Apache-2.0](https://img.shields.io/badge/mit_or_apache--2.0-a0703f?style=for-the-badge&logoColor=f2e8d5)](#licence)
+[![GPL-3.0-or-later](https://img.shields.io/badge/gpl--3.0--or--later-a0703f?style=for-the-badge&logoColor=f2e8d5)](#licence)
 [![Release](https://img.shields.io/github/v/release/Stiven-Gjekaj/inkland?style=for-the-badge&label=release&labelColor=d9c7a3&color=d9c7a3)](https://github.com/Stiven-Gjekaj/inkland/releases/latest)
 
 <p align="center">
@@ -349,12 +349,11 @@ algorithms again in Rust. It takes the data tables, the style presets, and
 the art of FMG, with their licences.
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists each one.
 
-The desktop app uses [Slint](https://slint.dev) under the Slint
-Royalty-free Desktop, Mobile, and Web Applications License.
+The desktop app uses [Slint](https://slint.dev) under the GPL-3.0.
 
 ## Licence
 
-inkland is licensed under either of these, at your option:
-
-- MIT licence ([LICENSE-MIT](LICENSE-MIT))
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+inkland is licensed under the GNU General Public License, version 3 or any
+later version ([LICENSE](LICENSE)). The town maps come from a port of
+[TownGeneratorOS](https://github.com/watabou/TownGeneratorOS) by Watabou,
+which is GPL-3.0. The releases up to v1.3.3 are MIT OR Apache-2.0.

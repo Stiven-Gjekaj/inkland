@@ -42,7 +42,7 @@ jobs:
           bin=inkland
           if [[ "${{ matrix.target }}" == *windows* ]]; then bin=inkland.exe; fi
           cp "target/${{ matrix.target }}/release/$bin" "dist/$name/"
-          cp LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md README.md "dist/$name/"
+          cp LICENSE THIRD_PARTY_NOTICES.md README.md "dist/$name/"
           # The binary holds charge files under the GNU FDL, which needs its text.
           cp crates/inkland-render/assets/emblems/GFDL-1.3.txt "dist/$name/"
           mkdir -p "dist/$name/docs"
@@ -104,7 +104,7 @@ jobs:
           bin=inkland-app
           if [[ "${{ matrix.target }}" == *windows* ]]; then bin=inkland-app.exe; fi
           cp "target/${{ matrix.target }}/release/$bin" "dist/$name/"
-          cp LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md README.md "dist/$name/"
+          cp LICENSE THIRD_PARTY_NOTICES.md README.md "dist/$name/"
           cp crates/inkland-render/assets/emblems/GFDL-1.3.txt "dist/$name/"
           # The app holds the FMG icon font under the SIL Open Font License.
           cp crates/inkland-app/ui/fonts/OFL.txt "dist/$name/"

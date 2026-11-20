@@ -4,8 +4,8 @@ description = "The inkland desktop app."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-# The app code is MIT OR Apache-2.0. The app binary links Slint under the
-# Slint Royalty-free License 2.0, so the app shows the AboutSlint widget.
+# The app code is GPL-3.0-or-later. The app binary links Slint under its
+# GPL-3.0-only option, so an app binary is GPL-3.0.
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

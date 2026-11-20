@@ -376,6 +376,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ## Rust crates
 
 The `inkland` binary includes Rust crates under MIT, Apache-2.0, ISC,
-BSD-2-Clause, BSD-3-Clause, Unicode-3.0, and Zlib licenses. `deny.toml` lists the
+BSD-2-Clause, BSD-3-Clause, Unicode-3.0, and Zlib licenses. The desktop app
+also includes Slint under its GPL-3.0-only option. `deny.toml` lists the
 licenses that the build accepts. To list each crate with its license, run
 `cargo deny list`.
