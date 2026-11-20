@@ -49,6 +49,8 @@ pub struct TownMapSvg {
     pub options: inkland_core::town::TownOptions,
     /// The number of buildings.
     pub buildings: usize,
+    /// The pinned buildings that moved, and why.
+    pub warnings: Vec<String>,
 }
 
 /// Draw the town map of one place of a world as an SVG file, `size_mm`
@@ -78,7 +80,16 @@ pub fn town_map(
                 format!("the world has no place {key:?}"),
             )
         })?;
-    let options = inkland_core::town::options_of(world, place);
+    let mut options = inkland_core::town::options_of(world, place);
+    options.pins = town_pins(config, place.pin.as_deref());
+    // A pinned castle needs a castle, and a pinned market a plaza.
+    let pinned = |k| options.pins.iter().any(|p| p.kind == k);
+    if pinned(inkland_core::town::Kind::Castle) {
+        options.citadel = Some(true);
+    }
+    if pinned(inkland_core::town::Kind::Market) {
+        options.plaza = Some(true);
+    }
     let town = inkland_core::town::generate(&options)?;
     let style = inkland_render::town::TownStyle {
         colour,
@@ -94,7 +105,40 @@ pub fn town_map(
         name: place.name.clone(),
         options,
         buildings: town.patches.iter().map(|p| p.buildings.len()).sum(),
+        warnings: town.warnings.clone(),
     })
+}
+
+/// The pinned buildings of the town of the point pin `pin`.
+fn town_pins(config: &Config, pin: Option<&str>) -> Vec<inkland_core::town::TownPin> {
+    use inkland_core::config::TownBuildingKind as B;
+    use inkland_core::town::{Kind, TownPin};
+    let Some(plan) = pin.and_then(|id| {
+        config
+            .pins
+            .points
+            .iter()
+            .find(|p| p.id == id)
+            .and_then(|p| p.town.as_ref())
+    }) else {
+        return Vec::new();
+    };
+    plan.buildings
+        .iter()
+        .map(|b| TownPin {
+            kind: match b.kind {
+                B::Temple => Kind::Cathedral,
+                B::Castle => Kind::Castle,
+                B::Market => Kind::Market,
+                B::Park => Kind::Park,
+                B::Palace => Kind::Administration,
+                B::Barracks => Kind::Military,
+                B::GuildHall => Kind::Merchant,
+                B::Manor => Kind::Patriciate,
+            },
+            at: b.at,
+        })
+        .collect()
 }
 
 /// The item whose coat of arms to draw.
@@ -981,6 +1025,27 @@ mod tests {
             t
         );
         assert!(town_map(&w, &c, "no such place", false, 150.0).is_err());
+    }
+
+    #[test]
+    fn the_town_plan_of_a_pin_pins_its_buildings() {
+        let c = config(json!({
+            "world": { "cells": 2000, "template": "pangea", "towns": 0 },
+            "pins": { "points": [{
+                "id": "kingsholm", "kind": "city", "at": [50, 40],
+                "town": { "buildings": [
+                    { "kind": "temple", "at": [0, -0.5] },
+                    { "kind": "castle", "at": [0, 1] },
+                    { "kind": "guild-hall" }
+                ] }
+            }] }
+        }));
+        let w = World::build(&c).unwrap();
+        let t = town_map(&w, &c, "kingsholm", false, 150.0).unwrap();
+        assert_eq!(t.options.pins.len(), 3);
+        assert_eq!(t.options.citadel, Some(true));
+        assert!(t.svg.contains("class=\"temple\""));
+        assert!(t.svg.contains("id=\"town-castle-wall\""));
     }
 
     #[test]

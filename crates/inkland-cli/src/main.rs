@@ -584,6 +584,7 @@ fn town(
         "citadel": t.options.citadel,
         "walls": t.options.walls,
         "buildings": t.buildings,
+        "warnings": t.warnings,
     });
     if !colour {
         v["checks"] = json!(inkland::check_svg(&t.svg, &config));

@@ -1290,6 +1290,58 @@ pub struct PointPin {
     /// claims of a capital and its seats add together. Default: no claim.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim: Option<Vec<Point>>,
+    /// The plan of the town map of this place: the major buildings that
+    /// the town map puts in place. The generator builds the rest of the
+    /// town around them. Default: a generated town.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub town: Option<TownPlan>,
+}
+
+/// The plan of the town map of a pinned place.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TownPlan {
+    /// The pinned buildings, in order. A building that does not fit its
+    /// position moves to the nearest free patch, with a warning.
+    #[serde(default)]
+    pub buildings: Vec<TownBuilding>,
+}
+
+/// A pinned building of a town map.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TownBuilding {
+    /// The kind of the building.
+    pub kind: TownBuildingKind,
+    /// The position `[x, y]` from the centre of the town, as a part of
+    /// the radius of the town: `[0, -0.5]` is halfway to the north edge.
+    /// A castle takes the patch outside the town nearest this direction.
+    /// The market stays in the centre. Default: where the generator puts
+    /// this kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<[f64; 2]>,
+}
+
+/// Kinds of pinned buildings of a town map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TownBuildingKind {
+    /// A temple, with a cross plan.
+    Temple,
+    /// A castle with its own wall, at the edge of the town.
+    Castle,
+    /// The market square in the centre of the town.
+    Market,
+    /// A park with trees.
+    Park,
+    /// The palace of the rulers: an administration ward.
+    Palace,
+    /// Barracks: a military ward.
+    Barracks,
+    /// A guild hall: a merchant ward.
+    GuildHall,
+    /// The houses of the rich: a patriciate ward.
+    Manor,
 }
 
 /// Kinds of places.

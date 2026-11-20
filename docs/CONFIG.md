@@ -614,6 +614,7 @@ A place at exact coordinates.
 | `name` | string |  |  | Name of the place. Default: a generated name. |
 | `port` | boolean |  | `false` | `true`: the cell of the place touches the sea or a lake. |
 | `state_coa` | [`Coa`](#coa) |  |  | The coat of arms of the state that this place is the capital of (`capital_of`), in the same shape as `coa`. The generated arms of the places and provinces of the state take from it. Default: generated arms. |
+| `town` | [`TownPlan`](#townplan) |  |  | The plan of the town map of this place: the major buildings that the town map puts in place. The generator builds the rest of the town around them. Default: a generated town. |
 
 ### Raster
 
@@ -829,6 +830,38 @@ One of:
 The names of the built-in heightmap templates.
 
 Type: `"volcano"`, `"high-island"`, `"low-island"`, `"continents"`, `"archipelago"`, `"atoll"`, `"mediterranean"`, `"peninsula"`, `"pangea"`, `"isthmus"`, `"shattered"`, `"taklamakan"`, `"old-world"`, `"fractious"`
+
+### TownBuilding
+
+A pinned building of a town map.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `at` | array of 2 number |  |  | The position `[x, y]` from the centre of the town, as a part of the radius of the town: `[0, -0.5]` is halfway to the north edge. A castle takes the patch outside the town nearest this direction. The market stays in the centre. Default: where the generator puts this kind. |
+| `kind` | [`TownBuildingKind`](#townbuildingkind) | yes |  | The kind of the building. |
+
+### TownBuildingKind
+
+Kinds of pinned buildings of a town map.
+
+One of:
+
+- `"temple"`: A temple, with a cross plan.
+- `"castle"`: A castle with its own wall, at the edge of the town.
+- `"market"`: The market square in the centre of the town.
+- `"park"`: A park with trees.
+- `"palace"`: The palace of the rulers: an administration ward.
+- `"barracks"`: Barracks: a military ward.
+- `"guild-hall"`: A guild hall: a merchant ward.
+- `"manor"`: The houses of the rich: a patriciate ward.
+
+### TownPlan
+
+The plan of the town map of a pinned place.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `buildings` | array of [`TownBuilding`](#townbuilding) |  | `[]` | The pinned buildings, in order. A building that does not fit its position moves to the nearest free patch, with a warning. |
 
 ### Towns
 
