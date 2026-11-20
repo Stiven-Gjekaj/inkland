@@ -33,6 +33,8 @@ to the file when the first map shows, and then stops.
   `economy`, `goods`, `journeys`, `markers`, `markets`, `measurers`,
   `military`, `notes`, `stability`, `zones`, or `print`.
   Example: `INKLAND_APP_SNAPSHOT_OPEN=tools/burgs`.
+- `INKLAND_APP_SNAPSHOT_TOWN=ROW` opens the Town Map dialog of a burg
+  before the image. ROW is the id of a pin or `place:<n>`.
 - `INKLAND_APP_SNAPSHOT_POINTER=x,y` puts the pointer at a point of the
   world (config units). The status bar and the Cell Details dialog then
   show the facts of that cell.
@@ -106,11 +108,14 @@ FMG tool that inkland does not have yet.
   Select a pin to change its name, its type, and the port flag, or to
   remove it. "Pin" makes a generated place a pin at the same position,
   with the same name. "Add on the map" adds a pin at each click.
-  "Open town map" opens the town map of the last row that you clicked on
-  watabou.github.io, in the web browser: the city generator for a
+  "Draw town map" opens the Town Map dialog with the offline town map of
+  the last row that you clicked: its walls, wards, streets, and buildings,
+  from the port of TownGeneratorOS. "Colour" switches between the colours
+  of the original and black and white, and "Save SVG" writes the map. The
+  CLI draws the same map with `inkland town`. "Open online" opens the town
+  on watabou.github.io, in the web browser: the city generator for a
   capital, a city, or a town, and the village generator for a village or
-  a hamlet. The link carries the name, the size, the seed, and the
-  features of the place, as in Azgaar's Fantasy Map Generator.
+  a hamlet, as in Azgaar's Fantasy Map Generator.
 - **Heightmap.** The template, the sea level, and the brush. Click or drag
   on the map to raise or lower the land. The list shows the brush strokes;
   "Remove" removes one stroke.
