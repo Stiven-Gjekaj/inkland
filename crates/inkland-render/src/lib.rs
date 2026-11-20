@@ -18,5 +18,6 @@ pub mod png;
 pub mod print_layers;
 pub mod relief_report;
 pub mod svg;
+pub mod town;
 pub mod transform;
 pub mod water;
