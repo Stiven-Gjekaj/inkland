@@ -106,6 +106,11 @@ FMG tool that inkland does not have yet.
   Select a pin to change its name, its type, and the port flag, or to
   remove it. "Pin" makes a generated place a pin at the same position,
   with the same name. "Add on the map" adds a pin at each click.
+  "Open town map" opens the town map of the last row that you clicked on
+  watabou.github.io, in the web browser: the city generator for a
+  capital, a city, or a town, and the village generator for a village or
+  a hamlet. The link carries the name, the size, the seed, and the
+  features of the place, as in Azgaar's Fantasy Map Generator.
 - **Heightmap.** The template, the sea level, and the brush. Click or drag
   on the map to raise or lower the land. The list shows the brush strokes;
   "Remove" removes one stroke.

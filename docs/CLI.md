@@ -47,7 +47,9 @@ inkland generate --config map.json --out-dir out --preview out/map.png
 
 Files in the output directory:
 
-- `world.json`: the base world. All variants share it. It does not change
+- `world.json`: the base world. All variants share it. Each place has
+  `town_link`: the link to its town map on watabou.github.io for a
+  capital, a city, a town, a village, or a hamlet, else `null`. It does not change
   when only overlays, variants, or render options change. Besides the
   terrain and the society, it holds the relations and the campaigns of each
   state and the `chronicle`, the goods, the deposits (`cell_good`), the
