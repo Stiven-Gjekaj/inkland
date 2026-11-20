@@ -34,6 +34,28 @@ pub struct TownStyle {
     pub font: String,
     /// The least width of a line, in points.
     pub min_line_pt: f64,
+    /// The name of the distance unit of the world, for example `mile`. A
+    /// scale bar in feet goes with an imperial unit, and one in metres goes
+    /// with all other units.
+    pub unit: String,
+}
+
+/// inkland: the length of a town unit, in metres. A main street is then
+/// 6 m wide.
+const METRES_PER_UNIT: f64 = 3.0;
+
+/// inkland: the unit of the scale bar of a town map for a world unit: its
+/// name and its length in metres.
+fn bar_unit(world_unit: &str) -> (&'static str, f64) {
+    let u = world_unit.to_lowercase();
+    if ["mile", "league", "foot", "feet", "yard", "furlong"]
+        .iter()
+        .any(|w| u.contains(w))
+    {
+        ("feet", 0.3048)
+    } else {
+        ("metres", 1.0)
+    }
 }
 
 /// The four colours of the palette: paper, light, medium, and dark.
@@ -294,8 +316,108 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
     }
     s.push_str("</g>\n");
     district_labels(&mut s, town, style, &to, paper, dark);
-    s.push_str("</g>\n</svg>\n");
+    s.push_str("</g>\n");
+    scale_and_compass(&mut s, style, k, paper, dark);
+    s.push_str("</svg>\n");
     s
+}
+
+/// inkland: a scale bar at the bottom left of the map and a compass at the
+/// bottom right, each on a paper box. `k` is mm for each town unit.
+fn scale_and_compass(s: &mut String, style: &TownStyle, k: f64, paper: &str, dark: &str) {
+    let size = style.size_mm;
+    let font = (size / 62.0).clamp(2.0, 3.5);
+    let line = line_mm(style.min_line_pt).max(0.15);
+    let (name, metres) = bar_unit(&style.unit);
+    // mm on the page for one unit of the bar.
+    let mm = k * metres / METRES_PER_UNIT;
+    let length = crate::extras::nice_length(0.25 * size / mm);
+    let bar = length * mm;
+    let bottom = TITLE_MM + size;
+    let (x, y) = (5.0, bottom - 5.0);
+    let _ = writeln!(s, "<g id=\"town-scale-bar\">");
+    let _ = writeln!(
+        s,
+        "<rect id=\"town-scale-bar-back\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{paper}\"/>",
+        n(x - 2.0),
+        n(y - font - 2.0),
+        n(bar + 4.0 + font * 3.0),
+        n(font + 5.0)
+    );
+    for i in 0..4 {
+        let fill = if i % 2 == 0 { dark } else { paper };
+        let _ = writeln!(
+            s,
+            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"1\" fill=\"{fill}\" stroke=\"{dark}\" stroke-width=\"{}\"/>",
+            n(x + bar * f64::from(i) / 4.0),
+            n(y),
+            n(bar / 4.0),
+            n(line)
+        );
+    }
+    let num = |v: f64| inkland_core::num::fixed(v, 3);
+    for (v, at, last) in [
+        (0.0, x, false),
+        (length / 2.0, x + bar / 2.0, false),
+        (length, x + bar, true),
+    ] {
+        let text = if last {
+            format!("{} {name}", num(v))
+        } else {
+            num(v)
+        };
+        let _ = writeln!(
+            s,
+            "<text x=\"{}\" y=\"{}\" font-family=\"{}\" font-size=\"{}\" text-anchor=\"{}\" fill=\"{dark}\">{}</text>",
+            n(at),
+            n(y - 0.8),
+            xml(&style.font),
+            n(font),
+            if last { "start" } else { "middle" },
+            xml(&text)
+        );
+    }
+    s.push_str("</g>\n");
+    // The compass: a north arrow with an N above it.
+    let (cx, cy) = (size - 8.0, bottom - 9.0);
+    let _ = writeln!(s, "<g id=\"town-compass\">");
+    let _ = writeln!(
+        s,
+        "<circle id=\"town-compass-back\" cx=\"{}\" cy=\"{}\" r=\"6\" fill=\"{paper}\"/>",
+        n(cx),
+        n(cy - 0.5)
+    );
+    let _ = writeln!(
+        s,
+        "<path d=\"M{} {}L{} {}L{} {}Z\" fill=\"{dark}\" stroke=\"{dark}\" stroke-width=\"{}\" stroke-linejoin=\"round\"/>",
+        n(cx),
+        n(cy - 3.0),
+        n(cx + 1.4),
+        n(cy + 3.0),
+        n(cx),
+        n(cy + 1.8),
+        n(line)
+    );
+    let _ = writeln!(
+        s,
+        "<path d=\"M{} {}L{} {}L{} {}Z\" fill=\"{paper}\" stroke=\"{dark}\" stroke-width=\"{}\" stroke-linejoin=\"round\"/>",
+        n(cx),
+        n(cy - 3.0),
+        n(cx - 1.4),
+        n(cy + 3.0),
+        n(cx),
+        n(cy + 1.8),
+        n(line)
+    );
+    let _ = writeln!(
+        s,
+        "<text x=\"{}\" y=\"{}\" font-family=\"{}\" font-size=\"{}\" text-anchor=\"middle\" fill=\"{dark}\">N</text>",
+        n(cx),
+        n(cy - 3.6),
+        xml(&style.font),
+        n(font)
+    );
+    s.push_str("</g>\n");
 }
 
 /// inkland: the names of the districts, in capitals on a paper box.
@@ -425,7 +547,20 @@ mod tests {
             size_mm: 150.0,
             font: "IM Fell English".to_owned(),
             min_line_pt: 0.25,
+            unit: "mile".to_owned(),
         }
+    }
+
+    #[test]
+    fn the_scale_bar_uses_feet_for_miles_and_metres_else() {
+        assert_eq!(bar_unit("mile").0, "feet");
+        assert_eq!(bar_unit("League").0, "feet");
+        assert_eq!(bar_unit("km").0, "metres");
+        let svg = town_svg(&town(), "Kingsholm", &style(true));
+        assert!(svg.contains("id=\"town-scale-bar\""));
+        assert!(svg.contains(" feet</text>"));
+        assert!(svg.contains("id=\"town-compass\""));
+        assert!(svg.contains("id=\"town-fields\""));
     }
 
     #[test]

@@ -85,6 +85,7 @@ pub fn town_map(
         size_mm,
         font: config.render.fonts.title.clone(),
         min_line_pt: config.render.min_line_width_pt,
+        unit: config.units.name.clone(),
     };
     Ok(TownMapSvg {
         svg: inkland_render::town::town_svg(&town, &place.name, &style),
