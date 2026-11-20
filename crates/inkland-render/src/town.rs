@@ -80,6 +80,60 @@ const RIVER: f64 = 4.0;
 /// in mm.
 const HATCH_MM: f64 = 1.2;
 
+/// inkland: the colour of a lawn in a park.
+const LAWN_COLOUR: &str = "#b5ae9e";
+/// inkland: the distance between two trees of a park, in town units.
+const TREE_STEP: f64 = 3.2;
+
+/// inkland: the trees of a park, as `[x, y, radius]` in town units: a
+/// grid with a fixed jitter, inside the lawns.
+fn park_trees(key: usize, lawns: &[inkland_core::town::Poly]) -> Vec<[f64; 3]> {
+    let mix = |mut z: u64| {
+        z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    let unit = |h: u64| (h >> 11) as f64 / (1u64 << 53) as f64;
+    let pts = lawns.iter().flatten();
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for p in pts {
+        x0 = x0.min(p[0]);
+        y0 = y0.min(p[1]);
+        x1 = x1.max(p[0]);
+        y1 = y1.max(p[1]);
+    }
+    let mut out = Vec::new();
+    let mut row = 0u64;
+    let mut y = y0 + TREE_STEP / 2.0;
+    while y < y1 {
+        let mut col = 0u64;
+        // Each second row moves half a step, as trees in a wood.
+        let mut x = x0 + TREE_STEP * if row.is_multiple_of(2) { 0.5 } else { 1.0 };
+        while x < x1 {
+            let h = mix((key as u64) << 32 ^ row << 16 ^ col);
+            let p = [
+                x + (unit(h) - 0.5) * TREE_STEP * 0.5,
+                y + (unit(mix(h)) - 0.5) * TREE_STEP * 0.5,
+            ];
+            let r = TREE_STEP * (0.35 + 0.15 * unit(mix(mix(h))));
+            if lawns.iter().any(|l| {
+                inkland_core::town::districts::contains(
+                    &inkland_core::town::poly::shrink_eq(l, r),
+                    p,
+                )
+            }) {
+                out.push([p[0], p[1], r]);
+            }
+            x += TREE_STEP;
+            col += 1;
+        }
+        y += TREE_STEP * 0.87;
+        row += 1;
+    }
+    out
+}
+
 /// inkland: the offset of the shadow of a building, in town units.
 const SHADOW: f64 = 0.7;
 /// inkland: the colour of the shadows, between the paper and the light
@@ -277,14 +331,26 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
                 );
             }
             Kind::Park => {
-                let (fill, stroke) = if style.colour {
-                    (medium, medium)
+                // inkland: a lawn with trees on it.
+                let (lawn, tree) = if style.colour {
+                    (LAWN_COLOUR, light)
                 } else {
-                    ("none", dark)
+                    ("none", paper)
                 };
+                let mut trees = String::new();
+                for t in park_trees(i, &p.buildings) {
+                    let [x, y] = to([t[0], t[1]]);
+                    let _ = write!(
+                        trees,
+                        "<circle cx=\"{}\" cy=\"{}\" r=\"{}\"/>",
+                        n(x),
+                        n(y),
+                        n(t[2] * k)
+                    );
+                }
                 let _ = writeln!(
                     s,
-                    "<path id=\"town-ward-{i}\" class=\"{class}\" d=\"{d}\" fill=\"{fill}\" stroke=\"{stroke}\" stroke-width=\"{}\"/>",
+                    "<g id=\"town-ward-{i}\" class=\"{class}\" stroke=\"{dark}\" stroke-width=\"{}\"><path d=\"{d}\" fill=\"{lawn}\"/><g fill=\"{tree}\">{trees}</g></g>",
                     n(w(NORMAL_STROKE))
                 );
             }
@@ -665,6 +731,20 @@ mod tests {
         for r in crate::checks::check_svg(&print, &opts) {
             assert!(r.pass, "{} {:?}", r.name, r.details);
         }
+    }
+
+    #[test]
+    fn a_park_has_trees_inside_its_lawns() {
+        let lawn = inkland_core::town::poly::rect(20.0, 20.0);
+        let trees = park_trees(3, std::slice::from_ref(&lawn));
+        assert!(trees.len() >= 20, "{}", trees.len());
+        for t in &trees {
+            assert!(
+                t[0].abs() + t[2] <= 10.0 && t[1].abs() + t[2] <= 10.0,
+                "{t:?}"
+            );
+        }
+        assert_eq!(trees, park_trees(3, &[lawn]));
     }
 
     #[test]
