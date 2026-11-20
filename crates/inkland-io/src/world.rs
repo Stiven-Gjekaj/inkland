@@ -113,7 +113,13 @@ pub fn world_value(world: &World, config: &Config) -> Value {
         "cell_population": world.society.cells.pop.iter().map(|&p| round(p, 3)).collect::<Vec<_>>(),
         "cell_development": world.society.development,
         "cultures": world.society.cultures.iter().map(culture_value).collect::<Vec<_>>(),
-        "places": world.society.places.iter().map(place_value).collect::<Vec<_>>(),
+        "places": world
+            .society
+            .places
+            .iter()
+            .zip(inkland_core::watabou::town_links(world))
+            .map(|(p, link)| place_value(p, link))
+            .collect::<Vec<_>>(),
         "states": world.society.states.iter().map(|st| state_value(st, world)).collect::<Vec<_>>(),
         "provinces": world.society.provinces.iter().map(province_value).collect::<Vec<_>>(),
         "coastlines": world.coastlines.iter().map(|c| json!({
@@ -191,7 +197,9 @@ fn culture_value(c: &inkland_core::cultures::Culture) -> Value {
     })
 }
 
-fn place_value(p: &inkland_core::society::Place) -> Value {
+/// A place. `town_link` is the link to the Watabou town generator of the
+/// place, or `None`.
+fn place_value(p: &inkland_core::society::Place, town_link: Option<String>) -> Value {
     json!({
         "id": p.id,
         "pin": p.pin,
@@ -215,6 +223,7 @@ fn place_value(p: &inkland_core::society::Place) -> Value {
         "shanty": p.shanty,
         "temple": p.temple,
         "coa": p.coa,
+        "town_link": town_link,
     })
 }
 
@@ -365,6 +374,18 @@ mod tests {
         for p in v["places"].as_array().unwrap() {
             assert!(p["population"].as_f64().unwrap() > 0.0);
             assert!(p["group"].is_string());
+            // A town has a link to its town map; a fort has none.
+            let link = &p["town_link"];
+            match p["group"].as_str().unwrap() {
+                "capital" | "city" | "town" | "village" | "hamlet" => {
+                    assert!(
+                        link.as_str()
+                            .unwrap()
+                            .starts_with("https://watabou.github.io/")
+                    );
+                }
+                _ => assert!(link.is_null()),
+            }
         }
         for st in v["states"].as_array().unwrap() {
             assert!(st["form"].is_string() && st["full_name"].is_string());
