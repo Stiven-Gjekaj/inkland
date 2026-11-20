@@ -304,7 +304,27 @@ pub fn geometry(model: &mut Model, patch: usize, ward: &Ward) -> Vec<Poly> {
         | Kind::Gate => {
             let (min_sq, grid, size, empty) = ward.common.unwrap_or((10.0, 0.5, 0.6, 0.04));
             let block = city_block(model, patch);
-            let mut g = create_alleys(&mut model.rng, &block, min_sq, grid, size, empty, true, 0);
+            let mut g = if model.lots && ward.kind != Kind::Slum {
+                // inkland: street blocks with alleys, then narrow lots along
+                // each street, with a yard in the middle.
+                let blocks = create_alleys(
+                    &mut model.rng,
+                    &block,
+                    min_sq * INSULA,
+                    grid,
+                    size * 0.5,
+                    0.0,
+                    true,
+                    0,
+                );
+                let mut lots = Vec::new();
+                for b in blocks {
+                    lots.extend(frontage_lots(&mut model.rng, &b, min_sq, empty));
+                }
+                lots
+            } else {
+                create_alleys(&mut model.rng, &block, min_sq, grid, size, empty, true, 0)
+            };
             if !model.is_enclosed(patch) {
                 g = filter_outskirts(model, patch, g);
             }
@@ -454,6 +474,65 @@ pub fn create_alleys(
     buildings
 }
 
+/// inkland: the area of a street block with lots around it, as a multiple
+/// of the least area of a building.
+const INSULA: f64 = 6.0;
+
+/// inkland: the lots of a street block. A strip one lot deep runs along each
+/// edge, and cuts across it make narrow lots on the street. The middle of
+/// the block is a yard, or sometimes one more building.
+pub fn frontage_lots(rng: &mut Random, block: &[P], min_sq: f64, empty: f64) -> Vec<Poly> {
+    let depth = min_sq.sqrt();
+    let width = 0.6 * min_sq.sqrt();
+    let area = poly::square(block).abs();
+    if block.len() < 3 || area < depth * depth * 2.5 {
+        return vec![block.to_vec()];
+    }
+    let mut out = Vec::new();
+    let strips = poly::ring(block, depth * (0.8 + 0.4 * rng.float()));
+    for strip in strips {
+        split_lots(rng, &strip, width, empty, 0, &mut out);
+    }
+    // The yard: the rest of the block, with a building in some of them.
+    if rng.bool(0.25) {
+        let core = poly::shrink_eq(block, depth * 1.4);
+        if core.len() >= 3 && poly::square(&core).abs() > min_sq {
+            out.push(core);
+        }
+    }
+    out
+}
+
+/// Cut a strip into lots across its longest edge, each about `width` wide.
+fn split_lots(
+    rng: &mut Random,
+    strip: &[P],
+    width: f64,
+    empty: f64,
+    depth: usize,
+    out: &mut Vec<Poly>,
+) {
+    if strip.len() < 3 {
+        return;
+    }
+    let i = longest_edge(strip);
+    let l = poly::len(poly::vector(strip, i));
+    if l < width * 1.4 || depth >= MAX_DEPTH {
+        if poly::square(strip).abs() > 0.5 && !rng.bool(empty) {
+            out.push(strip.to_vec());
+        }
+        return;
+    }
+    let ratio = 0.5 + (rng.float() - 0.5) * 0.3;
+    for half in poly::bisect(strip, i, ratio, 0.0, 0.0) {
+        if half.len() >= 3 && poly::square(&half).abs() < poly::square(strip).abs() - 1e-9 {
+            split_lots(rng, &half, width, empty, depth + 1, out);
+        } else {
+            out.push(half);
+        }
+    }
+}
+
 /// The index of the vertex that starts the longest edge.
 fn longest_edge(p: &[P]) -> usize {
     let idx: Vec<usize> = (0..p.len()).collect();
@@ -585,4 +664,33 @@ fn filter_outskirts(model: &mut Model, patch: usize, geometry: Vec<Poly>) -> Vec
             model.rng.fuzzy(1.0) > min_dist
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_block_gets_narrow_lots_along_its_edges() {
+        let block: Poly = vec![[0.0, 0.0], [40.0, 0.0], [40.0, 40.0], [0.0, 40.0]];
+        let mut rng = Random::new(3);
+        let lots = frontage_lots(&mut rng, &block, 25.0, 0.0);
+        assert!(lots.len() >= 16, "{}", lots.len());
+        // The lots along the edges cover the ring of the block, one lot deep.
+        let along: Vec<&Poly> = lots
+            .iter()
+            .filter(|l| {
+                l.iter()
+                    .any(|v| v[0] == 0.0 || v[0] == 40.0 || v[1] == 0.0 || v[1] == 40.0)
+            })
+            .collect();
+        assert!(along.len() >= 16);
+        for l in &along {
+            let a = poly::square(l).abs();
+            assert!(a > 0.5 && a < 80.0, "{a}");
+        }
+        // A small block stays one building.
+        let small: Poly = vec![[0.0, 0.0], [6.0, 0.0], [6.0, 6.0], [0.0, 6.0]];
+        assert_eq!(frontage_lots(&mut rng, &small, 25.0, 0.0), vec![small]);
+    }
 }

@@ -57,6 +57,9 @@ pub struct Retry(pub &'static str);
 pub struct Model {
     pub rng: Random,
     pub n_patches: usize,
+    /// inkland: narrow lots along the streets, with yards in the blocks.
+    /// `false`: the buildings of the original.
+    pub lots: bool,
     pub plaza_needed: bool,
     pub citadel_needed: bool,
     pub walls_needed: bool,
@@ -138,6 +141,7 @@ impl Model {
         plaza: Option<bool>,
         citadel: Option<bool>,
         walls: Option<bool>,
+        lots: bool,
     ) -> Result<Model, Retry> {
         let mut rng = Random::new(seed);
         let n_patches = n_patches.max(3);
@@ -150,6 +154,7 @@ impl Model {
         let mut model = Model {
             rng,
             n_patches,
+            lots,
             plaza_needed,
             citadel_needed,
             walls_needed,

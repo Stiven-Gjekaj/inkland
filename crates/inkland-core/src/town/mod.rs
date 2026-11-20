@@ -37,6 +37,9 @@ pub struct TownOptions {
     pub citadel: Option<bool>,
     /// A wall around the town. `None`: a random choice.
     pub walls: Option<bool>,
+    /// inkland: narrow lots along the streets, with yards in the blocks.
+    /// `false`: the buildings of the original generator.
+    pub lots: bool,
 }
 
 /// A patch of a town: a ward and its buildings.
@@ -95,6 +98,7 @@ pub fn options_of(world: &crate::world::World, place: &crate::society::Place) ->
         plaza: Some(place.plaza),
         citadel: Some(place.citadel),
         walls: Some(place.walls),
+        lots: true,
     }
 }
 
@@ -106,6 +110,7 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
         opts.plaza,
         opts.citadel,
         opts.walls,
+        opts.lots,
     )
     .map_err(|e| {
         Error::new(
@@ -160,6 +165,7 @@ mod tests {
             plaza: Some(true),
             citadel,
             walls,
+            lots: false,
         })
         .unwrap()
     }
@@ -204,6 +210,7 @@ mod tests {
                     plaza: None,
                     citadel: None,
                     walls: None,
+                    lots: false,
                 })
                 .unwrap_or_else(|e| panic!("seed {seed}, {n} patches: {e:?}"));
                 assert!(t.patches.iter().filter(|p| p.within_city).count() >= n);
@@ -245,6 +252,30 @@ mod tests {
         for p in w.society.places.iter().take(10) {
             generate(&options_of(&w, p)).unwrap();
         }
+    }
+
+    #[test]
+    fn lots_give_more_and_smaller_buildings() {
+        let make = |lots: bool| {
+            generate(&TownOptions {
+                patches: 15,
+                seed: 4242,
+                plaza: Some(true),
+                citadel: Some(true),
+                walls: Some(true),
+                lots,
+            })
+            .unwrap()
+        };
+        let count = |t: &Town| t.patches.iter().map(|p| p.buildings.len()).sum::<usize>();
+        let (classic, lots) = (make(false), make(true));
+        assert!(
+            count(&lots) > count(&classic) * 5 / 4,
+            "{} {}",
+            count(&lots),
+            count(&classic)
+        );
+        assert_eq!(make(true), lots);
     }
 
     #[test]

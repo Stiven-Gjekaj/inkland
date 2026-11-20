@@ -234,6 +234,7 @@ mod tests {
             plaza: Some(true),
             citadel: Some(true),
             walls: Some(true),
+            lots: false,
         })
         .unwrap()
     }
