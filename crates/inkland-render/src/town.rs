@@ -76,6 +76,12 @@ fn water_colour(colour: bool) -> &'static str {
 /// inkland: the width of a river, in town units.
 const RIVER: f64 = 4.0;
 
+/// inkland: the offset of the shadow of a building, in town units.
+const SHADOW: f64 = 0.7;
+/// inkland: the colour of the shadows, between the paper and the light
+/// colour.
+const SHADOW_COLOUR: &str = "#aea79a";
+
 fn n(v: f64) -> String {
     let r = (v * 1000.0).round() / 1000.0;
     let r = if r == 0.0 { 0.0 } else { r };
@@ -185,6 +191,24 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
         );
     }
     s.push_str("</g>\n");
+
+    // inkland: in colour, each building casts a shadow to the south-east.
+    if style.colour {
+        let d: String = town
+            .patches
+            .iter()
+            .filter(|p| p.kind != Kind::Park)
+            .flat_map(|p| p.buildings.iter())
+            .map(|b| path(b, true))
+            .collect();
+        if !d.is_empty() {
+            let off = n(SHADOW * k);
+            let _ = writeln!(
+                s,
+                "<path id=\"town-shadows\" d=\"{d}\" fill=\"{SHADOW_COLOUR}\" transform=\"translate({off} {off})\"/>"
+            );
+        }
+    }
 
     // The wards.
     let _ = writeln!(s, "<g id=\"town-wards\" stroke-linejoin=\"miter\">");
@@ -563,6 +587,13 @@ mod tests {
         assert!(svg.contains(" feet</text>"));
         assert!(svg.contains("id=\"town-compass\""));
         assert!(svg.contains("id=\"town-fields\""));
+    }
+
+    #[test]
+    fn buildings_cast_shadows_in_colour_only() {
+        let t = town();
+        assert!(town_svg(&t, "K", &style(true)).contains("id=\"town-shadows\""));
+        assert!(!town_svg(&t, "K", &style(false)).contains("id=\"town-shadows\""));
     }
 
     #[test]
