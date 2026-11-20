@@ -34,6 +34,10 @@ pub struct TownStyle {
     pub font: String,
     /// The least width of a line, in points.
     pub min_line_pt: f64,
+    /// inkland: the hand of the hand-drawn look. In black and white it
+    /// moves the walls, the shore, the river, the moat, and the roads a
+    /// little, as a pen line. `None`: exact lines.
+    pub hand: Option<crate::hand::Hand>,
     /// The name of the distance unit of the world, for example `mile`. A
     /// scale bar in feet goes with an imperial unit, and one in metres goes
     /// with all other units.
@@ -203,6 +207,19 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
         }
         d
     };
+    // inkland: an open line, wobbled in black and white with a hand.
+    let hand = style.hand.filter(|_| !style.colour);
+    let pen = |key: &str, pts: &[P]| -> String {
+        let Some(h) = hand else {
+            return path(pts, false);
+        };
+        let page: Vec<[f64; 2]> = pts.iter().map(|&p| to(p)).collect();
+        let mut d = String::new();
+        for (i, [x, y]) in h.wobble(key, &page, false).into_iter().enumerate() {
+            let _ = write!(d, "{}{} {}", if i == 0 { "M" } else { "L" }, n(x), n(y));
+        }
+        d
+    };
     let mut s = String::new();
     let height = size + top;
     let _ = writeln!(
@@ -267,7 +284,7 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
         }
         // The shore: each edge of the sea that a land patch has too.
         let mut d = String::new();
-        for sea in &town.water {
+        for (si, sea) in town.water.iter().enumerate() {
             let m = sea.len();
             for i in 0..m {
                 let (a, b) = (sea[i], sea[(i + 1) % m]);
@@ -276,7 +293,7 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
                     (0..l).any(|j| p.shape[j] == b && p.shape[(j + 1) % l] == a)
                 });
                 if land {
-                    d.push_str(&path(&[a, b], false));
+                    d.push_str(&pen(&format!("shore-{si}-{i}"), &[a, b]));
                 }
             }
         }
@@ -289,7 +306,7 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
         }
     }
     if let Some(river) = &town.river {
-        let d = path(river, false);
+        let d = pen("river", river);
         let _ = writeln!(
             s,
             "<g id=\"town-river\" fill=\"none\" stroke-linejoin=\"round\" stroke-linecap=\"round\"><path d=\"{d}\" stroke=\"{dark}\" stroke-width=\"{}\"/><path d=\"{d}\" stroke=\"{water}\" stroke-width=\"{}\"/></g>",
@@ -315,7 +332,7 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
                 .as_ref()
                 .is_some_and(|c| inkland_core::town::districts::contains(c, mid));
             if wl.segments.get(i).copied().unwrap_or(true) && !in_castle {
-                d.push_str(&path(&[a, b], false));
+                d.push_str(&pen(&format!("moat-{i}"), &[a, b]));
             }
         }
         if !d.is_empty() {
@@ -345,8 +362,8 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
         s,
         "<g id=\"town-roads\" fill=\"none\" stroke-linejoin=\"round\">"
     );
-    for road in &town.roads {
-        let d = path(road, false);
+    for (ri, road) in town.roads.iter().enumerate() {
+        let d = pen(&format!("road-{ri}"), road);
         let _ = writeln!(
             s,
             "<path d=\"{d}\" stroke=\"{medium}\" stroke-width=\"{}\"/>",
@@ -473,7 +490,10 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
         let mut d = String::new();
         for i in 0..m {
             if wl.segments.get(i).copied().unwrap_or(true) {
-                d.push_str(&path(&[wl.shape[i], wl.shape[(i + 1) % m]], false));
+                d.push_str(&pen(
+                    &format!("{id}-{i}"),
+                    &[wl.shape[i], wl.shape[(i + 1) % m]],
+                ));
             }
         }
         let _ = writeln!(
@@ -754,6 +774,37 @@ mod tests {
             font: "IM Fell English".to_owned(),
             min_line_pt: 0.25,
             unit: "mile".to_owned(),
+            hand: None,
+        }
+    }
+
+    #[test]
+    fn the_hand_moves_the_walls_in_black_and_white_only() {
+        let t = town();
+        let hand = TownStyle {
+            hand: Some(crate::hand::Hand::new(7)),
+            ..style(false)
+        };
+        let wall = |svg: &str| {
+            let i = svg.find("id=\"town-wall\"").unwrap();
+            let j = i + svg[i..].find("/>").unwrap();
+            svg[i..j].to_owned()
+        };
+        let exact = town_svg(&t, "K", &style(false));
+        let drawn = town_svg(&t, "K", &hand);
+        assert_ne!(wall(&exact), wall(&drawn));
+        // The colour look keeps exact lines.
+        let colour = TownStyle {
+            colour: true,
+            ..hand.clone()
+        };
+        assert_eq!(town_svg(&t, "K", &colour), town_svg(&t, "K", &style(true)));
+        let opts = crate::checks::CheckOptions {
+            min_line_width_pt: 0.25,
+            fonts_allowed: vec!["IM Fell English".to_owned()],
+        };
+        for r in crate::checks::check_svg(&drawn, &opts) {
+            assert!(r.pass, "{} {:?}", r.name, r.details);
         }
     }
 
