@@ -228,6 +228,8 @@ struct State {
     draw: Option<(DrawTool, String, String)>,
     /// The pointer in the map view, if it is there.
     pointer: Option<[f64; 2]>,
+    /// The Burgs Overview row of the town map, its SVG, and its name.
+    town: Option<(String, String, String)>,
 }
 
 struct Controller {
@@ -738,6 +740,12 @@ impl Controller {
                 self.pointer_move(p);
             }
         }
+        // `INKLAND_APP_SNAPSHOT_TOWN=ROW` (a pin id or `place:<n>`) opens the
+        // Town Map dialog of that burg.
+        if let Ok(row) = std::env::var("INKLAND_APP_SNAPSHOT_TOWN") {
+            self.draw_town(&row);
+            self.ui().global::<Dialogs>().invoke_open(s("town"));
+        }
         let me = Rc::clone(self);
         slint::Timer::single_shot(Duration::from_millis(500), move || {
             let result = me
@@ -1171,6 +1179,46 @@ impl Controller {
                 self.message(&format!("opened {}", path.display()), false);
             }
             Err(e) => self.message(&e, true),
+        }
+    }
+
+    /// Draw the offline town map of a Burgs Overview row in the Town Map
+    /// dialog.
+    fn draw_town(&self, row: &str) {
+        let colour = self.ui().global::<AppState>().get_town_colour();
+        let drawn = {
+            let st = self.state.borrow();
+            let Some(m) = st.shown.as_ref() else {
+                drop(st);
+                self.message("generate a map first", true);
+                return;
+            };
+            let Some(i) = inkland_app::rows::place_index(&m.world, row) else {
+                drop(st);
+                self.message("this row has no burg in the shown world", true);
+                return;
+            };
+            // Two pixels for each logical pixel, for a sharp image.
+            inkland_app::town::draw(&m.world, &m.config, i, colour, 992)
+        };
+        match drawn {
+            Ok(t) => {
+                let ui = self.ui();
+                let g = ui.global::<AppState>();
+                g.set_town_image(slint::Image::from_rgba8(
+                    SharedPixelBuffer::clone_from_slice(&t.pixels, t.width, t.height),
+                ));
+                g.set_town_title(s(&t.name));
+                self.message(
+                    &format!(
+                        "drew the town map of {} with {} buildings",
+                        t.name, t.buildings
+                    ),
+                    false,
+                );
+                self.state.borrow_mut().town = Some((row.to_owned(), t.svg, t.name));
+            }
+            Err(e) => self.message(&format!("cannot draw the town map: {e}"), true),
         }
     }
 
@@ -1948,6 +1996,7 @@ fn main() -> Result<(), slint::PlatformError> {
             draft: Vec::new(),
             draw: None,
             pointer: None,
+            town: None,
         }),
         generator,
         rasterizer,
@@ -2196,6 +2245,30 @@ fn main() -> Result<(), slint::PlatformError> {
             c.state.borrow_mut().editor.unset(&path)
         };
         c.edited(r, "use the generated arms");
+    });
+    let c = Rc::clone(&app);
+    a.on_show_town(move |id| {
+        c.draw_town(&id);
+        c.ui().global::<Dialogs>().invoke_open(s("town"));
+    });
+    let c = Rc::clone(&app);
+    a.on_redraw_town(move || {
+        let row = c.state.borrow().town.as_ref().map(|t| t.0.clone());
+        if let Some(row) = row {
+            c.draw_town(&row);
+        }
+    });
+    let c = Rc::clone(&app);
+    a.on_save_town(move || {
+        let Some((_, svg, name)) = c.state.borrow().town.clone() else {
+            return;
+        };
+        let dialog = rfd::FileDialog::new()
+            .add_filter("SVG", &["svg"])
+            .set_file_name(format!("{name}.svg"));
+        if let Some(path) = dialog.save_file() {
+            c.write(&path, &svg, "town map");
+        }
     });
     let c = Rc::clone(&app);
     a.on_open_town(move |id| {

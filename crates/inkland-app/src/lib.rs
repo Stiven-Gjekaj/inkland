@@ -14,6 +14,7 @@ pub mod pins;
 pub mod positions;
 pub mod rows;
 pub mod snapshot;
+pub mod town;
 pub mod variants;
 pub mod view;
 pub mod worker;

@@ -86,17 +86,23 @@ pub fn place_row_id(n: u32) -> String {
     format!("place:{n}")
 }
 
+/// The index in the places of the world of a Burgs Overview row: a pin id
+/// or `place:<n>`.
+pub fn place_index(world: &World, id: &str) -> Option<usize> {
+    let places = &world.society.places;
+    match id.strip_prefix("place:") {
+        Some(n) => {
+            let n: u32 = n.parse().ok()?;
+            places.iter().position(|p| p.id == n)
+        }
+        None => places.iter().position(|p| p.pin.as_deref() == Some(id)),
+    }
+}
+
 /// The link to the Watabou town map of a Burgs Overview row: a pin id or
 /// `place:<n>`. `None` for a place with no town map, for example a fort.
 pub fn town_link(world: &World, id: &str) -> Option<String> {
-    let places = &world.society.places;
-    let i = match id.strip_prefix("place:") {
-        Some(n) => {
-            let n: u32 = n.parse().ok()?;
-            places.iter().position(|p| p.id == n)?
-        }
-        None => places.iter().position(|p| p.pin.as_deref() == Some(id))?,
-    };
+    let i = place_index(world, id)?;
     inkland_core::watabou::town_links(world).swap_remove(i)
 }
 

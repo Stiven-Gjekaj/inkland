@@ -33,13 +33,14 @@ export component BurgsDialog inherits Dialog {
         label: "Town map";
         label-width: 120px;
         DialogButton {
-            text: "Open town map";
+            text: "Draw town map";
+            enabled: AppState.burg-row != "";
+            clicked => { Actions.show-town(AppState.burg-row); }
+        }
+        DialogButton {
+            text: "Open online";
             enabled: AppState.burg-row != "";
             clicked => { Actions.open-town(AppState.burg-row); }
-        }
-        Label {
-            dialog: true;
-            text: "A city, a town, a village, or a hamlet opens on watabou.github.io.";
         }
         Rectangle { horizontal-stretch: 1; }
     }

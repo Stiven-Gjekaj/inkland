@@ -1,0 +1,54 @@
+// The Town Map dialog: the offline town map of a burg, from the port of
+// TownGeneratorOS by Watabou. "Colour" switches between the colours of the
+// original and black and white. "Save SVG" writes the map to a file.
+
+import { Theme, Label, DialogButton, Check, FormRow, Tip } from "../theme.slint";
+import { Dialog } from "../dialog.slint";
+import { AppState, Actions } from "../globals.slint";
+
+export component TownDialog inherits Dialog {
+    id: "town";
+    title: AppState.town-title == "" ? "Town Map" : "Town Map: " + AppState.town-title;
+    content-width: 520px;
+    pos-x: 360px;
+    pos-y: 40px;
+    HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 500px;
+            height: 540px;
+            background: white;
+            border-width: 1px;
+            border-color: #dddddd;
+            Image {
+                width: 496px;
+                height: 536px;
+                source: AppState.town-image;
+                image-fit: contain;
+            }
+        }
+    }
+    FormRow {
+        label: "Look";
+        label-width: 70px;
+        Check {
+            dialog: true;
+            text: "Colour";
+            checked: AppState.town-colour;
+            toggled(on) => {
+                AppState.town-colour = on;
+                Actions.redraw-town();
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        DialogButton {
+            text: "Save SVG";
+            enabled: AppState.town-title != "";
+            clicked => { Actions.save-town(); }
+        }
+    }
+    Tip {
+        dialog: true;
+        text: "The town comes from the burg: its size, plaza, castle, and walls. The CLI draws the same map with inkland town.";
+    }
+}

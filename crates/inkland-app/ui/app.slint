@@ -20,6 +20,7 @@ import { UnitsDialog } from "dialogs/units.slint";
 import { SocietyDialog } from "dialogs/society.slint";
 import { CellsDialog } from "dialogs/cells.slint";
 import { EmblemsDialog } from "dialogs/emblems.slint";
+import { TownDialog } from "dialogs/town.slint";
 import { DiplomacyDialog } from "dialogs/diplomacy.slint";
 import { MeasurersDialog } from "dialogs/measurers.slint";
 import { JourneysDialog } from "dialogs/journeys.slint";
@@ -103,6 +104,7 @@ export component AppWindow inherits Window {
         if Dialogs.units: UnitsDialog {}
         if Dialogs.cells: CellsDialog {}
         if Dialogs.emblems: EmblemsDialog {}
+        if Dialogs.town: TownDialog {}
         if Dialogs.diplomacy: DiplomacyDialog {}
         if Dialogs.measurers: MeasurersDialog {}
         if Dialogs.journeys: JourneysDialog {}

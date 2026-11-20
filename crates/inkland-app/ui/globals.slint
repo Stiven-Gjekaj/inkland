@@ -69,6 +69,11 @@ export global AppState {
     // The last row of the Burgs Overview that the user clicked: a pin id
     // or `place:<n>`.
     in-out property <string> burg-row;
+    // The Town Map dialog: the image and the title of the offline town map,
+    // and its look.
+    in property <image> town-image;
+    in property <string> town-title;
+    in-out property <bool> town-colour;
     in-out property <string> selected-name;
     // The kind (index in the kind list) and the port flag of the selected
     // pin.
@@ -209,6 +214,11 @@ export global Actions {
     callback select-pin(string);
     // Open the Watabou town map of a burg row in the web browser.
     callback open-town(string);
+    // Draw the offline town map of a burg row in the Town Map dialog, draw
+    // it again with the look of the dialog, and save it as SVG.
+    callback show-town(string);
+    callback redraw-town();
+    callback save-town();
     callback rename-pin(string, string);
     callback remove-pin(string);
     callback undo();
@@ -393,6 +403,7 @@ export global Dialogs {
     in-out property <bool> notes;
     in-out property <bool> markers;
     in-out property <bool> military;
+    in-out property <bool> town;
 
     public function open(id: string) {
         if id == "emblems" { self.emblems = true; }
@@ -421,6 +432,7 @@ export global Dialogs {
         if id == "notes" { self.notes = true; }
         if id == "markers" { self.markers = true; }
         if id == "military" { self.military = true; }
+        if id == "town" { self.town = true; }
         Actions.selection-changed();
         if id == "print" { self.print = true; }
     }
@@ -448,6 +460,7 @@ export global Dialogs {
         if id == "markets" { self.markets = false; }
         if id == "goods" { self.goods = false; }
         if id == "stability" { self.stability = false; }
+        if id == "town" { self.town = false; }
         if id == "zones" { self.zones = false; }
         if id == "notes" { self.notes = false; }
         if id == "markers" { self.markers = false; }
