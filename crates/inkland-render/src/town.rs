@@ -80,6 +80,42 @@ const RIVER: f64 = 4.0;
 /// in mm.
 const HATCH_MM: f64 = 1.2;
 
+/// inkland: the width of a moat, in town units.
+const MOAT: f64 = 3.0;
+/// inkland: the distance from the wall to the middle of the moat.
+const MOAT_OFFSET: f64 = 4.5;
+
+/// inkland: each vertex of a polygon moved out by `d`, so that each edge
+/// is `d` from its old place. Out is away from the centre of the polygon.
+fn outset(shape: &[P], d: f64) -> Vec<P> {
+    use inkland_core::town::poly;
+    let m = shape.len();
+    let c = poly::center(shape);
+    let normal = |i: usize| {
+        let (a, b) = (shape[i], shape[(i + 1) % m]);
+        let nrm = poly::norm(poly::rotate90(poly::sub(b, a)), 1.0);
+        let mid = poly::scale(poly::add(a, b), 0.5);
+        if poly::dot(nrm, poly::sub(mid, c)) < 0.0 {
+            poly::scale(nrm, -1.0)
+        } else {
+            nrm
+        }
+    };
+    (0..m)
+        .map(|i| {
+            let (n0, n1) = (normal((i + m - 1) % m), normal(i));
+            let sum = poly::add(n0, n1);
+            let l = poly::len(sum);
+            if l < 1e-9 {
+                return poly::add(shape[i], poly::scale(n1, d));
+            }
+            // The miter: the bisector, longer at a sharp corner, at most 2 d.
+            let cos = (l / 2.0).max(0.5);
+            poly::add(shape[i], poly::scale(sum, d / cos / l))
+        })
+        .collect()
+}
+
 /// inkland: the colour of a lawn in a park.
 const LAWN_COLOUR: &str = "#b5ae9e";
 /// inkland: the distance between two trees of a park, in town units.
@@ -260,6 +296,36 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
             n(w(RIVER + NORMAL_STROKE * 2.0)),
             n(w(RIVER))
         );
+    }
+
+    // inkland: a moat around the wall of a town with a river or the sea to
+    // fill it. The roads cross it at the gates.
+    if let Some(wl) = &town.wall
+        && (town.river.is_some() || !town.water.is_empty())
+    {
+        let ring = outset(&wl.shape, MOAT_OFFSET);
+        let m = ring.len();
+        let mut d = String::new();
+        let castle = town.castle.as_ref().map(|c| c.shape.clone());
+        for i in 0..m {
+            let (a, b) = (ring[i], ring[(i + 1) % m]);
+            let mid = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+            // No moat inside the castle, where its wall joins the town wall.
+            let in_castle = castle
+                .as_ref()
+                .is_some_and(|c| inkland_core::town::districts::contains(c, mid));
+            if wl.segments.get(i).copied().unwrap_or(true) && !in_castle {
+                d.push_str(&path(&[a, b], false));
+            }
+        }
+        if !d.is_empty() {
+            let _ = writeln!(
+                s,
+                "<g id=\"town-moat\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"{d}\" stroke=\"{dark}\" stroke-width=\"{}\"/><path d=\"{d}\" stroke=\"{water}\" stroke-width=\"{}\"/></g>",
+                n(w(MOAT + NORMAL_STROKE * 2.0)),
+                n(w(MOAT))
+            );
+        }
     }
 
     // inkland: the fields of the farms, under the roads.
@@ -745,6 +811,16 @@ mod tests {
             );
         }
         assert_eq!(trees, park_trees(3, &[lawn]));
+    }
+
+    #[test]
+    fn an_outset_square_is_larger_by_the_distance() {
+        let sq = inkland_core::town::poly::rect(10.0, 10.0);
+        let o = outset(&sq, 2.0);
+        for (a, b) in sq.iter().zip(&o) {
+            assert!((b[0].abs() - a[0].abs() - 2.0).abs() < 1e-9, "{b:?}");
+            assert!((b[1].abs() - a[1].abs() - 2.0).abs() < 1e-9, "{b:?}");
+        }
     }
 
     #[test]
