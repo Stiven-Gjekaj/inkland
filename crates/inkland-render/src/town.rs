@@ -280,8 +280,104 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
     if let Some(wl) = &town.castle {
         wall("town-castle-wall", wl, true);
     }
-    s.push_str("</g>\n</g>\n</svg>\n");
+    s.push_str("</g>\n");
+    district_labels(&mut s, town, style, &to, paper, dark);
+    s.push_str("</g>\n</svg>\n");
     s
+}
+
+/// inkland: the names of the districts, in capitals on a paper box.
+/// The larger districts come first. A label that would cover a label
+/// before it tries the other patches of its district, and is left out if
+/// no patch gives it space.
+fn district_labels(
+    s: &mut String,
+    town: &Town,
+    style: &TownStyle,
+    to: &dyn Fn(P) -> [f64; 2],
+    paper: &str,
+    dark: &str,
+) {
+    if town.districts.is_empty() {
+        return;
+    }
+    let size = (style.size_mm / 62.0).clamp(2.0, 3.5);
+    let spacing = size * 0.12;
+    let metrics = crate::metrics::FontMetrics::of(&style.font);
+    let cap = metrics.cap(size);
+    let pad = size * 0.18;
+    let (lo, hi) = (TITLE_MM, TITLE_MM + style.size_mm);
+    let mut order: Vec<usize> = (0..town.districts.len()).collect();
+    order.sort_by(|&a, &b| {
+        town.districts[b]
+            .area
+            .total_cmp(&town.districts[a].area)
+            .then(a.cmp(&b))
+    });
+    let mut boxes: Vec<[f64; 4]> = Vec::new();
+    let mut texts = String::new();
+    for i in order {
+        let d = &town.districts[i];
+        let text = d.name.to_uppercase();
+        let width = metrics.width(&text, size, spacing) + 2.0 * pad;
+        let mut spots = vec![d.label];
+        spots.extend(
+            d.patches
+                .iter()
+                .map(|&p| inkland_core::town::poly::centroid(&town.patches[p].shape)),
+        );
+        let fits = |b: &[f64; 4]| {
+            b[0] >= 0.0
+                && b[2] <= style.size_mm
+                && b[1] >= lo
+                && b[3] <= hi
+                && !boxes
+                    .iter()
+                    .any(|o| b[0] < o[2] && o[0] < b[2] && b[1] < o[3] && o[1] < b[3])
+        };
+        let found = spots
+            .into_iter()
+            .map(|p| {
+                let [x, y] = to(p);
+                let h = cap / 2.0 + pad;
+                ([x, y], [x - width / 2.0, y - h, x + width / 2.0, y + h])
+            })
+            .find(|(_, b)| fits(b));
+        let Some(([x, y], b)) = found else {
+            continue;
+        };
+        boxes.push(b);
+        let _ = writeln!(
+            texts,
+            "<text id=\"town-district-{i}\" x=\"{}\" y=\"{}\">{}</text>",
+            n(x),
+            n(y + cap / 2.0),
+            xml(&text)
+        );
+    }
+    // The paper box behind each label keeps it clear of the buildings.
+    let _ = writeln!(s, "<g id=\"town-district-boxes\" fill=\"{paper}\">");
+    for (i, b) in boxes.iter().enumerate() {
+        let _ = writeln!(
+            s,
+            "<rect id=\"town-district-box-{i}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"{}\"/>",
+            n(b[0]),
+            n(b[1]),
+            n(b[2] - b[0]),
+            n(b[3] - b[1]),
+            n(pad)
+        );
+    }
+    s.push_str("</g>\n");
+    let _ = writeln!(
+        s,
+        "<g id=\"town-districts\" font-family=\"{}\" font-size=\"{}\" letter-spacing=\"{}\" text-anchor=\"middle\" fill=\"{dark}\">",
+        xml(&style.font),
+        n(size),
+        n(spacing)
+    );
+    s.push_str(&texts);
+    s.push_str("</g>\n");
 }
 
 fn xml(t: &str) -> String {
