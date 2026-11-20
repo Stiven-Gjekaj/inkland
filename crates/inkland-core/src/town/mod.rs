@@ -12,6 +12,7 @@
 //! and a main street is 2 units wide.
 
 pub mod districts;
+pub mod fields;
 pub mod model;
 pub mod poly;
 pub mod random;
@@ -104,6 +105,8 @@ pub struct Town {
     pub piers: Vec<Poly>,
     /// inkland: the districts, with their names.
     pub districts: Vec<District>,
+    /// inkland: the fields of the farms.
+    pub fields: Vec<Poly>,
 }
 
 /// The options of the town map of a place: the number of patches from its
@@ -229,8 +232,10 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
         bridges: bridges(&m),
         piers: m.piers.clone(),
         districts: Vec::new(),
+        fields: Vec::new(),
     };
     town.districts = districts::districts(&town, opts.names, opts.seed);
+    town.fields = fields::fields(&town, opts.seed);
     Ok(town)
 }
 
@@ -440,6 +445,22 @@ mod tests {
         );
         // The same options give the same names.
         assert_eq!(t.districts, water_town(Some(0.0), Some(1.5)).districts);
+    }
+
+    #[test]
+    fn farms_have_fields_out_of_the_town() {
+        let t = water_town(None, None);
+        assert!(t.patches.iter().any(|p| p.kind == Kind::Farm));
+        assert!(!t.fields.is_empty());
+        for f in &t.fields {
+            let c = poly::centroid(f);
+            let p = t
+                .patches
+                .iter()
+                .find(|p| districts::contains(&p.shape, c))
+                .expect("a field is in a patch");
+            assert_eq!(p.kind, Kind::Farm);
+        }
     }
 
     #[test]
