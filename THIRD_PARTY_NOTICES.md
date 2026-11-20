@@ -373,6 +373,19 @@ FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
 
+## TownGeneratorOS
+
+The town maps of inkland come from a port of TownGeneratorOS by Watabou
+(<https://github.com/watabou/TownGeneratorOS>), the open version of the
+Medieval Fantasy City Generator. The port is in
+`crates/inkland-core/src/town/`. It follows the generator of the original
+in Rust: the Voronoi patches, the walls and gates, the streets, the wards,
+and their buildings. It does not include the drawing code, the user
+interface, or the assets of the original.
+
+TownGeneratorOS is licensed under the GNU General Public License, version 3.
+The full text of the license is in `LICENSE`.
+
 ## Rust crates
 
 The `inkland` binary includes Rust crates under MIT, Apache-2.0, ISC,
