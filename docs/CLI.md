@@ -213,7 +213,23 @@ inkland town --world out/world.json --place 15 --colour --size-mm 180 -o town.sv
 The place gives the town: the number of patches comes from its population,
 from 6 for a small town to 40 for a metropolis; the seed comes from the
 map seed and the place id; the plaza, the castle, and the walls are those
-of the place. The same world and place give the same map. The output on
+of the place. The same world and place give the same map.
+
+inkland adds these parts to the plan of the original:
+
+- Narrow lots along the streets, with yards inside the blocks.
+- The sea on the side of the haven of a port, with piers. The wall stops
+  at the shore.
+- A river through the town if a river goes through the cell of the
+  place, with a bridge where a street crosses it.
+- Districts with names from the name base of the culture of the place,
+  with labels that do not overlap.
+- Fields around the farms.
+- A scale bar and a compass. A town unit is 3 metres. The scale bar is in
+  feet if the world unit is a mile, a league, a yard, or a foot, and in
+  metres for other units.
+
+The output on
 stdout gives `svg`, `id`, `name`, `patches`, `seed`, `plaza`, `citadel`,
 `walls`, and `buildings`. Without `--colour`, it also gives `checks`, the
 print checks of the SVG. A place that the world does not have is

@@ -81,7 +81,9 @@ The engine fits the world around the pins, and never moves them.
   after each regeneration.
 - **Draws the town map of a place**, offline: walls, gates, wards, streets,
   and buildings, from a port of TownGeneratorOS by Watabou
-  (`inkland town`).
+  (`inkland town`). inkland adds lots along the streets, the sea and the
+  river of the place, bridges, piers, named districts, fields, a scale
+  bar, and a compass.
 
 </td>
 <td width="50%" valign="top">
