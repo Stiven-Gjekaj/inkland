@@ -24,6 +24,8 @@ pub struct Patch {
     pub ward: Option<Ward>,
     pub within_walls: bool,
     pub within_city: bool,
+    /// inkland: a patch of the sea.
+    pub water: bool,
 }
 
 impl Patch {
@@ -33,6 +35,7 @@ impl Patch {
             ward: None,
             within_walls: false,
             within_city: false,
+            water: false,
         }
     }
 }
@@ -60,6 +63,16 @@ pub struct Model {
     /// inkland: narrow lots along the streets, with yards in the blocks.
     /// `false`: the buildings of the original.
     pub lots: bool,
+    /// inkland: the direction of the sea from the centre, in radians (0
+    /// east, a quarter turn south), or `None` for no sea.
+    pub coast: Option<f64>,
+    /// inkland: the direction in which a river flows through the town, or
+    /// `None` for no river.
+    pub river_dir: Option<f64>,
+    /// inkland: the vertices of the river, from upstream.
+    pub river: Vec<V>,
+    /// inkland: the piers on the shore of the town.
+    pub piers: Vec<Poly>,
     pub plaza_needed: bool,
     pub citadel_needed: bool,
     pub walls_needed: bool,
@@ -142,6 +155,7 @@ impl Model {
         citadel: Option<bool>,
         walls: Option<bool>,
         lots: bool,
+        water: (Option<f64>, Option<f64>),
     ) -> Result<Model, Retry> {
         let mut rng = Random::new(seed);
         let n_patches = n_patches.max(3);
@@ -155,6 +169,10 @@ impl Model {
             rng,
             n_patches,
             lots,
+            coast: water.0,
+            river_dir: water.1,
+            river: Vec::new(),
+            piers: Vec::new(),
             plaza_needed,
             citadel_needed,
             walls_needed,
@@ -195,12 +213,16 @@ impl Model {
         self.arteries.clear();
         self.gates.clear();
         self.walled = false;
+        self.river.clear();
+        self.piers.clear();
         self.build_patches();
         self.optimize_junctions();
+        self.build_river()?;
         self.build_walls()?;
         self.build_streets()?;
         self.create_wards();
         self.build_geometry();
+        self.build_piers();
         Ok(())
     }
 
@@ -258,9 +280,18 @@ impl Model {
             }
         });
         let regions = voronoi.partitioning();
+        // inkland: the sea covers the regions beyond a shore line across the
+        // direction of the sea, so that it takes a part of the town.
+        let centres: Vec<P> = regions.iter().map(|r| voronoi.region_center(r)).collect();
+        let sea = self.coast.map(|a| {
+            let dir = [libm::cos(a), libm::sin(a)];
+            let reach = centres.get(self.n_patches).map_or(50.0, |c| len(*c));
+            (dir, reach * (0.45 + 0.2 * self.rng.float()))
+        });
         // A vertex for each triangle, so that the patches share them.
         let mut tri_vertex: BTreeMap<usize, V> = BTreeMap::new();
-        for (count, r) in regions.iter().enumerate() {
+        let mut count = 0;
+        for (k, r) in regions.iter().enumerate() {
             let shape: Vec<V> = r
                 .vertices
                 .iter()
@@ -273,6 +304,13 @@ impl Model {
                 .collect();
             let id = self.new_patch(shape);
             self.patches.push(id);
+            if let Some((dir, shore)) = sea
+                && k > 0
+                && poly::dot(centres[k], dir) > shore
+            {
+                self.store[id].water = true;
+                continue;
+            }
             if count == 0 {
                 let s = self.store[id].shape.clone();
                 self.center = poly::min_by(&s, |&p| len(self.v[p]));
@@ -288,7 +326,188 @@ impl Model {
                 self.store[id].within_walls = self.walls_needed;
                 self.inner.push(id);
             }
+            count += 1;
         }
+    }
+
+    /// `true` if the edge from `a` to `b` is a part of the river.
+    pub fn on_river(&self, a: V, b: V) -> bool {
+        self.river
+            .windows(2)
+            .any(|w| (w[0] == a && w[1] == b) || (w[0] == b && w[1] == a))
+    }
+
+    /// `true` if a water patch has the edge from `b` to `a`, so that the
+    /// edge from `a` to `b` of a land patch is on the shore.
+    pub fn on_shore(&self, a: V, b: V) -> bool {
+        self.patches
+            .iter()
+            .any(|&p| self.store[p].water && find_edge(&self.store[p].shape, b, a).is_some())
+    }
+
+    /// `true` if a water patch has the vertex.
+    pub fn at_water(&self, v: V) -> bool {
+        self.patches
+            .iter()
+            .any(|&p| self.store[p].water && self.store[p].shape.contains(&v))
+    }
+
+    /// inkland: a river along the edges of the patches, across the town in
+    /// its direction, from the far edge upstream to the far edge downstream
+    /// or to the sea.
+    fn build_river(&mut self) -> Result<(), Retry> {
+        let Some(a) = self.river_dir else {
+            return Ok(());
+        };
+        let dir = [libm::cos(a), libm::sin(a)];
+        // The river goes through the town: an edge far from the line
+        // through the centre costs more.
+        let reach = self
+            .patches
+            .iter()
+            .filter(|&&p| self.store[p].within_city)
+            .flat_map(|&p| self.store[p].shape.iter())
+            .map(|&v| len(self.v[v]))
+            .fold(1.0, f64::max);
+        let off = |q: P| (q[0] * dir[1] - q[1] * dir[0]).abs() / reach;
+        // The graph of the edges of the land patches.
+        let mut links: BTreeMap<V, BTreeMap<V, f64>> = BTreeMap::new();
+        for &p in &self.patches {
+            if self.store[p].water {
+                continue;
+            }
+            let s = self.store[p].shape.clone();
+            let n = s.len();
+            for i in 0..n {
+                let (x, y) = (s[i], s[(i + 1) % n]);
+                if x == y {
+                    continue;
+                }
+                let mid = poly::scale(poly::add(self.v[x], self.v[y]), 0.5);
+                let o = off(mid);
+                let d = dist(self.v[x], self.v[y])
+                    * (1.0 + 0.8 * self.rng.float())
+                    * (1.0 + 4.0 * o * o);
+                links.entry(x).or_default().insert(y, d);
+                links.entry(y).or_default().insert(x, d);
+            }
+        }
+        let verts: Vec<V> = links.keys().copied().collect();
+        if verts.is_empty() {
+            return Ok(());
+        }
+        let water_end = self.coast.is_some();
+        // The river starts on the land, not at the shore.
+        let land: Vec<V> = verts
+            .iter()
+            .copied()
+            .filter(|&v| !(water_end && self.at_water(v)))
+            .collect();
+        if land.is_empty() {
+            return Ok(());
+        }
+        let start = poly::max_by(&land, |&v| {
+            -poly::dot(self.v[v], dir) - 2.0 * reach * off(self.v[v])
+        });
+        let far = poly::max_by(&verts, |&v| {
+            poly::dot(self.v[v], dir) - 2.0 * reach * off(self.v[v])
+        });
+        let is_goal = |m: &Model, v: V| if water_end { m.at_water(v) } else { v == far };
+        // Dijkstra over the vertices, in a fixed order.
+        let mut cost: BTreeMap<V, f64> = BTreeMap::from([(start, 0.0)]);
+        let mut from: BTreeMap<V, V> = BTreeMap::new();
+        let mut done: std::collections::BTreeSet<V> = std::collections::BTreeSet::new();
+        let mut goal = None;
+        while let Some((&v, &c)) = cost
+            .iter()
+            .filter(|(k, _)| !done.contains(k))
+            .min_by(|a, b| a.1.total_cmp(b.1).then(a.0.cmp(b.0)))
+        {
+            done.insert(v);
+            if is_goal(self, v) {
+                goal = Some(v);
+                break;
+            }
+            for (&w, &d) in &links[&v] {
+                if done.contains(&w) {
+                    continue;
+                }
+                let nc = c + d;
+                if cost.get(&w).is_none_or(|&old| nc < old) {
+                    cost.insert(w, nc);
+                    from.insert(w, v);
+                }
+            }
+        }
+        let Some(mut v) = goal else {
+            return Err(Retry("no course for the river"));
+        };
+        let mut path = vec![v];
+        while let Some(&p) = from.get(&v) {
+            v = p;
+            path.push(v);
+        }
+        path.reverse();
+        if path.len() < 3 {
+            // The sea is too near the source: the town has no river.
+            return Ok(());
+        }
+        // Smooth the course: each inner vertex moves toward the middle of
+        // its neighbours. The patches share the vertices, so they follow.
+        for _ in 0..3 {
+            let pts = self.pts(&path);
+            for i in 1..path.len() - 1 {
+                let (a, b, c) = (pts[i - 1], pts[i], pts[i + 1]);
+                self.v[path[i]] = [
+                    (a[0] + 2.0 * b[0] + c[0]) / 4.0,
+                    (a[1] + 2.0 * b[1] + c[1]) / 4.0,
+                ];
+            }
+        }
+        self.river = path;
+        Ok(())
+    }
+
+    /// inkland: piers from the shore of the town into the sea.
+    fn build_piers(&mut self) {
+        let mut piers = Vec::new();
+        for p in self.patches.clone() {
+            if self.store[p].water || !self.store[p].within_city {
+                continue;
+            }
+            let s = self.store[p].shape.clone();
+            let n = s.len();
+            for i in 0..n {
+                let (a, b) = (s[i], s[(i + 1) % n]);
+                if !self.on_shore(a, b) {
+                    continue;
+                }
+                let (pa, pb) = (self.v[a], self.v[b]);
+                let l = dist(pa, pb);
+                let u = poly::scale(poly::sub(pb, pa), 1.0 / l.max(1e-9));
+                // Out to the sea: the side away from the land patch.
+                let c = poly::centroid(&self.shape_pts(p));
+                let mut out = [u[1], -u[0]];
+                if poly::dot(poly::sub(c, pa), out) > 0.0 {
+                    out = [-out[0], -out[1]];
+                }
+                let mut t = 3.0 + 3.0 * self.rng.float();
+                while t < l - 2.0 {
+                    let base = poly::add(pa, poly::scale(u, t));
+                    let length = 3.0 + 5.0 * self.rng.float();
+                    let half = poly::scale(u, 0.6);
+                    let tip = poly::scale(out, length);
+                    piers.push(vec![
+                        poly::sub(base, half),
+                        poly::add(base, half),
+                        poly::add(poly::add(base, half), tip),
+                        poly::add(poly::sub(base, half), tip),
+                    ]);
+                    t += 6.0 + 6.0 * self.rng.float();
+                }
+            }
+        }
+        self.piers = piers;
     }
 
     /// The patches that have the vertex `v`.
@@ -409,7 +628,9 @@ impl Model {
             shape
         };
         let mut wall = CurtainWall {
-            segments: vec![true; shape.len()],
+            segments: (0..shape.len())
+                .map(|i| !self.on_shore(shape[i], shape[(i + 1) % shape.len()]))
+                .collect(),
             shape,
             gates: Vec::new(),
             towers: Vec::new(),
@@ -431,6 +652,7 @@ impl Model {
                 .copied()
                 .filter(|v| {
                     !reserved.contains(v)
+                        && !self.at_water(*v)
                         && wall
                             .patches
                             .iter()
@@ -443,7 +665,7 @@ impl Model {
             wall.shape
                 .iter()
                 .copied()
-                .filter(|v| !reserved.contains(v))
+                .filter(|v| !reserved.contains(v) && !self.at_water(*v))
                 .collect()
         };
         if entrances.is_empty() {
@@ -458,7 +680,7 @@ impl Model {
                 let outer: Vec<usize> = self
                     .patch_by_vertex(gate)
                     .into_iter()
-                    .filter(|w| !wall.patches.contains(w))
+                    .filter(|w| !wall.patches.contains(w) && !self.store[*w].water)
                     .collect();
                 if outer.len() == 1 {
                     // No road leads out of the walls here: split the outer
@@ -719,7 +941,7 @@ impl Model {
                 let p = 1.0 / (self.n_patches as f64 - 5.0);
                 if !self.rng.bool(p) {
                     for patch in self.patch_by_vertex(gate) {
-                        if self.store[patch].ward.is_none() {
+                        if self.store[patch].ward.is_none() && !self.store[patch].water {
                             self.store[patch].within_city = true;
                             let w = wards::common(Kind::Gate, &mut self.rng);
                             self.store[patch].ward = Some(w);
@@ -735,7 +957,7 @@ impl Model {
                 for &v in &self.store[patch].shape {
                     self.city_radius = self.city_radius.max(len(self.v[v]));
                 }
-            } else if self.store[patch].ward.is_none() {
+            } else if self.store[patch].ward.is_none() && !self.store[patch].water {
                 let farm = self.rng.bool(0.2) && poly::compactness(&self.shape_pts(patch)) >= 0.7;
                 self.store[patch].ward =
                     Some(Ward::new(if farm { Kind::Farm } else { Kind::Empty }, None));
@@ -778,7 +1000,7 @@ impl Model {
                 || self
                     .get_neighbours(patch)
                     .iter()
-                    .all(|&n| self.store[n].within_city))
+                    .all(|&n| self.store[n].within_city || self.store[n].water))
     }
 }
 
@@ -906,6 +1128,10 @@ impl Topology {
             (!blocked.contains(&v)).then_some(n)
         };
         for &p in &model.patches {
+            // inkland: no street on the water, and none along the river.
+            if model.store[p].water {
+                continue;
+            }
             let within = model.store[p].within_city;
             let s = &model.store[p].shape;
             let mut v1 = s[s.len() - 1];
@@ -925,7 +1151,9 @@ impl Topology {
                         }
                     }
                 }
-                if let (Some(a), Some(b)) = (n0, n1) {
+                if let (Some(a), Some(b)) = (n0, n1)
+                    && !model.on_river(v0, v1)
+                {
                     let d = dist(model.v[v0], model.v[v1]);
                     t.links[a].insert(b, d);
                     t.links[b].insert(a, d);

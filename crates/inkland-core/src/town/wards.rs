@@ -14,6 +14,8 @@ pub const MAIN_STREET: f64 = 2.0;
 pub const REGULAR_STREET: f64 = 1.0;
 /// The width of an alley.
 pub const ALLEY: f64 = 0.6;
+/// inkland: the width of a river in a town.
+pub const RIVER: f64 = 4.0;
 
 /// The most levels of cuts of a block, so that a cut that does not split a
 /// block cannot repeat for ever.
@@ -265,6 +267,12 @@ fn city_block(model: &Model, patch: usize) -> Poly {
             let (v0, v1) = (s[i], s[(i + 1) % n]);
             if model.wall().is_some_and(|w| w.borders_by(patch, v0, v1)) {
                 // Not too close to the wall.
+                MAIN_STREET / 2.0
+            } else if model.on_river(v0, v1) {
+                // inkland: the river and a quay on each bank.
+                RIVER / 2.0 + ALLEY
+            } else if model.on_shore(v0, v1) {
+                // inkland: a quay along the sea.
                 MAIN_STREET / 2.0
             } else {
                 let mut on_street = inner_patch

@@ -235,6 +235,8 @@ mod tests {
             citadel: Some(true),
             walls: Some(true),
             lots: false,
+            coast: None,
+            river: None,
         })
         .unwrap()
     }

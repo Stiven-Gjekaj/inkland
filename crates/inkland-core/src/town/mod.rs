@@ -40,6 +40,12 @@ pub struct TownOptions {
     /// inkland: narrow lots along the streets, with yards in the blocks.
     /// `false`: the buildings of the original generator.
     pub lots: bool,
+    /// inkland: the direction of the sea from the centre of the town, in
+    /// radians (0 east, a quarter turn south), or `None` for no sea.
+    pub coast: Option<f64>,
+    /// inkland: the direction in which a river flows through the town, in
+    /// radians, or `None` for no river.
+    pub river: Option<f64>,
 }
 
 /// A patch of a town: a ward and its buildings.
@@ -56,8 +62,18 @@ pub struct TownPatch {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TownWall {
     pub shape: Poly,
+    /// For each edge of the shape, `true` if the wall stands there. A wall
+    /// has no part along the shore.
+    pub segments: Vec<bool>,
     pub gates: Vec<P>,
     pub towers: Vec<P>,
+}
+
+/// A bridge: its middle and the direction of the street over it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Bridge {
+    pub at: P,
+    pub dir: P,
 }
 
 /// The plan of a town.
@@ -73,6 +89,14 @@ pub struct Town {
     pub roads: Vec<Poly>,
     /// The distance of the farthest vertex of the town from its centre.
     pub radius: f64,
+    /// inkland: the sea patches.
+    pub water: Vec<Poly>,
+    /// inkland: the river, from upstream.
+    pub river: Option<Poly>,
+    /// inkland: the bridges of the streets over the river.
+    pub bridges: Vec<Bridge>,
+    /// inkland: the piers into the sea.
+    pub piers: Vec<Poly>,
 }
 
 /// The options of the town map of a place: the number of patches from its
@@ -99,7 +123,35 @@ pub fn options_of(world: &crate::world::World, place: &crate::society::Place) ->
         citadel: Some(place.citadel),
         walls: Some(place.walls),
         lots: true,
+        coast: coast_of(world, place),
+        river: river_of(world, place),
     }
+}
+
+/// inkland: the direction of the sea from a port, from its cell to the
+/// water cell next to it.
+fn coast_of(world: &crate::world::World, place: &crate::society::Place) -> Option<f64> {
+    let haven = world.society.cells.haven[place.cell]?;
+    if !place.port {
+        return None;
+    }
+    let (a, b) = (world.grid.points[place.cell], world.grid.points[haven]);
+    Some(libm::atan2(b[1] - a[1], b[0] - a[0]))
+}
+
+/// inkland: the direction of the river through the cell of a place, from
+/// the cell before it to the cell after it in the course of the river.
+fn river_of(world: &crate::world::World, place: &crate::society::Place) -> Option<f64> {
+    let c = place.cell;
+    let r = world.rivers.iter().find(|r| r.cells.contains(&c))?;
+    let i = r.cells.iter().position(|&x| x == c)?;
+    let before = r.cells[i.saturating_sub(1)];
+    let after = r.cells.get(i + 1).copied().unwrap_or(c);
+    let (a, b) = (world.grid.points[before], world.grid.points[after]);
+    if a == b {
+        return None;
+    }
+    Some(libm::atan2(b[1] - a[1], b[0] - a[0]))
 }
 
 /// Make the plan of a town.
@@ -111,6 +163,7 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
         opts.citadel,
         opts.walls,
         opts.lots,
+        (opts.coast, opts.river),
     )
     .map_err(|e| {
         Error::new(
@@ -121,12 +174,14 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
     })?;
     let wall_of = |w: &model::CurtainWall| TownWall {
         shape: m.pts(&w.shape),
+        segments: w.segments.clone(),
         gates: m.pts(&w.gates),
         towers: m.pts(&w.towers),
     };
     let patches = m
         .patches
         .iter()
+        .filter(|&&p| !m.store[p].water)
         .map(|&p| {
             let s = &m.store[p];
             let ward = s.ward.as_ref();
@@ -151,7 +206,41 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
         arteries: m.arteries.iter().map(|a| m.pts(a)).collect(),
         roads: m.roads.iter().map(|a| m.pts(a)).collect(),
         radius: m.city_radius,
+        water: m
+            .patches
+            .iter()
+            .filter(|&&p| m.store[p].water)
+            .map(|&p| m.shape_pts(p))
+            .collect(),
+        river: (!m.river.is_empty()).then(|| m.pts(&m.river)),
+        bridges: bridges(&m),
+        piers: m.piers.clone(),
     })
+}
+
+/// The bridges: each vertex of the river that a street or a road goes
+/// through.
+fn bridges(m: &model::Model) -> Vec<Bridge> {
+    let mut out: Vec<Bridge> = Vec::new();
+    for a in m.streets.iter().chain(&m.roads) {
+        let n = a.len();
+        for i in 0..n {
+            // The river vertex, also at the end of a street that reaches it.
+            if n >= 2 && m.river.contains(&a[i]) {
+                let (p, q) = (a[i.saturating_sub(1)], a[(i + 1).min(n - 1)]);
+                let d = poly::sub(m.v[q], m.v[p]);
+                let l = poly::len(d).max(1e-9);
+                let at = m.v[a[i]];
+                if !out.iter().any(|b| b.at == at) {
+                    out.push(Bridge {
+                        at,
+                        dir: poly::scale(d, 1.0 / l),
+                    });
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -166,6 +255,8 @@ mod tests {
             citadel,
             walls,
             lots: false,
+            coast: None,
+            river: None,
         })
         .unwrap()
     }
@@ -211,6 +302,8 @@ mod tests {
                     citadel: None,
                     walls: None,
                     lots: false,
+                    coast: None,
+                    river: None,
                 })
                 .unwrap_or_else(|e| panic!("seed {seed}, {n} patches: {e:?}"));
                 assert!(t.patches.iter().filter(|p| p.within_city).count() >= n);
@@ -264,6 +357,8 @@ mod tests {
                 citadel: Some(true),
                 walls: Some(true),
                 lots,
+                coast: None,
+                river: None,
             })
             .unwrap()
         };
@@ -276,6 +371,73 @@ mod tests {
             count(&classic)
         );
         assert_eq!(make(true), lots);
+    }
+
+    fn water_town(coast: Option<f64>, river: Option<f64>) -> Town {
+        generate(&TownOptions {
+            patches: 24,
+            seed: 17170015,
+            plaza: Some(true),
+            citadel: Some(false),
+            walls: Some(true),
+            lots: true,
+            coast,
+            river,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_port_has_sea_on_its_side_piers_and_no_wall_on_the_shore() {
+        // The sea to the east: +x.
+        let t = water_town(Some(0.0), None);
+        assert!(!t.water.is_empty());
+        assert!(!t.piers.is_empty());
+        for w in &t.water {
+            assert!(poly::centroid(w)[0] > 0.0, "the sea is east");
+        }
+        let wall = t.wall.as_ref().unwrap();
+        assert!(wall.segments.iter().any(|s| !s), "no wall on the shore");
+        // No building stands in the sea.
+        for p in &t.patches {
+            for b in &p.buildings {
+                let c = poly::center(b);
+                assert!(!t.water.iter().any(|w| inside(w, c)), "{c:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_river_crosses_the_town_with_bridges_and_no_building_on_it() {
+        let t = water_town(None, Some(0.0));
+        let river = t.river.as_ref().expect("a river");
+        // It flows from west to east, across the town.
+        assert!(river[0][0] < 0.0 && river[river.len() - 1][0] > 0.0);
+        assert!(!t.bridges.is_empty());
+        // No building is on the line of the river.
+        for p in &t.patches {
+            for b in &p.buildings {
+                for w in river.windows(2) {
+                    let mid = poly::interpolate(w[0], w[1], 0.5);
+                    assert!(!inside(b, mid), "a building on the river");
+                }
+            }
+        }
+    }
+
+    /// `true` if the point is inside the polygon.
+    fn inside(poly: &[P], p: P) -> bool {
+        let n = poly.len();
+        let mut c = false;
+        for i in 0..n {
+            let (a, b) = (poly[i], poly[(i + n - 1) % n]);
+            if (a[1] > p[1]) != (b[1] > p[1])
+                && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]
+            {
+                c = !c;
+            }
+        }
+        c
     }
 
     #[test]
