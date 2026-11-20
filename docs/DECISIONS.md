@@ -73,3 +73,17 @@ This file records the choices that the human makes.
   is a minor version.
 - A 3D view, in the desktop app and as an export of the terrain, is release
   `v2.0.0`. The two parts come in the same major version.
+
+## 2026-11-20: the license is GPL-3.0-or-later
+
+- inkland makes town maps with a port of TownGeneratorOS by Watabou.
+  TownGeneratorOS is GPL-3.0, and a port of it is a derived work.
+- So inkland changes from MIT OR Apache-2.0 to GPL-3.0-or-later.
+- Releases up to v1.3.3 keep MIT OR Apache-2.0. The change applies from the
+  next release.
+- The desktop app uses Slint under its GPL-3.0-only option, not under the
+  Slint Royalty-free License. So an app binary is GPL-3.0.
+- Each commit of inkland has one author, so the author alone can change the
+  license.
+- The town links of level 1 (to watabou.github.io) stay. The town maps of
+  the port draw offline, in inkland.
