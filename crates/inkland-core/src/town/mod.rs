@@ -11,12 +11,14 @@
 //! The town is in its own units: the centre of the town is at the origin,
 //! and a main street is 2 units wide.
 
+pub mod districts;
 pub mod model;
 pub mod poly;
 pub mod random;
 pub mod voronoi;
 pub mod wards;
 
+pub use districts::District;
 pub use poly::{P, Poly};
 pub use wards::Kind;
 
@@ -46,6 +48,9 @@ pub struct TownOptions {
     /// inkland: the direction in which a river flows through the town, in
     /// radians, or `None` for no river.
     pub river: Option<f64>,
+    /// inkland: the index of the name base for the names of the
+    /// districts.
+    pub names: usize,
 }
 
 /// A patch of a town: a ward and its buildings.
@@ -97,6 +102,8 @@ pub struct Town {
     pub bridges: Vec<Bridge>,
     /// inkland: the piers into the sea.
     pub piers: Vec<Poly>,
+    /// inkland: the districts, with their names.
+    pub districts: Vec<District>,
 }
 
 /// The options of the town map of a place: the number of patches from its
@@ -125,6 +132,12 @@ pub fn options_of(world: &crate::world::World, place: &crate::society::Place) ->
         lots: true,
         coast: coast_of(world, place),
         river: river_of(world, place),
+        names: world
+            .society
+            .cultures
+            .iter()
+            .find(|c| c.id == place.culture)
+            .map_or(0, |c| c.base),
     }
 }
 
@@ -199,7 +212,7 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
         .and_then(|c| m.store[c].ward.as_ref())
         .and_then(|w| w.wall.as_ref())
         .map(wall_of);
-    Ok(Town {
+    let mut town = Town {
         patches,
         wall: m.wall().map(wall_of),
         castle,
@@ -215,7 +228,10 @@ pub fn generate(opts: &TownOptions) -> Result<Town, Error> {
         river: (!m.river.is_empty()).then(|| m.pts(&m.river)),
         bridges: bridges(&m),
         piers: m.piers.clone(),
-    })
+        districts: Vec::new(),
+    };
+    town.districts = districts::districts(&town, opts.names, opts.seed);
+    Ok(town)
 }
 
 /// The bridges: each vertex of the river that a street or a road goes
@@ -257,6 +273,7 @@ mod tests {
             lots: false,
             coast: None,
             river: None,
+            names: 1,
         })
         .unwrap()
     }
@@ -304,6 +321,7 @@ mod tests {
                     lots: false,
                     coast: None,
                     river: None,
+                    names: 1,
                 })
                 .unwrap_or_else(|e| panic!("seed {seed}, {n} patches: {e:?}"));
                 assert!(t.patches.iter().filter(|p| p.within_city).count() >= n);
@@ -359,6 +377,7 @@ mod tests {
                 lots,
                 coast: None,
                 river: None,
+                names: 1,
             })
             .unwrap()
         };
@@ -383,8 +402,44 @@ mod tests {
             lots: true,
             coast,
             river,
+            names: 1,
         })
         .unwrap()
+    }
+
+    #[test]
+    fn each_district_has_a_name_of_its_own_and_a_label_inside() {
+        let t = water_town(Some(0.0), Some(1.5));
+        assert!(t.districts.len() >= 4, "{}", t.districts.len());
+        let mut names = std::collections::BTreeSet::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for d in &t.districts {
+            assert!(!d.name.is_empty());
+            assert!(names.insert(d.name.clone()), "{} twice", d.name);
+            assert!(
+                d.patches
+                    .iter()
+                    .any(|&i| districts::contains(&t.patches[i].shape, d.label)),
+                "the label of {} is outside it",
+                d.name
+            );
+            for &i in &d.patches {
+                assert!(seen.insert(i), "a patch in two districts");
+                assert!(!matches!(t.patches[i].kind, Kind::Market | Kind::Castle));
+            }
+        }
+        // The sea gives the district on the shore a name of the water.
+        assert!(
+            t.districts
+                .iter()
+                .any(|d| ["Harbour", "Docks", "Quayside", "Wharf", "Quay"]
+                    .iter()
+                    .any(|w| d.name.contains(w))),
+            "{:?}",
+            t.districts.iter().map(|d| &d.name).collect::<Vec<_>>()
+        );
+        // The same options give the same names.
+        assert_eq!(t.districts, water_town(Some(0.0), Some(1.5)).districts);
     }
 
     #[test]

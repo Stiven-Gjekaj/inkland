@@ -306,6 +306,7 @@ mod tests {
             lots: false,
             coast: None,
             river: None,
+            names: 1,
         })
         .unwrap()
     }
