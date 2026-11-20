@@ -325,9 +325,16 @@ pub fn geometry(model: &mut Model, patch: usize, ward: &Ward) -> Vec<Poly> {
                     true,
                     0,
                 );
+                // inkland: at the docks the lots are long halls; in a rich
+                // ward some lots are courtyard houses.
+                let shore = model.at_water_patch(patch);
+                let lot_sq = if shore { min_sq * 2.5 } else { min_sq };
+                let rich = matches!(ward.kind, Kind::Patriciate | Kind::Merchant);
+                let mut shapes = Random::new((model.rng.float() * 2_147_483_646.0) as i64 + 1);
                 let mut lots = Vec::new();
                 for b in blocks {
-                    lots.extend(frontage_lots(&mut model.rng, &b, min_sq, empty));
+                    let plain = frontage_lots(&mut model.rng, &b, lot_sq, empty);
+                    lots.extend(shape_lots(&mut shapes, &b, plain, lot_sq, rich && !shore));
                 }
                 lots
             } else {
@@ -390,9 +397,19 @@ pub fn geometry(model: &mut Model, patch: usize, ward: &Ward) -> Vec<Poly> {
             let c = poly::centroid(&shape);
             let pos = poly::interpolate(corner, c, 0.3 + model.rng.float() * 0.4);
             let mut housing = poly::rect(4.0, 4.0);
-            poly::rotate(&mut housing, model.rng.float() * std::f64::consts::PI);
+            let angle = model.rng.float() * std::f64::consts::PI;
+            poly::rotate(&mut housing, angle);
             poly::offset(&mut housing, pos);
-            ortho_building(&mut model.rng, &housing, 8.0, 0.5)
+            let mut out = ortho_building(&mut model.rng, &housing, 8.0, 0.5);
+            // inkland: with lots, a farmstead has a barn beside the house.
+            if model.lots {
+                let mut barn = poly::rect(5.0, 2.6);
+                poly::rotate(&mut barn, angle);
+                let side = [libm::cos(angle) * 5.2, libm::sin(angle) * 5.2];
+                poly::offset(&mut barn, poly::add(pos, side));
+                out.push(barn);
+            }
+            out
         }
     }
 }
@@ -522,6 +539,114 @@ pub fn frontage_lots(rng: &mut Random, block: &[P], min_sq: f64, empty: f64) -> 
         let core = poly::shrink_eq(block, depth * 1.4);
         if core.len() >= 3 && poly::square(&core).abs() > min_sq {
             out.push(core);
+        }
+    }
+    out
+}
+
+/// inkland: give some lots of a block other shapes than a quadrangle. A
+/// large lot loses its back corner and becomes an L, a wide lot loses the
+/// middle of its back and becomes a U, and in a rich ward a large lot
+/// becomes a courtyard house: a ring of rooms around a yard.
+pub fn shape_lots(
+    rng: &mut Random,
+    block: &[P],
+    lots: Vec<Poly>,
+    min_sq: f64,
+    rich: bool,
+) -> Vec<Poly> {
+    let mut out = Vec::new();
+    for lot in lots {
+        let area = poly::square(&lot).abs();
+        if lot.len() != 4 || area < min_sq * 0.5 {
+            out.push(lot);
+            continue;
+        }
+        let roll = rng.float();
+        if rich && area > min_sq * 2.0 && roll < 0.5 {
+            let t = area.sqrt() * 0.28;
+            let ring = poly::ring(&lot, t);
+            if ring.len() >= 3 {
+                out.extend(ring);
+                continue;
+            }
+        }
+        // The back: the parts of the lot far from the edge of the block.
+        let back = |p: P| -dist_to_edge(block, p);
+        if roll < 0.3 {
+            let k = poly::min_by(&[0, 1, 2, 3], |&i| back(lot[i]));
+            out.push(notch_corner(&lot, k, 0.4 + 0.15 * rng.float()));
+        } else if roll < 0.45 {
+            let k = poly::min_by(&[0, 1, 2, 3], |&i| {
+                back(poly::scale(poly::add(lot[i], lot[(i + 1) % 4]), 0.5))
+            });
+            let back_len = poly::len(poly::vector(&lot, k));
+            let side_len = poly::len(poly::vector(&lot, (k + 1) % 4));
+            if back_len > side_len * 1.2 {
+                out.push(notch_back(&lot, k, 0.4 + 0.1 * rng.float()));
+            } else {
+                out.push(lot);
+            }
+        } else {
+            out.push(lot);
+        }
+    }
+    out
+}
+
+/// The distance from a point to the nearest edge of a polygon.
+fn dist_to_edge(p: &[P], q: P) -> f64 {
+    let n = p.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (p[i], p[(i + 1) % n]);
+            let ab = poly::sub(b, a);
+            let l2 = poly::dot(ab, ab).max(1e-12);
+            let t = (poly::dot(poly::sub(q, a), ab) / l2).clamp(0.0, 1.0);
+            poly::dist(q, poly::add(a, poly::scale(ab, t)))
+        })
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// An L: the quadrangle without a part at its corner `k`, `f` of each of
+/// the two edges at the corner.
+pub fn notch_corner(q: &[P], k: usize, f: f64) -> Poly {
+    let n = q.len();
+    let (a, prev, next) = (q[k], q[(k + n - 1) % n], q[(k + 1) % n]);
+    let (dp, dn) = (
+        poly::scale(poly::sub(prev, a), f),
+        poly::scale(poly::sub(next, a), f),
+    );
+    let mut out = Vec::new();
+    for (i, &v) in q.iter().enumerate() {
+        if i == k {
+            out.push(poly::add(a, dp));
+            out.push(poly::add(a, poly::add(dp, dn)));
+            out.push(poly::add(a, dn));
+        } else {
+            out.push(v);
+        }
+    }
+    out
+}
+
+/// A U: the quadrangle without the middle part of its edge `k`, `f` of
+/// the depth of the quadrangle deep.
+pub fn notch_back(q: &[P], k: usize, f: f64) -> Poly {
+    let n = q.len();
+    let (a, b) = (q[k], q[(k + 1) % n]);
+    let (c, d) = (q[(k + 2) % n], q[(k + 3) % n]);
+    // Into the quadrangle: toward the middle of the opposite edge.
+    let mid = poly::scale(poly::add(a, b), 0.5);
+    let opp = poly::scale(poly::add(c, d), 0.5);
+    let inward = poly::scale(poly::sub(opp, mid), f);
+    let x1 = poly::interpolate(a, b, 0.3);
+    let x2 = poly::interpolate(a, b, 0.7);
+    let mut out = Vec::new();
+    for (i, &v) in q.iter().enumerate() {
+        out.push(v);
+        if i == k {
+            out.extend([x1, poly::add(x1, inward), poly::add(x2, inward), x2]);
         }
     }
     out
@@ -747,6 +872,32 @@ fn filter_outskirts(model: &mut Model, patch: usize, geometry: Vec<Poly>) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notches_make_an_l_and_a_u_with_less_area() {
+        let q = poly::rect(10.0, 6.0);
+        let l = notch_corner(&q, 2, 0.5);
+        assert_eq!(l.len(), 6);
+        assert!((poly::square(&l).abs() - 60.0 * 0.75).abs() < 1e-9);
+        let u = notch_back(&q, 2, 0.5);
+        assert_eq!(u.len(), 8);
+        assert!((poly::square(&u).abs() - (60.0 - 4.0 * 3.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn shaped_lots_stay_inside_their_lots() {
+        let block = poly::rect(60.0, 40.0);
+        let mut rng = Random::new(5);
+        let plain = frontage_lots(&mut rng, &block, 25.0, 0.0);
+        let shaped = shape_lots(&mut Random::new(9), &block, plain.clone(), 25.0, true);
+        assert!(
+            shaped.iter().any(|p| p.len() == 6 || p.len() == 8),
+            "an L or a U"
+        );
+        let a: f64 = plain.iter().map(|p| poly::square(p).abs()).sum();
+        let b: f64 = shaped.iter().map(|p| poly::square(p).abs()).sum();
+        assert!(b < a && b > a * 0.5, "{a} {b}");
+    }
 
     #[test]
     fn a_cross_plan_fits_inside_its_block() {

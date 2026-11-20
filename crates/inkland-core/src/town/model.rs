@@ -384,6 +384,11 @@ impl Model {
             .any(|&p| self.store[p].water && self.store[p].shape.contains(&v))
     }
 
+    /// inkland: `true` if a patch is on the shore of the sea.
+    pub fn at_water_patch(&self, patch: usize) -> bool {
+        self.store[patch].shape.iter().any(|&v| self.at_water(v))
+    }
+
     /// inkland: a river along the edges of the patches, across the town in
     /// its direction, from the far edge upstream to the far edge downstream
     /// or to the sea.
