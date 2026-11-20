@@ -45,6 +45,15 @@ fn palette(colour: bool) -> [&'static str; 4] {
     }
 }
 
+/// inkland: the colour of the water. Black and white has white water with
+/// a black shore.
+fn water_colour(colour: bool) -> &'static str {
+    if colour { "#9fadab" } else { "#ffffff" }
+}
+
+/// inkland: the width of a river, in town units.
+const RIVER: f64 = 4.0;
+
 fn n(v: f64) -> String {
     let r = (v * 1000.0).round() / 1000.0;
     let r = if r == 0.0 { 0.0 } else { r };
@@ -102,6 +111,26 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
         xml(name)
     );
     let _ = writeln!(s, "<g id=\"town-map\" clip-path=\"url(#town-clip)\">");
+
+    // inkland: the sea, then the river: a dark bank line on each side.
+    let water = water_colour(style.colour);
+    if !town.water.is_empty() {
+        let d: String = town.water.iter().map(|p| path(p, true)).collect();
+        let _ = writeln!(
+            s,
+            "<path id=\"town-sea\" d=\"{d}\" fill=\"{water}\" stroke=\"{water}\" stroke-width=\"{}\"/>",
+            n(w(NORMAL_STROKE))
+        );
+    }
+    if let Some(river) = &town.river {
+        let d = path(river, false);
+        let _ = writeln!(
+            s,
+            "<g id=\"town-river\" fill=\"none\" stroke-linejoin=\"round\" stroke-linecap=\"round\"><path d=\"{d}\" stroke=\"{dark}\" stroke-width=\"{}\"/><path d=\"{d}\" stroke=\"{water}\" stroke-width=\"{}\"/></g>",
+            n(w(RIVER + NORMAL_STROKE * 2.0)),
+            n(w(RIVER))
+        );
+    }
 
     // The roads: a dark line with a paper line inside.
     let _ = writeln!(
@@ -164,16 +193,56 @@ pub fn town_svg(town: &Town, name: &str, style: &TownStyle) -> String {
     }
     s.push_str("</g>\n");
 
+    // inkland: the piers and the bridges.
+    if !town.piers.is_empty() {
+        let d: String = town.piers.iter().map(|p| path(p, true)).collect();
+        let _ = writeln!(
+            s,
+            "<path id=\"town-piers\" d=\"{d}\" fill=\"{light}\" stroke=\"{dark}\" stroke-width=\"{}\"/>",
+            n(w(NORMAL_STROKE))
+        );
+    }
+    if !town.bridges.is_empty() {
+        let _ = writeln!(s, "<g id=\"town-bridges\">");
+        for (i, b) in town.bridges.iter().enumerate() {
+            // A deck across the river, along the street.
+            let along = [
+                b.dir[0] * (RIVER / 2.0 + 1.5),
+                b.dir[1] * (RIVER / 2.0 + 1.5),
+            ];
+            let side = [-b.dir[1] * MAIN_STREET * 0.6, b.dir[0] * MAIN_STREET * 0.6];
+            let deck = [
+                [b.at[0] - along[0] - side[0], b.at[1] - along[1] - side[1]],
+                [b.at[0] + along[0] - side[0], b.at[1] + along[1] - side[1]],
+                [b.at[0] + along[0] + side[0], b.at[1] + along[1] + side[1]],
+                [b.at[0] - along[0] + side[0], b.at[1] - along[1] + side[1]],
+            ];
+            let _ = writeln!(
+                s,
+                "<path id=\"town-bridge-{i}\" d=\"{}\" fill=\"{paper}\" stroke=\"{dark}\" stroke-width=\"{}\"/>",
+                path(&deck, true),
+                n(w(NORMAL_STROKE))
+            );
+        }
+        s.push_str("</g>\n");
+    }
+
     // The walls, their gates, and their towers.
     let _ = writeln!(s, "<g id=\"town-walls\">");
     let mut wall = |id: &str, wl: &TownWall, large: bool| {
+        // The parts of the wall that stand: a shore has none.
+        let m = wl.shape.len();
+        let mut d = String::new();
+        for i in 0..m {
+            if wl.segments.get(i).copied().unwrap_or(true) {
+                d.push_str(&path(&[wl.shape[i], wl.shape[(i + 1) % m]], false));
+            }
+        }
         let _ = writeln!(
             s,
-            "<path id=\"{id}\" d=\"{}\" fill=\"none\" stroke=\"{dark}\" stroke-width=\"{}\"/>",
-            path(&wl.shape, true),
+            "<path id=\"{id}\" d=\"{d}\" fill=\"none\" stroke=\"{dark}\" stroke-width=\"{}\" stroke-linecap=\"round\"/>",
             n(w(THICK_STROKE))
         );
-        let m = wl.shape.len();
         for (g, gate) in wl.gates.iter().enumerate() {
             let Some(i) = wl.shape.iter().position(|v| v == gate) else {
                 continue;
