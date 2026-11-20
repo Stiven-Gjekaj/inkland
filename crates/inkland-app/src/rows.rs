@@ -86,6 +86,20 @@ pub fn place_row_id(n: u32) -> String {
     format!("place:{n}")
 }
 
+/// The link to the Watabou town map of a Burgs Overview row: a pin id or
+/// `place:<n>`. `None` for a place with no town map, for example a fort.
+pub fn town_link(world: &World, id: &str) -> Option<String> {
+    let places = &world.society.places;
+    let i = match id.strip_prefix("place:") {
+        Some(n) => {
+            let n: u32 = n.parse().ok()?;
+            places.iter().position(|p| p.id == n)?
+        }
+        None => places.iter().position(|p| p.pin.as_deref() == Some(id))?,
+    };
+    inkland_core::watabou::town_links(world).swap_remove(i)
+}
+
 /// The generated place of a row id `place:<n>`.
 pub fn generated_place<'a>(world: &'a World, id: &str) -> Option<&'a inkland_core::society::Place> {
     let n: u32 = id.strip_prefix("place:")?.parse().ok()?;
@@ -617,6 +631,37 @@ mod tests {
         assert_eq!(g.name, generated[0].cells[0]);
         // Without a world, only the pins show.
         assert_eq!(burg_rows(&c, None).len(), 2);
+    }
+
+    #[test]
+    fn a_burg_row_gives_the_town_map_of_its_place() {
+        let (c, w) = world();
+        let rows = burg_rows(&c, Some(&w));
+        let mut found = 0;
+        for r in &rows {
+            let id = r.id.as_str();
+            let place = match generated_place(&w, id) {
+                Some(p) => p,
+                None => match w
+                    .society
+                    .places
+                    .iter()
+                    .find(|p| p.pin.as_deref() == Some(id))
+                {
+                    Some(p) => p,
+                    None => continue,
+                },
+            };
+            let link = town_link(&w, id);
+            if inkland_core::watabou::Generator::of_group(&place.group).is_some() {
+                assert!(link.unwrap().starts_with("https://watabou.github.io/"));
+                found += 1;
+            } else {
+                assert_eq!(link, None);
+            }
+        }
+        assert!(found > 0);
+        assert_eq!(town_link(&w, "place:999999"), None);
     }
 
     #[test]

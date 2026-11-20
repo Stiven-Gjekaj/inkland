@@ -2198,6 +2198,25 @@ fn main() -> Result<(), slint::PlatformError> {
         c.edited(r, "use the generated arms");
     });
     let c = Rc::clone(&app);
+    a.on_open_town(move |id| {
+        let link = {
+            let st = c.state.borrow();
+            st.shown
+                .as_ref()
+                .and_then(|m| inkland_app::rows::town_link(&m.world, &id))
+        };
+        match link {
+            Some(url) => match open_url(&url) {
+                Ok(()) => c.message("opened the town map in the web browser", false),
+                Err(e) => c.message(&format!("cannot open the web browser: {e}"), true),
+            },
+            None => c.message(
+                "this burg has no town map: only a city, a town, a village, or a hamlet has one",
+                true,
+            ),
+        }
+    });
+    let c = Rc::clone(&app);
     a.on_select_pin(move |id| {
         let mut st = c.state.borrow_mut();
         let pin = st
@@ -2325,4 +2344,20 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     }
     ui.run()
+}
+
+/// Open a web link in the web browser of the system.
+fn open_url(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        // `start` reads the first quoted argument as a window title.
+        c.args(["/C", "start", ""]);
+        c
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(url).spawn().map(|_| ())
 }

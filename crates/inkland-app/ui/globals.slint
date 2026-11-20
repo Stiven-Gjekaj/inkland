@@ -66,6 +66,9 @@ export global AppState {
     in-out property <Tool> tool: Tool.select;
     in property <[PinRow]> pins;
     in-out property <string> selected-id;
+    // The last row of the Burgs Overview that the user clicked: a pin id
+    // or `place:<n>`.
+    in-out property <string> burg-row;
     in-out property <string> selected-name;
     // The kind (index in the kind list) and the port flag of the selected
     // pin.
@@ -204,6 +207,8 @@ export global Actions {
     // Alt. The result is `true` if the key is a hotkey.
     callback key(string, bool, bool, bool) -> bool;
     callback select-pin(string);
+    // Open the Watabou town map of a burg row in the web browser.
+    callback open-town(string);
     callback rename-pin(string, string);
     callback remove-pin(string);
     callback undo();

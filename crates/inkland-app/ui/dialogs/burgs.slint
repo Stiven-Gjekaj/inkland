@@ -19,12 +19,29 @@ export component BurgsDialog inherits Dialog {
         selected: AppState.selected-id;
         list-height: 240px;
         action: "Pin";
-        select(id) => { Actions.select-pin(id); }
+        select(id) => {
+            AppState.burg-row = id;
+            Actions.select-pin(id);
+        }
         act(id) => { Actions.pin-place(id); }
     }
     Tip {
         dialog: true;
         text: "Bold rows are pins. Click a pin to edit it. Pin makes a generated burg a pin at the same place.";
+    }
+    FormRow {
+        label: "Town map";
+        label-width: 120px;
+        DialogButton {
+            text: "Open town map";
+            enabled: AppState.burg-row != "";
+            clicked => { Actions.open-town(AppState.burg-row); }
+        }
+        Label {
+            dialog: true;
+            text: "A city, a town, a village, or a hamlet opens on watabou.github.io.";
+        }
+        Rectangle { horizontal-stretch: 1; }
     }
     FormRow {
         label: AppState.selected-id == "" ? "No pin selected" : "Pin " + AppState.selected-id;
