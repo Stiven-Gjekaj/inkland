@@ -87,3 +87,10 @@ This file records the choices that the human makes.
   license.
 - The town links of level 1 (to watabou.github.io) stay. The town maps of
   the port draw offline, in inkland.
+
+## 2026-11-20: version 2 is the GNU GPL and the town maps
+
+- The change of the license to GPL-3.0-or-later, the town links, and the
+  town maps are release `v2.0.0`.
+- The 3D view (an app view and an export) is no longer version 2. It comes
+  in a later major version.
