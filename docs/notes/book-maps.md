@@ -326,3 +326,15 @@ next, and stand clear of the river line. A river with no smooth part that
 is long enough for its name gets a level label above it, and the report
 lists it in `labels.level_rivers`. A fixed `at` in the label options still
 puts the name where you want it.
+
+## Town maps
+
+`inkland town --world out/world.json --place <id> -o town.svg` draws the
+plan of one place: its walls, gates, towers, wards, streets, and
+buildings. The place sets the size, the plaza, the castle, and the walls,
+so the plan agrees with the world map. Without `--colour`, the plan is
+black and white and passes the print checks.
+
+Each place in `world.json` also has `town_link`, a link to the town on
+watabou.github.io, as in Azgaar's Fantasy Map Generator. That site draws a
+newer, more detailed town, but online only.

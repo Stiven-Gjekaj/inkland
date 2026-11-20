@@ -79,6 +79,9 @@ The engine fits the world around the pins, and never moves them.
   another age.
 - **Takes the edits of the FMG editors as config**, so an edit comes back
   after each regeneration.
+- **Draws the town map of a place**, offline: walls, gates, wards, streets,
+  and buildings, from a port of TownGeneratorOS by Watabou
+  (`inkland town`).
 
 </td>
 <td width="50%" valign="top">
@@ -348,6 +351,11 @@ by Max Haniyeu (Azgaar), under the MIT licence. inkland writes the
 algorithms again in Rust. It takes the data tables, the style presets, and
 the art of FMG, with their licences.
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists each one.
+
+The town maps come from a port of
+[TownGeneratorOS](https://github.com/watabou/TownGeneratorOS) by Watabou,
+under the GPL-3.0. Each place also links to the Medieval Fantasy City
+Generator of Watabou, as in FMG.
 
 The desktop app uses [Slint](https://slint.dev) under the GPL-3.0.
 
