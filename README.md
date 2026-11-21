@@ -110,7 +110,7 @@ The engine fits the world around the pins, and never moves them.
 - The print checks run on each SVG, the town maps too: line widths,
   fonts, and black and white only.
 - Up to 8 times faster than FMG to generate: a 100 000-cell world takes
-  0.48 s with all stages. [Speed](#speed) gives the measures.
+  0.48 s with all stages, and its colour map 0.18 s. [Speed](#speed) gives the measures.
 - `docs/CONFIG.md` comes from the JSON Schema of the config.
 
 </td>
@@ -183,48 +183,48 @@ The six maps come from one config: `fixtures/configs/full.json`.
 ## Speed
 
 inkland generates a world **5 to 8 times faster** than FMG. The gap grows
-with the cell count. The render of one colour map is **2 to 3 times
-slower** than in FMG. The FMG time does not count the time that the
-browser takes to draw.
+with the cell count. The render of one colour map takes about the same
+time as in FMG up to 50 000 cells, and 1.4 times longer at 100 000 cells.
+The FMG time does not count the time that the browser takes to draw.
 
 **Generation**: all stages, from the heightmap to the journeys
 
 ```text
 10K cells   FMG      ███▊                                       342 ms
-            inkland  ▊                                           73 ms   4.7x faster
+            inkland  ▊                                           71 ms   4.8x faster
 
 20K cells   FMG      ███████▉                                   733 ms
-            inkland  █▍                                         128 ms   5.7x faster
+            inkland  █▍                                         124 ms   5.9x faster
 
 50K cells   FMG      ████████████████████▏                     1870 ms
-            inkland  ██▉                                        262 ms   7.1x faster
+            inkland  ██▉                                        265 ms   7.1x faster
 
 100K cells  FMG      ████████████████████████████████████████  3708 ms
-            inkland  █████▎                                     482 ms   7.7x faster
+            inkland  █████▏                                     478 ms   7.8x faster
 ```
 
-**Render**: the layers of one colour map
+**Render**: the layers of one colour map, with the placement of the labels
 
 ```text
-10K cells   FMG      █████▉                                      60 ms
-            inkland  ████████████                               121 ms   2.0x slower
+10K cells   FMG      █████████████▍                              60 ms
+            inkland  ████████████▌                               56 ms   1.1x faster
 
-20K cells   FMG      ███████▊                                    78 ms
-            inkland  ██████████████▊                            149 ms   1.9x slower
+20K cells   FMG      █████████████████▍                          78 ms
+            inkland  ███████████████▋                            70 ms   1.1x faster
 
-50K cells   FMG      █████████▉                                 100 ms
-            inkland  █████████████████████████████▍             298 ms   3.0x slower
+50K cells   FMG      ██████████████████████▍                    100 ms
+            inkland  █████████████████████████                  112 ms   1.1x slower
 
-100K cells  FMG      ████████████▋                              128 ms
-            inkland  ████████████████████████████████████████   405 ms   3.2x slower
+100K cells  FMG      ████████████████████████████▋              128 ms
+            inkland  ████████████████████████████████████████   179 ms   1.4x slower
 ```
 
-| Cells | FMG generate | inkland generate | Faster | FMG render | inkland render | Slower |
+| Cells | FMG generate | inkland generate | Faster | FMG render | inkland render | Against FMG |
 |---:|---:|---:|---:|---:|---:|---:|
-| 10 000 | 342 ms | **73 ms** | 4.7x | 60 ms | 121 ms | 2.0x |
-| 20 000 | 733 ms | **128 ms** | 5.7x | 78 ms | 149 ms | 1.9x |
-| 50 000 | 1870 ms | **262 ms** | 7.1x | 100 ms | 298 ms | 3.0x |
-| 100 000 | 3708 ms | **482 ms** | 7.7x | 128 ms | 405 ms | 3.2x |
+| 10 000 | 342 ms | **71 ms** | 4.8x | 60 ms | 56 ms | 1.1x faster |
+| 20 000 | 733 ms | **124 ms** | 5.9x | 78 ms | 70 ms | 1.1x faster |
+| 50 000 | 1870 ms | **265 ms** | 7.1x | 100 ms | 112 ms | 1.1x slower |
+| 100 000 | 3708 ms | **478 ms** | 7.8x | 128 ms | 179 ms | 1.4x slower |
 
 <details>
 <summary><b>How we measured</b></summary>
@@ -236,7 +236,8 @@ browser takes to draw.
   Rendering" measures that FMG records. Two runs of
   `scripts/bench-fmg.sh` made 12 maps for each cell count, with random
   seeds and templates, after 1 map to warm up.
-- inkland 2.2.0, release build, one thread. The times are `World::build`
+- inkland after v2.2.0, at the commit that adds the cell walk to the label
+  placement, release build, one thread. The times are `World::build`
   and the SVG of one colour variant in the `default` style. Each cell
   count makes 6 maps: the seeds 1 to 6 with 6 FMG templates.
   `cargo run --release -p inkland --example timing` runs this test.
