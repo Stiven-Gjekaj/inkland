@@ -618,6 +618,103 @@ fn circumcenter(a: &DPoint, b: &DPoint, c: &DPoint) -> [f64; 2] {
     [a.x + (cy * bl - by * cl) * d, a.y + (bx * cl - cx * bl) * d]
 }
 
+/// A search of the cell nearest to many positions near each other, with
+/// the result of `Grid::find_cell` for each position.
+///
+/// The search starts at the cell of the position before it and steps to
+/// nearer neighbours. A cell with no nearer neighbour is the nearest cell
+/// when its neighbours include all its Delaunay neighbours. The grid of a
+/// cell next to a boundary point can miss some, and these missing links
+/// are all between such border cells. A Delaunay triangulation of the
+/// border cells alone gives them back. A tie and a long walk use
+/// `Grid::find_cell`.
+pub struct CellWalk<'a> {
+    grid: &'a Grid,
+    /// The links of each border cell to other border cells. Empty for the
+    /// other cells.
+    links: Vec<Vec<u32>>,
+    /// `false` if the border cells have no triangulation, for example when
+    /// they are all on one line. A walk that stops at a border cell then
+    /// uses `Grid::find_cell`.
+    linked: bool,
+    hint: std::cell::Cell<usize>,
+}
+
+impl<'a> CellWalk<'a> {
+    /// The most steps of one search before it uses `Grid::find_cell`.
+    const MAX_STEPS: usize = 48;
+
+    pub fn new(grid: &'a Grid) -> Self {
+        let border: Vec<usize> = (0..grid.len()).filter(|&c| grid.border[c]).collect();
+        let mut links = vec![Vec::new(); grid.len()];
+        let pts: Vec<DPoint> = border
+            .iter()
+            .map(|&c| DPoint {
+                x: grid.points[c][0],
+                y: grid.points[c][1],
+            })
+            .collect();
+        let t = triangulate(&pts);
+        let linked = !t.triangles.is_empty();
+        for tri in t.triangles.chunks(3) {
+            for k in 0..3 {
+                let (a, b) = (border[tri[k]], border[tri[(k + 1) % 3]]);
+                if !links[a].contains(&(b as u32)) {
+                    links[a].push(b as u32);
+                    links[b].push(a as u32);
+                }
+            }
+        }
+        CellWalk {
+            grid,
+            links,
+            linked,
+            hint: std::cell::Cell::new(usize::MAX),
+        }
+    }
+
+    /// The cell whose site is nearest to a position: `Grid::find_cell`.
+    pub fn find(&self, x: f64, y: f64) -> usize {
+        let g = self.grid;
+        let d = |c: usize| {
+            let p = g.points[c];
+            (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y)
+        };
+        let full = || {
+            let c = g.find_cell(x, y);
+            self.hint.set(c);
+            c
+        };
+        let mut c = self.hint.get();
+        if c >= g.len() {
+            return full();
+        }
+        let mut dc = d(c);
+        for _ in 0..Self::MAX_STEPS {
+            let around = g
+                .neighbors(c)
+                .chain(self.links[c].iter().map(|&b| b as usize));
+            let (mut best, mut bd, mut tie) = (c, dc, false);
+            for nb in around {
+                let dn = d(nb);
+                if dn < bd {
+                    (best, bd) = (nb, dn);
+                }
+                tie |= dn == dc;
+            }
+            if best == c {
+                if tie || (g.border[c] && !self.linked) {
+                    return full();
+                }
+                self.hint.set(c);
+                return c;
+            }
+            (c, dc) = (best, bd);
+        }
+        full()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -641,6 +738,67 @@ mod tests {
         let g = grid(2000);
         for p in &g.points {
             assert!(p[0] > 0.0 && p[0] < 400.0 && p[1] > 0.0 && p[1] < 300.0);
+        }
+    }
+
+    #[test]
+    fn the_search_from_a_hint_finds_the_nearest_cell() {
+        let g = grid(2000);
+        // A second grid with sites off the lattice, as the grid of a world.
+        let sites: Vec<[f64; 2]> = g
+            .points
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % 3 != 0)
+            .map(|(_, &p)| p)
+            .collect();
+        let packed = g.packed(sites);
+        for grid in [&g, &packed] {
+            let walk = CellWalk::new(grid);
+            let mut rng = crate::rand::Rand::new(
+                <rand_chacha::ChaCha8Rng as rand_core::SeedableRng>::seed_from_u64(3),
+            );
+            let (mut x, mut y) = (grid.width / 2.0, grid.height / 2.0);
+            for i in 0..20_000 {
+                // Small steps, as a label walk, and a jump now and then, also
+                // out of the frame.
+                if i % 500 == 0 {
+                    x = rng.uniform(-10.0, grid.width + 10.0);
+                    y = rng.uniform(-10.0, grid.height + 10.0);
+                } else {
+                    x += rng.uniform(-0.6, 0.6);
+                    y += rng.uniform(-0.6, 0.6);
+                }
+                assert_eq!(walk.find(x, y), grid.find_cell(x, y), "{x} {y}");
+            }
+            // Along each edge of the frame, just inside and just outside,
+            // where the border cells need their extra links.
+            for off in [-4.0, -0.5, 0.5, 4.0] {
+                let mut t = 0.0;
+                while t <= grid.width {
+                    for q in [[t, off], [t, grid.height - off]] {
+                        assert_eq!(walk.find(q[0], q[1]), grid.find_cell(q[0], q[1]), "{q:?}");
+                    }
+                    t += 0.37;
+                }
+                let mut t = 0.0;
+                while t <= grid.height {
+                    for q in [[off, t], [grid.width - off, t]] {
+                        assert_eq!(walk.find(q[0], q[1]), grid.find_cell(q[0], q[1]), "{q:?}");
+                    }
+                    t += 0.37;
+                }
+            }
+            // A site itself, and a point halfway between two sites: a tie.
+            let a = grid.points[10];
+            let b = grid.neighbors(10).next().unwrap();
+            let mid = [
+                (a[0] + grid.points[b][0]) / 2.0,
+                (a[1] + grid.points[b][1]) / 2.0,
+            ];
+            for q in [a, mid] {
+                assert_eq!(walk.find(q[0], q[1]), grid.find_cell(q[0], q[1]));
+            }
         }
     }
 
