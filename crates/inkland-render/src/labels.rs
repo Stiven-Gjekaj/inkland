@@ -894,6 +894,8 @@ fn water_fallback(
     halo: f64,
 ) -> Vec<Candidate> {
     let g = &world.grid;
+    // The cell searches of the label points, which are near each other.
+    let walk = inkland_core::grid::CellWalk::new(&world.grid);
     let members = members_of(area);
     let depth = depths(world, area, &members);
     let mut cells: Vec<usize> = members
@@ -908,7 +910,7 @@ fn water_fallback(
     let on_water = |b: &Obb| {
         box_points(b).all(|q| {
             let p = page.to_world(q);
-            !world.features.is_land(g.find_cell(p[0], p[1]))
+            !world.features.is_land(walk.find(p[0], p[1]))
         })
     };
     let mut out = Vec::new();
@@ -919,7 +921,7 @@ fn water_fallback(
         let step = g.step_x.max(1e-9) / 4.0;
         let wet = |x: f64| {
             let q = [x, p[1]];
-            let k = g.find_cell(q[0], q[1]);
+            let k = walk.find(q[0], q[1]);
             area[k] && !world.features.is_land(k)
         };
         let reach = |dir: f64| {
@@ -1577,6 +1579,8 @@ pub fn place_with(
     page: &Page,
     style: &dyn Fn(&'static str) -> Look,
 ) -> Labels {
+    // The cell searches of the label points, which are near each other.
+    let walk = inkland_core::grid::CellWalk::new(&world.grid);
     let sizes = &config.render.font_sizes_pt;
     let [mx, my, mw, mh] = page.map_rect();
     let inner = [mx + 0.5, my + 0.5, mx + mw - 0.5, my + mh - 0.5];
@@ -1780,7 +1784,7 @@ pub fn place_with(
             inner,
             &feature_mask,
             members,
-            &|p: [f64; 2]| feature_mask[world.grid.find_cell(p[0], p[1])],
+            &|p: [f64; 2]| feature_mask[walk.find(p[0], p[1])],
             None,
             &name,
             f,
@@ -1890,7 +1894,7 @@ pub fn place_with(
                     inner,
                     &part_area,
                     &members_of(&part_area),
-                    &|p: [f64; 2]| part_area[world.grid.find_cell(p[0], p[1])],
+                    &|p: [f64; 2]| part_area[walk.find(p[0], p[1])],
                     None,
                     &name,
                     f,
@@ -1927,7 +1931,7 @@ pub fn place_with(
         let area: Vec<bool> = (0..g.len())
             .map(|c| shape.contains(g.points[c]) && wet(c))
             .collect();
-        let inside = |p: [f64; 2]| shape.contains(p) && wet(g.find_cell(p[0], p[1]));
+        let inside = |p: [f64; 2]| shape.contains(p) && wet(walk.find(p[0], p[1]));
         // The grid has no cells in deep water, so a sea far from a coast can
         // have no cell. The shape, not its cells, tells if it is in the view.
         let bounds = shape.bbox();
@@ -1957,7 +1961,7 @@ pub fn place_with(
                 cand.boxes.iter().all(|b| {
                     box_points(b).all(|q| {
                         let p = page.to_world(q);
-                        !world.features.is_land(g.find_cell(p[0], p[1]))
+                        !world.features.is_land(walk.find(p[0], p[1]))
                     })
                 })
             });
@@ -2019,7 +2023,7 @@ pub fn place_with(
                     inner,
                     &area,
                     &members_of(&area),
-                    &|p: [f64; 2]| area[world.grid.find_cell(p[0], p[1])],
+                    &|p: [f64; 2]| area[walk.find(p[0], p[1])],
                     None,
                     &name,
                     f,
