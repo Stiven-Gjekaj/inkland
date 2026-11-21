@@ -236,8 +236,7 @@ The FMG time does not count the time that the browser takes to draw.
   Rendering" measures that FMG records. Two runs of
   `scripts/bench-fmg.sh` made 12 maps for each cell count, with random
   seeds and templates, after 1 map to warm up.
-- inkland after v2.2.0, at the commit that adds the cell walk to the label
-  placement, release build, one thread. The times are `World::build`
+- inkland 2.2.1, release build, one thread. The times are `World::build`
   and the SVG of one colour variant in the `default` style. Each cell
   count makes 6 maps: the seeds 1 to 6 with 6 FMG templates.
   `cargo run --release -p inkland --example timing` runs this test.
