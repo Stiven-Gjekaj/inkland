@@ -28,20 +28,29 @@ _A faithful remake of Azgaar's Fantasy Map Generator, with hard pins, print-safe
 ---
 
 > [!NOTE]
-> **Version 1.0 ports all of Azgaar's Fantasy Map Generator.**
-> Each generation stage runs as in FMG: terrain, climate, water, biomes,
-> cultures, burgs, states, provinces, routes, religions, coats of arms,
-> diplomacy, the economy, the military, markers, zones, and journeys.
-> Colour mode draws each FMG layer with the 15 style presets.
-> [docs/PORT.md](docs/PORT.md) compares each stage with FMG, and says what
-> is not ported yet.
-> Version 1.1 adds the desktop app to the release packages. Its data
-> dialogs add markets, regiments, zones, journeys, measurers, and legend
-> boxes on the map.
-> Version 1.2 gives the maps a more organic, hand-drawn look: rough coasts
-> and region outlines, mountain chains, ocean depth bands, curved labels and
-> roads, and terrain character areas. [docs/notes/book-maps.md](docs/notes/book-maps.md)
-> gives the options for book maps.
+> **Version 2.2 draws the town map of each place, offline.**
+>
+> - **1.0** ports all of Azgaar's Fantasy Map Generator. Each generation
+>   stage runs as in FMG, and colour mode draws each FMG layer with the 15
+>   style presets. [docs/PORT.md](docs/PORT.md) compares each stage with
+>   FMG, and says what is not ported yet.
+> - **1.1** adds the desktop app to the release packages.
+> - **1.2** gives the maps a hand-drawn look: rough coasts, mountain
+>   chains, ocean depth bands, curved labels and roads, and terrain
+>   character areas.
+> - **1.3** adds climate presets, coasts that wander from their drawn
+>   line, and a switch for the generated roads.
+> - **2.0** adds the town maps, from a port of TownGeneratorOS by Watabou.
+>   inkland is now GPL-3.0-or-later.
+> - **2.1** adds the sea, rivers, bridges, piers, named districts, farm
+>   fields, a scale bar, and a compass to the town maps, and the Town Map
+>   dialog to the app.
+> - **2.2** takes the roads and the hills of a town from the world map,
+>   and adds a moat, temples with a cross plan, parks with trees, more
+>   building shapes, and buildings that the config pins.
+>
+> [docs/notes/book-maps.md](docs/notes/book-maps.md) gives the options for
+> book maps.
 
 ---
 
@@ -81,10 +90,13 @@ The engine fits the world around the pins, and never moves them.
   after each regeneration.
 - **Draws the town map of a place**, offline: walls, gates, wards, streets,
   and buildings, from a port of TownGeneratorOS by Watabou
-  (`inkland town`). inkland adds lots along the streets, the sea and the
-  river of the place, bridges, piers, named districts, fields, a scale
-  bar, a compass, a moat, varied building shapes, and pinned buildings
-  from the config.
+  (`inkland town`). The town agrees with the world map: its size, sea,
+  river, roads, and hills come from the place.
+- **Adds to the town generator**: lots along the streets, bridges, piers,
+  named districts, fields, a moat, temples with a cross plan, parks with
+  trees, L, U, and courtyard houses, a scale bar, and a compass.
+- **Keeps the buildings that you pin** in a town: a temple, a castle, or a
+  guild hall stands where the story needs it.
 
 </td>
 <td width="50%" valign="top">
@@ -95,10 +107,10 @@ The engine fits the world around the pins, and never moves them.
 - `--dry-run` checks the config and the pins before generation.
 - JSON on stdout, no prompts, and a stable error code for each failure.
 - Each edit has an exact undo.
-- The print checks run on each SVG: line widths, fonts, and black and
-  white only.
-- Up to 8 times faster than FMG: a 100 000-cell world takes 0.45 s with
-  all stages. [Speed](#speed) gives the measures.
+- The print checks run on each SVG, the town maps too: line widths,
+  fonts, and black and white only.
+- Up to 8 times faster than FMG to generate: a 100 000-cell world takes
+  0.48 s with all stages. [Speed](#speed) gives the measures.
 - `docs/CONFIG.md` comes from the JSON Schema of the config.
 
 </td>
@@ -171,47 +183,48 @@ The six maps come from one config: `fixtures/configs/full.json`.
 ## Speed
 
 inkland generates a world **5 to 8 times faster** than FMG. The gap grows
-with the cell count. The render of one colour map is a little faster than
-in FMG.
+with the cell count. The render of one colour map is **2 to 3 times
+slower** than in FMG. The FMG time does not count the time that the
+browser takes to draw.
 
 **Generation**: all stages, from the heightmap to the journeys
 
 ```text
 10K cells   FMG      ███▊                                       342 ms
-            inkland  ▊                                           70 ms   4.9x faster
+            inkland  ▊                                           73 ms   4.7x faster
 
 20K cells   FMG      ███████▉                                   733 ms
-            inkland  █▎                                         120 ms   6.1x faster
+            inkland  █▍                                         128 ms   5.7x faster
 
 50K cells   FMG      ████████████████████▏                     1870 ms
-            inkland  ██▋                                        247 ms   7.6x faster
+            inkland  ██▉                                        262 ms   7.1x faster
 
 100K cells  FMG      ████████████████████████████████████████  3708 ms
-            inkland  ████▉                                      452 ms   8.2x faster
+            inkland  █████▎                                     482 ms   7.7x faster
 ```
 
 **Render**: the layers of one colour map
 
 ```text
-10K cells   FMG      ██████████████████▊                         60 ms
-            inkland  ███████████████▋                            50 ms   1.2x faster
+10K cells   FMG      █████▉                                      60 ms
+            inkland  ████████████                               121 ms   2.0x slower
 
-20K cells   FMG      ████████████████████████▍                   78 ms
-            inkland  ███████████████████                         61 ms   1.3x faster
+20K cells   FMG      ███████▊                                    78 ms
+            inkland  ██████████████▊                            149 ms   1.9x slower
 
-50K cells   FMG      ███████████████████████████████▎           100 ms
-            inkland  █████████████████████████▎                  81 ms   1.2x faster
+50K cells   FMG      █████████▉                                 100 ms
+            inkland  █████████████████████████████▍             298 ms   3.0x slower
 
-100K cells  FMG      ████████████████████████████████████████   128 ms
-            inkland  ██████████████████████████████████████▏    122 ms   1.0x faster
+100K cells  FMG      ████████████▋                              128 ms
+            inkland  ████████████████████████████████████████   405 ms   3.2x slower
 ```
 
-| Cells | FMG generate | inkland generate | Faster | FMG render | inkland render | Faster |
+| Cells | FMG generate | inkland generate | Faster | FMG render | inkland render | Slower |
 |---:|---:|---:|---:|---:|---:|---:|
-| 10 000 | 342 ms | **70 ms** | 4.9x | 60 ms | **50 ms** | 1.2x |
-| 20 000 | 733 ms | **120 ms** | 6.1x | 78 ms | **61 ms** | 1.3x |
-| 50 000 | 1870 ms | **247 ms** | 7.6x | 100 ms | **81 ms** | 1.2x |
-| 100 000 | 3708 ms | **452 ms** | 8.2x | 128 ms | **122 ms** | 1.0x |
+| 10 000 | 342 ms | **73 ms** | 4.7x | 60 ms | 121 ms | 2.0x |
+| 20 000 | 733 ms | **128 ms** | 5.7x | 78 ms | 149 ms | 1.9x |
+| 50 000 | 1870 ms | **262 ms** | 7.1x | 100 ms | 298 ms | 3.0x |
+| 100 000 | 3708 ms | **482 ms** | 7.7x | 128 ms | 405 ms | 3.2x |
 
 <details>
 <summary><b>How we measured</b></summary>
@@ -223,7 +236,7 @@ in FMG.
   Rendering" measures that FMG records. Two runs of
   `scripts/bench-fmg.sh` made 12 maps for each cell count, with random
   seeds and templates, after 1 map to warm up.
-- inkland 1.1.0, release build, one thread. The times are `World::build`
+- inkland 2.2.0, release build, one thread. The times are `World::build`
   and the SVG of one colour variant in the `default` style. Each cell
   count makes 6 maps: the seeds 1 to 6 with 6 FMG templates.
   `cargo run --release -p inkland --example timing` runs this test.
@@ -309,6 +322,12 @@ inkland import --map fixtures/azgaar/1.154.0.map.gz -o imported.json
 inkland check --svg out/map.svg
 ```
 
+Draw the town map of a place, in colour or print-safe:
+
+```bash
+inkland town --world out/world.json --place kingsholm --colour -o kingsholm.svg
+```
+
 `generate` writes `world.json`, and for each variant `<variant>.svg` and
 `<variant>.report.json`. The report gives each pin and where it is, each
 road length, each label that has no place, and the print checks. A failed
@@ -325,7 +344,8 @@ A small config:
   "world": { "cells": 20000, "template": "continents" },
   "pins": {
     "points": [
-      { "id": "kingsholm", "kind": "city", "name": "Kingsholm", "at": [120, 88], "capital_of": "The Kingdom" },
+      { "id": "kingsholm", "kind": "city", "name": "Kingsholm", "at": [120, 88], "capital_of": "The Kingdom",
+        "town": { "buildings": [{ "kind": "temple", "at": [0, -0.5] }, { "kind": "castle" }] } },
       { "id": "harbour", "kind": "town", "name": "Harbour", "at": [40, 150], "port": true }
     ],
     "regions": [{ "id": "western-sea", "kind": "sea", "name": "The Western Sea", "box": [0, 0, 20, 300] }],
@@ -345,7 +365,9 @@ A small config:
 `inkland-app` is a desktop editor in the layout of FMG: the Layers, Style,
 Options, Tools, and About tabs, and the FMG editors as dialogs. Each edit
 is a command on the config, with undo and redo, and the app saves the
-edits as a script. [docs/APP.md](docs/APP.md) describes it.
+edits as a script. In the Burgs Overview, "Draw town map" opens the town
+map of a burg, offline, and saves it as SVG. "Open online" opens the town
+in the generators of Watabou. [docs/APP.md](docs/APP.md) describes it.
 
 ---
 
