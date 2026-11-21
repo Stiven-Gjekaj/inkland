@@ -144,7 +144,27 @@ The engine fits the world around the pins, and never moves them.
 </tr>
 </table>
 
-The four maps come from one config: `fixtures/configs/full.json`.
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**A town map in colour**: the port of Saltmouth, with its docks, river,
+moat, castle, and districts
+
+![A town map in colour](docs/images/town-colour.jpg)
+
+</td>
+<td width="50%" valign="top">
+
+**The same town, print-safe**, with lines on the sea
+
+![A print-safe town map](docs/images/town-print.png)
+
+</td>
+</tr>
+</table>
+
+The six maps come from one config: `fixtures/configs/full.json`.
 
 ---
 
